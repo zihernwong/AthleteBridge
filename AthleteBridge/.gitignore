@@ -1,0 +1,41 @@
+# Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Cocoa/Carthage/Pods
+Pods/
+Carthage/
+
+# Swift Package Manager
+.build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+
+# Swift Package Manager
+Package.resolved
+
+# GoogleService-Info (contains API keys and private config) - keep out of repo
+GoogleService-Info.plist
+
+# Misc
+*.xcfilelist
+*.hmap
+
+# macOS
+*.DS_Store
+
+# User settings
+*.xcuserdatad
