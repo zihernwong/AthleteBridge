@@ -8,6 +8,19 @@ struct AuthScreen: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            // App logo (load via helper that tries asset name and bundle filename)
+            if let logo = appLogoImageSwiftUI() {
+                logo
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 160, height: 160)
+                    .padding(.bottom, 8)
+            } else {
+                Text("AthletesBridge")
+                    .font(.largeTitle)
+                    .bold()
+            }
+
             Text(isLogin ? "Login" : "Sign Up")
                 .font(.largeTitle)
                 .bold()
@@ -60,4 +73,3 @@ struct AuthScreen_Previews: PreviewProvider {
             .environmentObject(AuthViewModel())
     }
 }
-

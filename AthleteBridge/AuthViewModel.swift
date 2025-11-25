@@ -77,29 +77,59 @@ class AuthViewModel: ObservableObject {
             case .emailAlreadyInUse:
                 return "This email is already in use."
             case .weakPassword:
-                return "The password is too weak."
+                return "The password is too weak. Try a longer password."
             case .wrongPassword:
-                return "Incorrect password."
+                return "Invalid password. Please try again."
             case .userNotFound:
                 return "No user found for that email."
             case .userDisabled:
                 return "This user account has been disabled."
             case .networkError:
-                return "Network error. Check your internet connection."
+                return "Network error. Check your internet connection and try again."
             case .internalError:
-                // internalError is generic — include underlying description if available
-                if let detail = nsError.userInfo[NSLocalizedDescriptionKey] as? String {
-                    return "Internal error: \(detail)"
-                } else {
-                    return "An internal error has occurred. Check console logs for details."
+                // internalError is generic — include underlying description or give friendly guidance
+                if let deserialized = nsError.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any],
+                   let message = deserialized["message"] as? String {
+                    // Common server-side messages: CONFIGURATION_NOT_FOUND, etc.
+                    if message == "CONFIGURATION_NOT_FOUND" {
+                        return "Firebase Auth is not configured for this app (configuration not found). Make sure your GoogleService-Info.plist is in the app bundle and FirebaseApp.configure() is called."
+                    }
                 }
+                if let detail = nsError.userInfo[NSLocalizedDescriptionKey] as? String, !detail.isEmpty {
+                    return "Authentication failed: \(detail)"
+                } else {
+                    return "An internal error occurred during authentication. Please try again or check Firebase configuration."
+                }
+            case .invalidCredential:
+                return "Invalid or expired credential. Please try signing in again."
+            case .invalidVerificationCode, .invalidVerificationID:
+                return "Invalid verification code. Please retry the verification step."
+            case .userTokenExpired, .requiresRecentLogin:
+                return "Session expired — please sign in again."
             default:
-                // Fall back to localized description including the AuthErrorCode for easier debugging
-                return "\(nsError.localizedDescription) (\(authCode))"
+                // For any other known auth codes, return a concise, user-friendly fallback
+                return "Authentication failed. Please check your email and password and try again. (\(authCode))"
             }
         }
 
-        // Fallback: return localized description
-        return nsError.localizedDescription
+        // If the error contains a deserialized server response with a useful message, surface a friendly version
+        if let deserialized = nsError.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any],
+           let message = deserialized["message"] as? String {
+            // Map a few server messages to nicer text
+            switch message {
+            case "CONFIGURATION_NOT_FOUND":
+                return "Firebase Auth configuration not found — ensure GoogleService-Info.plist is added and Firebase is configured."
+            default:
+                return "Authentication failed: \(message)"
+            }
+        }
+
+        // Fallback: prefer a concise, non-technical localized message
+        let localized = nsError.localizedDescription
+        if localized.isEmpty {
+            return "Authentication failed. Please try again."
+        }
+        // Strip verbose technical prefixes if present (keep it short)
+        return localized
     }
 }

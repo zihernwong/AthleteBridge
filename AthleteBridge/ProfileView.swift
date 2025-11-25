@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
 struct ProfileView: View {
     enum Role: String, CaseIterable, Identifiable {
@@ -8,193 +10,296 @@ struct ProfileView: View {
     }
 
     @EnvironmentObject var auth: AuthViewModel
-    @EnvironmentObject var firestore: FirestoreService
+    @EnvironmentObject var firestore: FirestoreManager
     @State private var role: Role = .client
 
     // Common fields
     @State private var name: String = ""
 
-    // Client fields
-    @State private var clientGoals: String = ""
-    @State private var clientAvailability: String = "Morning"
+    // Client fields: fixed multi-select goals
+    @State private var selectedGoals: Set<String> = []
+    private let availableGoals: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    // client preferred availability now supports multiple selections
+    @State private var selectedClientAvailability: Set<String> = []
+    private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
 
-    // Coach fields
-    @State private var specialtiesText: String = ""
-    @State private var experienceYears: String = "0"
+    // Coach fields: fixed multi-select specialties
+    @State private var selectedSpecialties: Set<String> = []
+    private let availableSpecialties: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    @State private var experienceYears: Int = 0
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
 
+    // Photo + UI state
+    @State private var selectedImage: UIImage? = nil
+    @State private var showingPhotoPicker = false
     @State private var isSaving = false
+    @State private var isUploadingImage = false
+    @State private var uploadError: String? = nil
     @State private var saveMessage: String? = nil
+    @State private var showSavedConfirmation: Bool = false
+
     @Environment(\.presentationMode) private var presentationMode
 
-    var availabilityOptions = ["Morning", "Afternoon", "Evening"]
-
     var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Role")) {
-                    Picker("Role", selection: $role) {
-                        ForEach(Role.allCases) { r in
-                            Text(r.rawValue).tag(r)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-
-                Section(header: Text("Full Name")) {
-                    TextField("Full Name", text: $name)
-                }
-
-                if role == .client {
-                    Section(header: Text("Client Details")) {
-                        TextField("Goals (comma separated)", text: $clientGoals)
-                        Picker("Preferred Availability", selection: $clientAvailability) {
-                            ForEach(availabilityOptions, id: \.self) { option in
-                                Text(option)
-                            }
-                        }
-                    }
-                } else {
-                    Section(header: Text("Coach Details")) {
-                        TextField("Specialties (comma separated)", text: $specialtiesText)
-                        TextField("Experience (years)", text: $experienceYears)
-                            .keyboardType(.numberPad)
-                        // availability multi-select simple toggles
-                        VStack(alignment: .leading) {
-                            Text("Availability")
-                            ForEach(availabilityOptions, id: \.self) { opt in
-                                Toggle(opt, isOn: Binding(get: {
-                                    coachAvailabilitySelection.contains(opt)
-                                }, set: { newVal in
-                                    if newVal {
-                                        if !coachAvailabilitySelection.contains(opt) {
-                                            coachAvailabilitySelection.append(opt)
-                                        }
-                                    } else {
-                                        coachAvailabilitySelection.removeAll { $0 == opt }
-                                    }
-                                }))
-                            }
-                        }
-                        TextField("Hourly rate (optional)", text: $hourlyRateText)
-                            .keyboardType(.decimalPad)
-                    }
-                }
-
-                Section {
-                    if isSaving {
-                        ProgressView()
+        ZStack {
+            NavigationView {
+                Form {
+                    roleSection
+                    nameSection
+                    if role == .client {
+                        clientSection
                     } else {
-                        Button("Save Profile") {
-                            saveProfile()
-                        }
+                        coachSection
                     }
+                    photoSection
+                    saveSection
+                }
+                .navigationTitle("Create Profile")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                    }
+                }
+                .onAppear { populateFromExisting() }
+            }
 
-                    if let msg = saveMessage {
-                        Text(msg).foregroundColor(.green)
+            if showSavedConfirmation {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Text("Profile saved")
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.green)
+                            .cornerRadius(12)
+                        Spacer()
                     }
+                    .padding(.bottom, 60)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut, value: showSavedConfirmation)
+            }
+        }
+        .sheet(isPresented: $showingPhotoPicker) {
+            PhotoPicker(selectedImage: $selectedImage)
+        }
+    }
+
+    // MARK: - View pieces
+    private var roleSection: some View {
+        Section(header: Text("Role")) {
+            Picker("Role", selection: $role) {
+                ForEach(Role.allCases) { r in
+                    Text(r.rawValue).tag(r)
                 }
             }
-            .navigationTitle("Create Profile")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        // Dismiss or logout
-                        presentationMode.wrappedValue.dismiss()
+            .pickerStyle(SegmentedPickerStyle())
+        }
+    }
+
+    private var nameSection: some View {
+        Section(header: Text("Full Name")) {
+            TextField("Full Name", text: $name)
+        }
+    }
+
+    private var clientSection: some View {
+        Section(header: Text("Client Details")) {
+            Text("Goals")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            // chip-style multi-select list
+            ChipMultiSelect(items: availableGoals, selection: $selectedGoals)
+
+            Text("Preferred Availability")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            ChipMultiSelect(items: availableAvailability, selection: $selectedClientAvailability)
+        }
+    }
+
+    private var coachSection: some View {
+        Section(header: Text("Coach Details")) {
+            Text("Specialties")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            ChipMultiSelect(items: availableSpecialties, selection: $selectedSpecialties)
+
+            // Experience as a wheel picker (scrollable)
+            VStack(alignment: .leading) {
+                HStack {
+                    Text("Experience (years)")
+                    Spacer()
+                    Text("\(experienceYears) yrs")
+                        .foregroundColor(.secondary)
+                }
+                Picker(selection: $experienceYears, label: Text("Experience")) {
+                    ForEach(0...70, id: \.self) { yr in
+                        Text("\(yr)").tag(yr)
                     }
                 }
+                .pickerStyle(WheelPickerStyle())
+                .frame(maxHeight: 120)
             }
-            .onAppear {
-                // If firestore already has a current profile, populate fields
-                if let client = firestore.currentClient {
-                    role = .client
-                    name = client.name
-                    clientGoals = client.goals.joined(separator: ", ")
-                    clientAvailability = client.preferredAvailability
-                } else if let coach = firestore.currentCoach {
-                    role = .coach
-                    name = coach.name
-                    specialtiesText = coach.specialties.joined(separator: ", ")
-                    experienceYears = String(coach.experienceYears)
-                    coachAvailabilitySelection = coach.availability
+
+            Text("Availability")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            ChipMultiSelect(items: availableAvailability, selection: Binding(get: {
+                Set(coachAvailabilitySelection)
+            }, set: { newSet in
+                coachAvailabilitySelection = Array(newSet)
+            }))
+        }
+    }
+
+    private var photoSection: some View {
+        Section(header: Text("Profile Photo")) {
+            HStack {
+                if let img = selectedImage {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 100, height: 100)
+                        .clipShape(Circle())
+                        .shadow(radius: 4)
+                } else {
+                    Image(systemName: "person.crop.circle")
+                        .resizable()
+                        .frame(width: 80, height: 80)
+                        .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading) {
+                    Button(selectedImage == nil ? "Choose Photo" : "Change Photo") { showingPhotoPicker = true }
+                    if selectedImage != nil {
+                        Text("Will be uploaded when saving profile")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if let uploadError = uploadError {
+                        Text(uploadError).foregroundColor(.red).font(.caption)
+                    }
                 }
             }
         }
     }
 
+    private var saveSection: some View {
+        Section {
+            if isSaving || isUploadingImage {
+                ProgressView()
+            } else {
+                Button("Save Profile") { saveProfile() }
+                    .disabled((role == .client && selectedGoals.isEmpty) || (role == .coach && selectedSpecialties.isEmpty))
+            }
+
+            if let msg = saveMessage { Text(msg).foregroundColor(.green) }
+
+            // Validation message when no selection
+            if role == .client && selectedGoals.isEmpty {
+                Text("Please select at least one goal").foregroundColor(.red).font(.caption)
+            } else if role == .coach && selectedSpecialties.isEmpty {
+                Text("Please select at least one specialty").foregroundColor(.red).font(.caption)
+            }
+        }
+    }
+
+    // MARK: - Helpers
     private func populateFromExisting() {
-        // If firestore already has a current profile, populate fields
         if let client = firestore.currentClient {
             role = .client
             name = client.name
-            clientGoals = client.goals.joined(separator: ", ")
-            clientAvailability = client.preferredAvailability
+            selectedGoals = Set(client.goals)
+            selectedClientAvailability = Set(client.preferredAvailability)
         } else if let coach = firestore.currentCoach {
-            role = .coach
-            name = coach.name
-            specialtiesText = coach.specialties.joined(separator: ", ")
-            experienceYears = String(coach.experienceYears)
-            coachAvailabilitySelection = coach.availability
+             role = .coach
+             name = coach.name
+             selectedSpecialties = Set(coach.specialties)
+             experienceYears = coach.experienceYears
+             coachAvailabilitySelection = coach.availability
         }
     }
 
     private func saveProfile() {
-        guard let uid = auth.user?.uid else {
-            saveMessage = "No authenticated user"
-            return
-        }
+        guard let uid = auth.user?.uid else { saveMessage = "No authenticated user"; return }
 
         isSaving = true
         saveMessage = nil
 
-        if role == .client {
-            let goals = clientGoals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            firestore.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: goals, preferredAvailability: clientAvailability) { err in
-                DispatchQueue.main.async {
-                    self.isSaving = false
-                    if let err = err {
-                        self.saveMessage = "Error saving client: \(err.localizedDescription)"
-                    } else {
-                        // Show a success message briefly before dismissing so the user sees the green label
-                        self.saveMessage = "Client profile saved"
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            presentationMode.wrappedValue.dismiss()
+        func finalizeSave(withPhotoURL photoURL: String?) {
+            if role == .client {
+                let goals = Array(selectedGoals)
+                let preferred = Array(selectedClientAvailability)
+                // save preferredAvailability as array for multi-select support
+                // call existing API which accepts array after update
+                firestore.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: goals, preferredAvailability: preferred, photoURL: photoURL) { err in
+                    DispatchQueue.main.async {
+                        self.isSaving = false
+                        if let err = err {
+                            self.saveMessage = "Error saving client: \(err.localizedDescription)"
+                        } else {
+                            self.showSavedConfirmation = true
+                            firestore.showToast("Client profile saved")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                self.showSavedConfirmation = false
+                                presentationMode.wrappedValue.dismiss()
+                            }
                         }
+                    }
+                }
+            } else {
+                let specialties = Array(selectedSpecialties)
+                let experience = experienceYears
+                let hourlyRate = Double(hourlyRateText)
+                let parts = name.split(separator: " ").map { String($0) }
+                let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
+                let lastName = parts.dropFirst().joined(separator: " ")
+                firestore.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, active: true, overwrite: true) { err in
+                    DispatchQueue.main.async {
+                        self.isSaving = false
+                        if let err = err {
+                            self.saveMessage = "Error saving coach: \(err.localizedDescription)"
+                        } else {
+                            self.showSavedConfirmation = true
+                            firestore.showToast("Coach profile saved")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                self.showSavedConfirmation = false
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If there is a selected image, upload it first
+        if let image = selectedImage {
+            isUploadingImage = true
+            uploadError = nil
+            let maxDim: CGFloat = 1024
+            guard let resized = image.resized(to: maxDim), let jpegData = resized.jpegData(compressionQuality: 0.75) else {
+                isUploadingImage = false
+                isSaving = false
+                saveMessage = "Failed processing image"
+                return
+            }
+            firestore.uploadToCloudinary(data: jpegData, filename: "\(uid).jpg") { result in
+                DispatchQueue.main.async {
+                    self.isUploadingImage = false
+                    switch result {
+                    case .success(let url): finalizeSave(withPhotoURL: url.absoluteString)
+                    case .failure(let err): isSaving = false; uploadError = "Upload failed: \(err.localizedDescription)"; saveMessage = "Image upload failed"
                     }
                 }
             }
         } else {
-            let specialties = specialtiesText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            let experience = Int(experienceYears) ?? 0
-            let hourlyRate = Double(hourlyRateText)
-            // split full name into first/last for the schema
-            let parts = name.split(separator: " ").map { String($0) }
-            let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
-            let lastName = parts.dropFirst().joined(separator: " ")
-            firestore.saveCoachWithSchema(id: uid,
-                                          firstName: firstName,
-                                          lastName: lastName,
-                                          specialties: specialties,
-                                          availability: coachAvailabilitySelection,
-                                          experienceYears: experience,
-                                          hourlyRate: hourlyRate,
-                                          photoURL: nil,
-                                          active: true,
-                                          overwrite: true) { err in
-                DispatchQueue.main.async {
-                    self.isSaving = false
-                    if let err = err {
-                        self.saveMessage = "Error saving coach: \(err.localizedDescription)"
-                    } else {
-                        // Show the green success label like the client flow, then dismiss after a short delay
-                        self.saveMessage = "Coach profile saved"
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            presentationMode.wrappedValue.dismiss()
-                        }
-                    }
-                }
-            }
+            finalizeSave(withPhotoURL: nil)
         }
     }
 }
@@ -204,6 +309,86 @@ struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
         ProfileView()
             .environmentObject(AuthViewModel())
-            .environmentObject(FirestoreService())
+            .environmentObject(FirestoreManager())
+    }
+}
+
+// Simple SwiftUI wrapper for PHPicker to pick a single image
+struct PhotoPicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        var parent: PhotoPicker
+        init(_ parent: PhotoPicker) { self.parent = parent }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            guard let item = results.first else { return }
+            if item.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                item.itemProvider.loadObject(ofClass: UIImage.self) { (obj, _) in
+                    if let image = obj as? UIImage {
+                        DispatchQueue.main.async { self.parent.selectedImage = image }
+                    }
+                }
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration(photoLibrary: .shared())
+        config.filter = .images
+        config.selectionLimit = 1
+        let vc = PHPickerViewController(configuration: config)
+        vc.delegate = context.coordinator
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+}
+
+// Local UIImage resizing helper accessible within the module
+extension UIImage {
+    func resized(to maxDimension: CGFloat) -> UIImage? {
+        let aspect = size.width / size.height
+        var newSize: CGSize
+        if size.width > size.height {
+            newSize = CGSize(width: maxDimension, height: maxDimension / aspect)
+        } else {
+            newSize = CGSize(width: maxDimension * aspect, height: maxDimension)
+        }
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 0)
+        draw(in: CGRect(origin: .zero, size: newSize))
+        let resized = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return resized
+    }
+}
+
+// Chip-style multi-select component
+struct ChipMultiSelect: View {
+    let items: [String]
+    @Binding var selection: Set<String>
+
+    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                Button(action: {
+                    if selection.contains(item) { selection.remove(item) } else { selection.insert(item) }
+                }) {
+                    Text(item)
+                        .font(.subheadline)
+                        .foregroundColor(selection.contains(item) ? .white : .primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(selection.contains(item) ? Color.accentColor : Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(20)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

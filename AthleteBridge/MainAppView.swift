@@ -7,7 +7,7 @@ struct MainAppView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Profile tab (first)
+            // Profile tab
             ProfileView()
                 .tabItem {
                     Image(systemName: "person.crop.circle")
@@ -17,17 +17,36 @@ struct MainAppView: View {
 
             // Home tab
             NavigationStack {
-                VStack(spacing: 20) {
-                    Text("Welcome, \(auth.user?.email ?? "User")!")
-                        .font(.title3)
-
-                    Button("Logout") {
-                        auth.logout()
+                ZStack {
+                    // background logo (load via helper for bundle filename support)
+                    if let bg = appLogoImageSwiftUI() {
+                        bg
+                            .resizable()
+                            .scaledToFit()
+                            .opacity(0.08)
+                            .frame(maxWidth: 400)
+                            .allowsHitTesting(false)
                     }
-                    .foregroundColor(.red)
+
+                    // Pin welcome content to top so it doesn't overlap the centered logo
+                    VStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Welcome, \(auth.user?.email ?? "User")!")
+                                .font(.title3)
+                                .padding(.horizontal)
+
+                            Button("Logout") {
+                                auth.logout()
+                            }
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
+                        }
+                        .padding(.top, 12)
+
+                        Spacer()
+                    }
                 }
                 .navigationTitle("AthleteBridge")
-                // Present ClientFormView when navigateToClientForm becomes true
                 .navigationDestination(isPresented: $navigateToClientForm) {
                     ClientFormView()
                 }
@@ -37,13 +56,35 @@ struct MainAppView: View {
                 Text("Home")
             }
             .tag(1)
+
+            // Reviews tab
+            ReviewsView()
+                .tabItem {
+                    Image(systemName: "star.bubble")
+                    Text("Reviews")
+                }
+                .tag(2)
+
+            // Bookings tab (new)
+            BookingsView()
+                .tabItem {
+                    Image(systemName: "calendar")
+                    Text("Bookings")
+                }
+                .tag(3)
+
+            // Locations tab (new)
+            LocationsView()
+                .tabItem {
+                    Image(systemName: "mappin.and.ellipse")
+                    Text("Locations")
+                }
+                .tag(4)
         }
         .onAppear {
-            // If user already signed in, navigate immediately
             navigateToClientForm = auth.user != nil
         }
         .onChange(of: auth.user?.uid) { _old, newValue in
-            // When auth.user becomes non-nil (login) navigate; when nil (logout), reset
             navigateToClientForm = newValue != nil
         }
     }
@@ -54,5 +95,6 @@ struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
         MainAppView()
             .environmentObject(AuthViewModel())
+            .environmentObject(FirestoreManager())
     }
 }

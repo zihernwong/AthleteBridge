@@ -22,9 +22,9 @@ struct Client: Identifiable, Hashable {
     let id: String
     let name: String
     let goals: [String]
-    let preferredAvailability: String
+    let preferredAvailability: [String]
 
-    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: String) {
+    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: [String]) {
         self.id = id
         self.name = name
         self.goals = goals

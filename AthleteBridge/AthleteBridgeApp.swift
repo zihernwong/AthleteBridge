@@ -1,15 +1,23 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseAuth
+import FirebaseInAppMessaging
 
 @main
 struct AthleteBridgeApp: App {
     @StateObject private var auth = AuthViewModel()
-    @StateObject private var firestore = FirestoreService()
+    @StateObject private var firestore = FirestoreManager()
 
     init() {
         FirebaseApp.configure()
         print("[AthleteBridgeApp] FirebaseApp.configure() called")
+
+        // Suppress Firebase In-App Messaging automatic display/fetch until the
+        // Firebase project is verified and In-App Messaging is configured in
+        // the Firebase Console. This avoids repeated 403 fetch errors at app
+        // startup while you finish setup.
+        // Remove this line when IAM is correctly configured for your app.
+        InAppMessaging.inAppMessaging().messageDisplaySuppressed = true
 
         // Print the configured Firebase options to verify the project/bundle match
         if let app = FirebaseApp.app() {
