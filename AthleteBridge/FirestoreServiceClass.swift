@@ -374,71 +374,144 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    /// Debug helper: fetch and print every document in the `bookings` collection.
-    /// Useful to confirm what's actually stored in Firestore (raw documents).
-    func fetchAllBookingsDebug() {
-        let bookingsColl = self.db.collection("bookings")
-        bookingsColl.getDocuments { snapshot, error in
-            if let error = error {
-                let msg = "fetchAllBookingsDebug error: \(error.localizedDescription)"
-                print(msg)
-                DispatchQueue.main.async { self.bookingsDebug += "\n\(msg)" }
-                return
-            }
-
-            let docs = snapshot?.documents ?? []
-            let header = "fetchAllBookingsDebug: total=\(docs.count)"
-            print(header)
-            DispatchQueue.main.async { self.bookingsDebug += "\n\(header)" }
-
-            for doc in docs {
-                let data = doc.data()
-                let line = "doc: \(doc.documentID) -> \(data)"
-                print(line)
-                DispatchQueue.main.async { self.bookingsDebug += "\n\(line)" }
-            }
-        }
-    }
-
-    // Dummy upload to cloudinary - placeholder to satisfy callers
-    func uploadToCloudinary(data: Data, filename: String, completion: @escaping (Result<URL, Error>) -> Void) {
-        // Placeholder - user must configure their unsigned preset and cloud name
-        completion(.failure(NSError(domain: "Cloudinary", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cloudinary not configured"])))
-    }
-
-    func showToast(_ message: String) {
-        // placeholder for UI toast handling
-        print("Toast: \(message)")
-    }
-
-    // Save a booking to `bookings` collection using DocumentReference for client and coach
-    func saveBooking(clientRef: DocumentReference, coachRef: DocumentReference, startAt: Date, endAt: Date, location: String?, notes: String?, status: String = "requested", completion: @escaping (Error?) -> Void) {
-        var data: [String: Any] = [
-            "ClientID": clientRef,
-            "CoachID": coachRef,
-            "StartAt": Timestamp(date: startAt),
-            "EndAt": Timestamp(date: endAt),
-            "Location": location ?? "",
-            "Notes": notes ?? "",
-            "Status": status,
-            "CreatedAt": FieldValue.serverTimestamp()
-        ]
-        db.collection("bookings").addDocument(data: data) { error in
-            if let error = error {
-                print("saveBooking error: \(error)")
-                completion(error)
+    /// Debug helper: create a sample booking and verify mirrored docs exist; prints results to console.
+    func debugCreateAndVerifyBooking(coachId: String, clientId: String) {
+        let start = Date()
+        let end = start.addingTimeInterval(30 * 60)
+        saveBookingAndMirror(coachId: coachId, clientId: clientId, startAt: start, endAt: end, status: "requested", location: "Debug Location", notes: "Debug booking") { err in
+            if let err = err {
+                print("[FirestoreManager] debugCreateAndVerifyBooking: saveBookingAndMirror failed: \(err)")
             } else {
-                print("saveBooking: booking created")
-                completion(nil)
+                print("[FirestoreManager] debugCreateAndVerifyBooking: booking created and mirrors verified (see above)")
             }
         }
     }
 
-    // Convenience: Save a booking by client uid and coach uid (stores DocumentReference internally)
-    func saveBooking(clientUid: String, coachUid: String, startAt: Date, endAt: Date, location: String?, notes: String?, status: String = "requested", completion: @escaping (Error?) -> Void) {
-        let clientRef = db.collection("clients").document(clientUid)
-        let coachRef = db.collection("coaches").document(coachUid)
-        saveBooking(clientRef: clientRef, coachRef: coachRef, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, completion: completion)
+    /// Remove legacy booking arrays from parent documents.
+    /// Deletes the `calendar` field on every coach and the `bookings` field on every client.
+    /// Works in batched chunks to avoid exceeding the 500-operation per-batch limit.
+    func removeBookingArraysFromParents(completion: @escaping (Error?) -> Void) {
+        let coachColl = db.collection("coaches")
+        let clientColl = db.collection("clients")
+
+        let group = DispatchGroup()
+        var firstError: Error? = nil
+
+        func processDocs(_ docs: [QueryDocumentSnapshot], fieldName: String, collectionName: String, finish: @escaping () -> Void) {
+            // Partition into batches of 450 updates to be safe
+            let batchSize = 450
+            var index = 0
+            while index < docs.count {
+                let end = min(index + batchSize, docs.count)
+                let batch = db.batch()
+                for i in index..<end {
+                    let docRef = docs[i].reference
+                    // Only issue delete if the field exists in the snapshot
+                    if docs[i].data()[fieldName] != nil {
+                        batch.updateData([fieldName: FieldValue.delete()], forDocument: docRef)
+                    }
+                }
+                group.enter()
+                batch.commit { err in
+                    if let err = err {
+                        print("removeBookingArraysFromParents commit error for \(collectionName): \(err)")
+                        if firstError == nil { firstError = err }
+                    }
+                    group.leave()
+                }
+                index = end
+            }
+            // if there were zero docs or no updates, still call finish after group completes
+            finish()
+        }
+
+        // Fetch coaches
+        group.enter()
+        coachColl.getDocuments { snap, err in
+            if let err = err {
+                print("removeBookingArraysFromParents: failed to list coaches: \(err)")
+                if firstError == nil { firstError = err }
+                group.leave()
+            } else {
+                let docs = snap?.documents ?? []
+                // Process and schedule commits
+                processDocs(docs, fieldName: "calendar", collectionName: "coaches") {
+                    group.leave()
+                }
+            }
+        }
+
+        // Fetch clients
+        group.enter()
+        clientColl.getDocuments { snap, err in
+            if let err = err {
+                print("removeBookingArraysFromParents: failed to list clients: \(err)")
+                if firstError == nil { firstError = err }
+                group.leave()
+            } else {
+                let docs = snap?.documents ?? []
+                processDocs(docs, fieldName: "bookings", collectionName: "clients") {
+                    group.leave()
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            completion(firstError)
+        }
+    }
+
+    /// Fetch bookings mirrored under a coach's `bookings` subcollection within an optional date range.
+    func fetchBookingsForCoach(coachId: String, start: Date? = nil, end: Date? = nil, completion: @escaping ([BookingItem]) -> Void) {
+        var query: Query = db.collection("coaches").document(coachId).collection("bookings")
+        if let s = start { query = query.whereField("StartAt", isGreaterThanOrEqualTo: Timestamp(date: s)) }
+        if let e = end { query = query.whereField("StartAt", isLessThan: Timestamp(date: e)) }
+        query.getDocuments { snapshot, error in
+            if let error = error { print("fetchBookingsForCoach error: \(error)"); completion([]); return }
+            let docs = snapshot?.documents ?? []
+            let items = docs.map { d -> BookingItem in
+                let data = d.data()
+                let id = d.documentID
+                let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
+                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
+                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                let status = data["Status"] as? String
+                let location = data["Location"] as? String
+                let notes = data["Notes"] as? String
+                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+            }
+            completion(items)
+        }
+    }
+
+    /// Fetch bookings mirrored under a client's `bookings` subcollection.
+    func fetchBookingsForClient(clientId: String, completion: @escaping ([BookingItem]) -> Void) {
+        let coll = db.collection("clients").document(clientId).collection("bookings")
+        coll.getDocuments { snapshot, error in
+            if let error = error { print("fetchBookingsForClient error: \(error)"); completion([]); return }
+            let docs = snapshot?.documents ?? []
+            let items = docs.map { d -> BookingItem in
+                let data = d.data()
+                let id = d.documentID
+                let coachID = (data["CoachID"] as? DocumentReference)?.documentID ?? (data["CoachID"] as? String ?? "")
+                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
+                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                let status = data["Status"] as? String
+                let location = data["Location"] as? String
+                let notes = data["Notes"] as? String
+                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+            }
+            completion(items)
+        }
+    }
+
+    /// Count bookings for a client (reads the client's bookings subcollection)
+    func countBookingsForClient(clientId: String, completion: @escaping (Int?, Error?) -> Void) {
+        let coll = db.collection("clients").document(clientId).collection("bookings")
+        coll.getDocuments { snapshot, error in
+            if let error = error { completion(nil, error); return }
+            completion(snapshot?.documents.count ?? 0, nil)
+        }
     }
 
     /// Fetch all reviews from the `reviews` collection and resolve client/coach names when possible.
@@ -721,5 +794,218 @@ class FirestoreManager: ObservableObject {
                 completion(nil)
             }
         }
+    }
+
+    /// Migrate existing root `bookings` documents into per-coach and per-client subcollections.
+    /// This is idempotent: it will set the same document data under each subcollection using the booking's root document ID.
+    func migrateBookingsToSubcollections(completion: @escaping (Error?) -> Void) {
+        let bookingsColl = db.collection("bookings")
+        bookingsColl.getDocuments { [weak self] snapshot, error in
+            guard let self = self else { completion(nil); return }
+            if let error = error { completion(error); return }
+            let docs = snapshot?.documents ?? []
+            guard !docs.isEmpty else { completion(nil); return }
+
+            let batch = self.db.batch()
+            for doc in docs {
+                let data = doc.data()
+                let bookingId = doc.documentID
+                // Resolve coach id & client id from either DocumentReference or string
+                var coachId: String? = nil
+                var clientId: String? = nil
+                if let cref = data["CoachID"] as? DocumentReference { coachId = cref.documentID }
+                else if let s = data["CoachID"] as? String { coachId = s.split(separator: "/").last.map(String.init) ?? s }
+                if let cref = data["ClientID"] as? DocumentReference { clientId = cref.documentID }
+                else if let s = data["ClientID"] as? String { clientId = s.split(separator: "/").last.map(String.init) ?? s }
+
+                if let cId = coachId {
+                    let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                    batch.setData(data, forDocument: coachBookingRef)
+                }
+                if let clId = clientId {
+                    let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                    batch.setData(data, forDocument: clientBookingRef)
+                }
+            }
+
+            batch.commit { err in
+                if let err = err { print("migrateBookingsToSubcollections commit error: \(err)"); completion(err) }
+                else { print("migrateBookingsToSubcollections: mirrored \(docs.count) bookings"); completion(nil) }
+            }
+        }
+    }
+
+    /// Save booking to root `bookings` and mirror under coach/client subcollections.
+    func saveBookingAndMirror(coachId: String,
+                              clientId: String,
+                              startAt: Date,
+                              endAt: Date,
+                              status: String = "requested",
+                              location: String? = nil,
+                              notes: String? = nil,
+                              extra: [String: Any]? = nil,
+                              completion: @escaping (Error?) -> Void) {
+        let coachRef = db.collection("coaches").document(coachId)
+        let clientRef = db.collection("clients").document(clientId)
+        let bookingRef = db.collection("bookings").document()
+        let coachBookingRef = coachRef.collection("bookings").document(bookingRef.documentID)
+        let clientBookingRef = clientRef.collection("bookings").document(bookingRef.documentID)
+
+        var data: [String: Any] = [
+            "CoachID": coachRef,
+            "ClientID": clientRef,
+            "StartAt": Timestamp(date: startAt),
+            "EndAt": Timestamp(date: endAt),
+            "Location": location ?? "",
+            "Notes": notes ?? "",
+            "Status": status,
+            "CreatedAt": FieldValue.serverTimestamp()
+        ]
+        if let extra = extra { for (k,v) in extra { data[k] = v } }
+
+        print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId)")
+
+        let batch = db.batch()
+        batch.setData(data, forDocument: bookingRef)
+        batch.setData(data, forDocument: coachBookingRef)
+        batch.setData(data, forDocument: clientBookingRef)
+
+        // Build a compact denormalized summary to append to coach.calendar
+        let bookingSummary: [String: Any] = [
+            "id": bookingRef.documentID,
+            "ClientID": clientRef.documentID,
+            "CoachID": coachRef.documentID,
+            "StartAt": Timestamp(date: startAt),
+            "EndAt": Timestamp(date: endAt),
+            "Location": location ?? "",
+            "Notes": notes ?? "",
+            "Status": status,
+            // Use a concrete client-side timestamp for array elements; server-side
+            // sentinels (FieldValue.serverTimestamp()) aren't allowed inside
+            // arrayUnion payloads. The authoritative server timestamp still exists
+            // on the root booking document's CreatedAt field.
+            "CreatedAt": Timestamp(date: Date())
+        ]
+
+        // Use arrayUnion to append without duplicating existing entries.
+        batch.updateData(["calendar": FieldValue.arrayUnion([bookingSummary])], forDocument: coachRef)
+
+        // Also mirror the booking under the coach/client subcollections and append a
+        // denormalized summary into the coach's `calendar` array for fast lookups.
+        // Warning: storing unbounded arrays on documents can grow large; consider
+        // migrating to subcollections only if calendar arrays become too large.
+
+        batch.commit { [weak self] err in
+            guard let self = self else { completion(err); return }
+            if let err = err {
+                print("[FirestoreManager] saveBookingAndMirror commit error: \(err)")
+                completion(err)
+                return
+            }
+            print("[FirestoreManager] saveBookingAndMirror commit succeeded for booking \(bookingRef.documentID). Verifying mirrors...")
+
+            let group = DispatchGroup()
+            var firstError: Error? = nil
+
+            group.enter()
+            coachBookingRef.getDocument { snap, err in
+                if let err = err {
+                    print("[FirestoreManager] coach mirror getDocument error: \(err)")
+                    if firstError == nil { firstError = err }
+                } else if let snap = snap, snap.exists {
+                    print("[FirestoreManager] coach mirror exists at \(coachBookingRef.path)")
+                } else {
+                    print("[FirestoreManager] coach mirror MISSING at \(coachBookingRef.path)")
+                }
+                group.leave()
+            }
+
+            group.enter()
+            clientBookingRef.getDocument { snap, err in
+                if let err = err {
+                    print("[FirestoreManager] client mirror getDocument error: \(err)")
+                    if firstError == nil { firstError = err }
+                } else if let snap = snap, snap.exists {
+                    print("[FirestoreManager] client mirror exists at \(clientBookingRef.path)")
+                } else {
+                    print("[FirestoreManager] client mirror MISSING at \(clientBookingRef.path)")
+                }
+                group.leave()
+            }
+
+            group.notify(queue: .main) {
+                if let err = firstError {
+                    completion(err)
+                } else {
+                    completion(nil)
+                }
+            }
+        }
+    }
+
+    /// Convenience wrapper used by UI to save a booking. Calls the internal saveBookingAndMirror implementation.
+    func saveBooking(clientUid: String, coachUid: String, startAt: Date, endAt: Date, location: String?, notes: String?, status: String = "requested", completion: @escaping (Error?) -> Void) {
+        saveBookingAndMirror(coachId: coachUid, clientId: clientUid, startAt: startAt, endAt: endAt, status: status, location: location, notes: notes, extra: nil, completion: completion)
+    }
+
+    /// Debug helper to fetch all bookings (root collection) and append a readable dump into bookingsDebug.
+    func fetchAllBookingsDebug() {
+        DispatchQueue.main.async { self.bookingsDebug = "Starting fetchAllBookingsDebug..." }
+        let coll = db.collection("bookings")
+        coll.getDocuments { snapshot, error in
+            if let error = error {
+                let msg = "fetchAllBookingsDebug error: \(error.localizedDescription)"
+                print(msg)
+                DispatchQueue.main.async { self.bookingsDebug += "\n\(msg)" }
+                return
+            }
+            let docs = snapshot?.documents ?? []
+            var lines: [String] = ["Total bookings: \(docs.count)"]
+            for d in docs.prefix(50) {
+                let data = d.data()
+                let id = d.documentID
+                let start = (data["StartAt"] as? Timestamp)?.dateValue()
+                let coach = (data["CoachID"] as? DocumentReference)?.documentID ?? (data["CoachID"] as? String ?? "")
+                let client = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
+                lines.append("id=\(id) coach=\(coach) client=\(client) start=\(start ?? Date.distantPast)")
+            }
+            DispatchQueue.main.async {
+                self.bookingsDebug += "\n" + lines.joined(separator: "\n")
+            }
+        }
+    }
+
+    // Dummy upload to cloudinary - placeholder to satisfy callers
+    func uploadToCloudinary(data: Data, filename: String, completion: @escaping (Result<URL, Error>) -> Void) {
+        // Placeholder - user must configure their unsigned preset and cloud name
+        completion(.failure(NSError(domain: "Cloudinary", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cloudinary not configured"])))
+    }
+
+    func showToast(_ message: String) {
+        // placeholder for UI toast handling
+        print("Toast: \(message)")
+    }
+
+    /// Fetch bookings stored under clients/{clientId}/bookings and set published `bookings`.
+    func fetchBookingsFromClientSubcollection(clientId: String) {
+        DispatchQueue.main.async { self.bookingsDebug = "Starting fetchBookingsFromClientSubcollection for \(clientId)..." }
+        fetchBookingsForClient(clientId: clientId) { items in
+            DispatchQueue.main.async {
+                self.bookings = items.sorted { (a,b) in
+                    (a.startAt ?? Date.distantPast) > (b.startAt ?? Date.distantPast)
+                }
+                self.bookingsDebug += "\nFetched \(items.count) bookings from clients/\(clientId)/bookings"
+            }
+        }
+    }
+
+    /// Convenience: fetch bookings for the currently authenticated user from their client subcollection.
+    func fetchBookingsForCurrentClientSubcollection() {
+        DispatchQueue.main.async { self.bookingsDebug = "Starting fetchBookingsForCurrentClientSubcollection..." }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            DispatchQueue.main.async { self.bookings = []; self.bookingsDebug += "\nNo authenticated user" }
+            return
+        }
+        fetchBookingsFromClientSubcollection(clientId: uid)
     }
 }

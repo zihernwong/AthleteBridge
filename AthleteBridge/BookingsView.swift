@@ -77,13 +77,13 @@ struct BookingsView: View {
                     Button(action: { showingNewBooking = true }) {
                         Image(systemName: "plus")
                     }
-                    Button(action: { firestore.fetchBookingsForCurrentUser() }) {
+                    Button(action: { firestore.fetchBookingsForCurrentClientSubcollection() }) {
                         Image(systemName: "arrow.clockwise")
                     }
                 }
             }
             .onAppear {
-                firestore.fetchBookingsForCurrentUser()
+                firestore.fetchBookingsForCurrentClientSubcollection()
                 // ensure coaches are loaded so the NewBookingForm picker has items
                 firestore.fetchCoaches()
             }
@@ -215,6 +215,8 @@ struct NewBookingForm: View {
                 }
                 if let uid = auth.user?.uid {
                     firestore.fetchCurrentProfiles(for: uid)
+                    // also load bookings stored under clients/{uid}/bookings
+                    firestore.fetchBookingsFromClientSubcollection(clientId: uid)
                 }
             }
         }
@@ -242,7 +244,8 @@ struct NewBookingForm: View {
                     self.alertMessage = "Failed to save booking: \(err.localizedDescription)"
                     self.showAlert = true
                 } else {
-                    firestore.fetchBookingsForCurrentUser()
+                    // Refresh the client subcollection which is the canonical source
+                    firestore.fetchBookingsForCurrentClientSubcollection()
                     firestore.showToast("Booking saved")
                     showSheet = false
                 }
