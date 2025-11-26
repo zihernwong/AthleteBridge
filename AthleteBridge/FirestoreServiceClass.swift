@@ -69,6 +69,10 @@ class FirestoreManager: ObservableObject {
     @Published var locations: [LocationItem] = []
     @Published var locationsDebug: String = ""
 
+    /// Aggregated bookings fetched from each coach's subcollection
+    @Published var coachBookings: [BookingItem] = []
+    @Published var coachBookingsDebug: String = ""
+
     init() {
         // Ensure Firebase is configured before using Firestore
         if FirebaseApp.app() == nil {
@@ -726,6 +730,94 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Add a new location document into the `locations` collection.
+    func addLocation(name: String, address: String? = nil, latitude: Double, longitude: Double, ownerRefs: [DocumentReference]? = nil, clientRef: DocumentReference? = nil, coachRef: DocumentReference? = nil, completion: @escaping (Error?) -> Void) {
+        let coll = db.collection("locations")
+
+        // base payload
+        var data: [String: Any] = [
+            "Name": name,
+            "createdAt": FieldValue.serverTimestamp(),
+            "geo": GeoPoint(latitude: latitude, longitude: longitude)
+        ]
+        if let address = address { data["Address"] = address }
+
+        // If owner refs provided, store them on the root document and also store simple ownerUIDs for easy queries
+        if let owners = ownerRefs {
+            data["Owners"] = owners
+            let uids = owners.map { $0.documentID }
+            data["OwnerUIDs"] = uids
+        }
+
+        // Also include explicit ClientID/CoachID fields when available for convenience
+        if let cRef = clientRef { data["ClientID"] = cRef }
+        if let sRef = coachRef { data["CoachID"] = sRef }
+
+        // Create a new document ref and use a batch to optionally mirror to owner subcollections
+        let newDocRef = coll.document()
+        let batch = db.batch()
+        batch.setData(data, forDocument: newDocRef)
+
+        if let owners = ownerRefs {
+            for owner in owners {
+                let ownerLocRef = owner.collection("locations").document(newDocRef.documentID)
+                batch.setData(data, forDocument: ownerLocRef)
+            }
+        }
+
+        batch.commit { err in
+            if let err = err {
+                print("addLocation commit error: \(err)")
+                completion(err)
+                return
+            }
+            // refresh local cache
+            self.fetchLocations()
+            completion(nil)
+        }
+    }
+
+    /// Convenience: add a location and mirror it under the current user's client/coach subcollections (if applicable)
+    func addLocationForCurrentUser(name: String, address: String? = nil, latitude: Double, longitude: Double, completion: @escaping (Error?) -> Void) {
+        var ownerRefs: [DocumentReference] = []
+        var clientReference: DocumentReference? = nil
+        var coachReference: DocumentReference? = nil
+
+        guard let uid = Auth.auth().currentUser?.uid else {
+            // no authenticated user: just add to root
+            addLocation(name: name, address: address, latitude: latitude, longitude: longitude, ownerRefs: nil, clientRef: nil, coachRef: nil, completion: completion)
+            return
+        }
+
+        // Always create references for clients/{uid} and coaches/{uid} so the root doc contains pointers
+        // We still mirror under the subcollections only if those profiles exist (or we can always mirror).
+        let clientRefCandidate = db.collection("clients").document(uid)
+        let coachRefCandidate = db.collection("coaches").document(uid)
+
+        // If a client profile exists (cached) or we want to assume client ownership, add it
+        if let client = self.currentClient, client.id == uid {
+            ownerRefs.append(clientRefCandidate)
+            clientReference = clientRefCandidate
+        }
+
+        // If a coach profile exists (cached) add it
+        if let coach = self.currentCoach, coach.id == uid {
+            ownerRefs.append(coachRefCandidate)
+            coachReference = coachRefCandidate
+        }
+
+        // If neither client nor coach cached but user is authenticated, still attach the clientRef by default
+        // so the saved location has a pointer to the user's document path. This helps identify ownership even
+        // before the profile document is created.
+        if ownerRefs.isEmpty {
+            // default to client ownership (if your app separate roles, change logic accordingly)
+            ownerRefs.append(clientRefCandidate)
+            clientReference = clientRefCandidate
+        }
+
+        addLocation(name: name, address: address, latitude: latitude, longitude: longitude, ownerRefs: ownerRefs, clientRef: clientReference, coachRef: coachReference, completion: completion)
+    }
+
     /// Seed developer/test sample locations into the `locations` collection.
     /// This is intended as a convenience for development only.
     func seedLocations(overwriteExisting: Bool = false, completion: @escaping (Error?) -> Void = { _ in }) {
@@ -1007,5 +1099,148 @@ class FirestoreManager: ObservableObject {
             return
         }
         fetchBookingsFromClientSubcollection(clientId: uid)
+    }
+
+    /// Fetch all bookings stored under each coach's `bookings` subcollection and populate `coachBookings`.
+    func fetchAllCoachBookings() {
+        DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchAllCoachBookings..." }
+        let coachColl = db.collection("coaches")
+        coachColl.getDocuments { snap, err in
+            if let err = err {
+                let msg = "fetchAllCoachBookings: failed to list coaches: \(err.localizedDescription)"
+                print(msg)
+                DispatchQueue.main.async { self.coachBookingsDebug += "\n\(msg)" }
+                return
+            }
+            let coachDocs = snap?.documents ?? []
+            DispatchQueue.main.async { self.coachBookingsDebug += "\nFound \(coachDocs.count) coaches" }
+
+            let group = DispatchGroup()
+            var aggregated: [BookingItem] = []
+
+            for coachDoc in coachDocs {
+                group.enter()
+                let coachId = coachDoc.documentID
+                let coachFirst = coachDoc.data()["FirstName"] as? String ?? ""
+                let coachLast = coachDoc.data()["LastName"] as? String ?? ""
+                let coachName = [coachFirst, coachLast].filter { !$0.isEmpty }.joined(separator: " ")
+
+                let coll = coachDoc.reference.collection("bookings")
+                coll.getDocuments { bsnap, berr in
+                    if let berr = berr {
+                        print("fetchAllCoachBookings: failed to list bookings for coach \(coachId): \(berr)")
+                        group.leave()
+                        return
+                    }
+                    let docs = bsnap?.documents ?? []
+                    for d in docs {
+                        let data = d.data()
+                        let id = d.documentID
+                        let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
+                        let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
+                        let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                        let status = data["Status"] as? String
+                        let location = data["Location"] as? String
+                        let notes = data["Notes"] as? String
+                        // attempt to resolve client name sync-ish: we won't block overall fetching per-client
+                        // we don't retain clientName here because it will be resolved later in bulk
+                        var clientName: String? = nil
+                        if let clientRef = data["ClientID"] as? DocumentReference {
+                            clientRef.getDocument { cSnap, _ in
+                                if let cdata = cSnap?.data() {
+                                    clientName = cdata["name"] as? String
+                                }
+                            }
+                        } else if let clientStr = data["ClientID"] as? String {
+                            // try to fetch client doc to get name
+                            self.db.collection("clients").document(clientID).getDocument { cSnap, _ in
+                                if let cdata = cSnap?.data() { /* no-op: resolve later if needed */ }
+                            }
+                        }
+
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                        aggregated.append(item)
+                    }
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                // sort by start descending
+                let sorted = aggregated.sorted { (a,b) in
+                    (a.startAt ?? Date.distantPast) > (b.startAt ?? Date.distantPast)
+                }
+                self.coachBookings = sorted
+                self.coachBookingsDebug += "\nAssigned \(sorted.count) coach-side bookings"
+            }
+        }
+    }
+
+    /// Fetch bookings for a specific coach's bookings subcollection and populate `coachBookings`.
+    func fetchBookingsForCoachSubcollection(coachId: String) {
+        DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchBookingsForCoachSubcollection for \(coachId)..." }
+        fetchBookingsForCoach(coachId: coachId) { items in
+            DispatchQueue.main.async {
+                self.coachBookings = items.sorted { (a,b) in
+                    (a.startAt ?? Date.distantPast) > (b.startAt ?? Date.distantPast)
+                }
+                self.coachBookingsDebug += "\nFetched \(items.count) bookings from coaches/\(coachId)/bookings"
+            }
+        }
+    }
+
+    /// Convenience: fetch bookings for the currently authenticated user treating them as a coach.
+    func fetchBookingsForCurrentCoachSubcollection() {
+        DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchBookingsForCurrentCoachSubcollection..." }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            DispatchQueue.main.async { self.coachBookings = []; self.coachBookingsDebug += "\nNo authenticated user" }
+            return
+        }
+        fetchBookingsForCoachSubcollection(coachId: uid)
+    }
+
+    /// Fetch locations from a client's `locations` subcollection and return mapped LocationItem array.
+    func fetchLocationsForClient(clientId: String, completion: @escaping ([LocationItem]) -> Void) {
+        let coll = db.collection("clients").document(clientId).collection("locations")
+        coll.getDocuments { snapshot, error in
+            if let error = error {
+                print("fetchLocationsForClient error: \(error)")
+                completion([])
+                return
+            }
+            let docs = snapshot?.documents ?? []
+            let mapped: [LocationItem] = docs.map { d in
+                let data = d.data()
+                let id = d.documentID
+                let name = (data["Name"] as? String) ?? (data["name"] as? String) ?? (data["locationName"] as? String)
+                let address = (data["Address"] as? String) ?? (data["address"] as? String) ?? (data["Location"] as? String)
+                let notes = (data["Notes"] as? String) ?? (data["notes"] as? String)
+                var lat: Double? = nil
+                var lng: Double? = nil
+                if let latNum = data["latitude"] as? Double { lat = latNum } else if let latNum = data["Latitude"] as? Double { lat = latNum }
+                if let lngNum = data["longitude"] as? Double { lng = lngNum } else if let lngNum = data["Longitude"] as? Double { lng = lngNum }
+                if let gp = data["geo"] as? GeoPoint { lat = gp.latitude; lng = gp.longitude }
+                return LocationItem(id: id, name: name, address: address, notes: notes, latitude: lat, longitude: lng)
+            }
+            completion(mapped)
+        }
+    }
+
+    /// Convenience: fetch locations for the currently authenticated user (clients/{uid}/locations)
+    func fetchLocationsForCurrentUser() {
+        DispatchQueue.main.async { self.locationsDebug = "Starting fetchLocationsForCurrentUser..." }
+        guard let uid = Auth.auth().currentUser?.uid else {
+            DispatchQueue.main.async {
+                self.locations = []
+                self.locationsDebug += "\nNo authenticated user"
+            }
+            return
+        }
+        fetchLocationsForClient(clientId: uid) { items in
+            DispatchQueue.main.async {
+                self.locations = items
+                self.locationsDebug += "\nFetched \(items.count) locations for client/\(uid)"
+            }
+        }
     }
 }

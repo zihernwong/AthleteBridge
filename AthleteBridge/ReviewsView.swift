@@ -21,14 +21,60 @@ struct ReviewsView: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
 
+    // Computed lists to split reviews for the current user
+    private var reviewsAboutUser: [FirestoreManager.ReviewItem] {
+        guard let uid = auth.user?.uid else { return [] }
+        return firestore.reviews.filter { $0.coachID == uid }
+    }
+
+    private var reviewsByUser: [FirestoreManager.ReviewItem] {
+        guard let uid = auth.user?.uid else { return [] }
+        return firestore.reviews.filter { $0.clientID == uid }
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                Section(header: Text("Recent Reviews")) {
-                    if firestore.reviews.isEmpty {
-                        Text("No reviews yet").foregroundColor(.secondary)
+                // Reviews about the current user (if they are a coach)
+                Section(header: Text("Reviews About You")) {
+                    if reviewsAboutUser.isEmpty {
+                        Text("No reviews about you yet").foregroundColor(.secondary)
                     } else {
-                        ForEach(firestore.reviews) { item in
+                        ForEach(reviewsAboutUser) { item in
+                            HStack(alignment: .top, spacing: 12) {
+                                Circle()
+                                    .fill(Color.accentColor.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+                                    .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(item.clientName ?? "Client").font(.headline)
+                                        Spacer()
+                                        Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                    }
+
+                                    HStack(spacing: 4) {
+                                        let stars = Int(item.rating ?? "0") ?? 0
+                                        ForEach(1...5, id: \.self) { i in
+                                            Image(systemName: i <= stars ? "star.fill" : "star")
+                                                .foregroundColor(i <= stars ? .yellow : .secondary)
+                                        }
+                                    }
+                                    Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        }
+                    }
+                }
+
+                // Reviews written by the current user
+                Section(header: Text("Your Reviews")) {
+                    if reviewsByUser.isEmpty {
+                        Text("You haven't written any reviews yet").foregroundColor(.secondary)
+                    } else {
+                        ForEach(reviewsByUser) { item in
                             HStack(alignment: .top, spacing: 12) {
                                 Circle()
                                     .fill(Color.accentColor.opacity(0.15))
@@ -54,10 +100,10 @@ struct ReviewsView: View {
                             }
                             .padding(.vertical, 6)
                         }
-                        .onDelete(perform: delete)
                     }
                 }
 
+                // Write a review form remains unchanged
                 Section(header: Text("Write a Review")) {
                     if firestore.coaches.isEmpty {
                         Text("No coaches available").foregroundColor(.secondary)
@@ -108,12 +154,7 @@ struct ReviewsView: View {
             .navigationTitle("Reviews")
             .listStyle(InsetGroupedListStyle())
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    EditButton()
-                    Button(action: { firestore.fetchAllReviews() }) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                }
+                // No edit or refresh buttons needed for Reviews view per request.
             }
             .onAppear {
                 firestore.fetchCoaches()
@@ -156,13 +197,6 @@ struct ReviewsView: View {
                 }
             }
         }
-    }
-
-    private func delete(at offsets: IndexSet) {
-        // local deletion only for now; real deletion from Firestore requires document id and security rules
-        // Remove the selected item from the reviews array shown
-        let ids = offsets.map { firestore.reviews[$0].id }
-        firestore.reviews.removeAll { ids.contains($0.id) }
     }
 }
 

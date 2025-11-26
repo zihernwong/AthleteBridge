@@ -38,6 +38,8 @@ struct ProfileView: View {
     @State private var uploadError: String? = nil
     @State private var saveMessage: String? = nil
     @State private var showSavedConfirmation: Bool = false
+    // Tracks whether we are editing an existing profile (true) or creating a new one (false)
+    @State private var isEditMode: Bool = false
 
     @Environment(\.presentationMode) private var presentationMode
 
@@ -55,13 +57,32 @@ struct ProfileView: View {
                     photoSection
                     saveSection
                 }
-                .navigationTitle("Create Profile")
+                .navigationTitle(isEditMode ? "Edit Profile" : "Create Profile")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                     }
                 }
-                .onAppear { populateFromExisting() }
+                .onAppear {
+                    // Ensure Firestore attempts to load the current user's client/coach documents
+                    if let uid = auth.user?.uid {
+                        firestore.fetchCurrentProfiles(for: uid)
+                    }
+                    // Try to populate immediately from any already-loaded profiles
+                    populateFromExisting()
+                    // determine initial edit/create mode based on the currently selected role
+                    updateModeForRole()
+                }
+                // If auth.user becomes available after this view appears, trigger profile fetch
+                .onReceive(auth.$user) { user in
+                    if let uid = user?.uid {
+                        firestore.fetchCurrentProfiles(for: uid)
+                    }
+                }
+                // React to asynchronous updates from Firestore so the UI updates into Edit mode
+                .onReceive(firestore.$currentClient) { _ in
+                    updateModeForRole()
+                }
             }
 
             if showSavedConfirmation {
@@ -195,7 +216,7 @@ struct ProfileView: View {
             if isSaving || isUploadingImage {
                 ProgressView()
             } else {
-                Button("Save Profile") { saveProfile() }
+                Button(isEditMode ? "Save Changes" : "Save Profile") { saveProfile() }
                     .disabled((role == .client && selectedGoals.isEmpty) || (role == .coach && selectedSpecialties.isEmpty))
             }
 
@@ -206,6 +227,31 @@ struct ProfileView: View {
                 Text("Please select at least one goal").foregroundColor(.red).font(.caption)
             } else if role == .coach && selectedSpecialties.isEmpty {
                 Text("Please select at least one specialty").foregroundColor(.red).font(.caption)
+            }
+        }
+    }
+
+    // MARK: - Mode helpers
+    /// Sets isEditMode and populates fields for the active role when existing profile data is present.
+    private func updateModeForRole() {
+        if role == .client {
+            if let client = firestore.currentClient {
+                isEditMode = true
+                name = client.name
+                selectedGoals = Set(client.goals)
+                selectedClientAvailability = Set(client.preferredAvailability)
+            } else {
+                isEditMode = false
+            }
+        } else {
+            if let coach = firestore.currentCoach {
+                isEditMode = true
+                name = coach.name
+                selectedSpecialties = Set(coach.specialties)
+                experienceYears = coach.experienceYears
+                coachAvailabilitySelection = coach.availability
+            } else {
+                isEditMode = false
             }
         }
     }
@@ -232,20 +278,25 @@ struct ProfileView: View {
         isSaving = true
         saveMessage = nil
 
+        // Capture the environment object into a local strong reference to avoid
+        // property-wrapper dynamic-member lookup issues when used inside nested
+        // functions and asynchronous closures.
+        let fm = self.firestore
+
         func finalizeSave(withPhotoURL photoURL: String?) {
             if role == .client {
                 let goals = Array(selectedGoals)
                 let preferred = Array(selectedClientAvailability)
                 // save preferredAvailability as array for multi-select support
                 // call existing API which accepts array after update
-                firestore.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: goals, preferredAvailability: preferred, photoURL: photoURL) { err in
+                fm.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: goals, preferredAvailability: preferred, photoURL: photoURL) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
                             self.saveMessage = "Error saving client: \(err.localizedDescription)"
                         } else {
                             self.showSavedConfirmation = true
-                            firestore.showToast("Client profile saved")
+                            fm.showToast("Client profile saved")
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                                 self.showSavedConfirmation = false
                                 presentationMode.wrappedValue.dismiss()
@@ -260,14 +311,14 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                firestore.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, active: true, overwrite: true) { err in
+                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, active: true, overwrite: true) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
                             self.saveMessage = "Error saving coach: \(err.localizedDescription)"
                         } else {
                             self.showSavedConfirmation = true
-                            firestore.showToast("Coach profile saved")
+                            fm.showToast("Coach profile saved")
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                                 self.showSavedConfirmation = false
                                 presentationMode.wrappedValue.dismiss()
@@ -289,12 +340,12 @@ struct ProfileView: View {
                 saveMessage = "Failed processing image"
                 return
             }
-            firestore.uploadToCloudinary(data: jpegData, filename: "\(uid).jpg") { result in
+            fm.uploadToCloudinary(data: jpegData, filename: "\(uid).jpg") { result in
                 DispatchQueue.main.async {
                     self.isUploadingImage = false
                     switch result {
                     case .success(let url): finalizeSave(withPhotoURL: url.absoluteString)
-                    case .failure(let err): isSaving = false; uploadError = "Upload failed: \(err.localizedDescription)"; saveMessage = "Image upload failed"
+                    case .failure(let err): self.isSaving = false; self.uploadError = "Upload failed: \(err.localizedDescription)"; self.saveMessage = "Image upload failed"
                     }
                 }
             }

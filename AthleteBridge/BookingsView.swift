@@ -33,7 +33,8 @@ struct BookingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                Section(header: Text("Bookings")) {
+                // Bookings where the current user is the client
+                Section(header: Text("My Bookings")) {
                     if firestore.bookings.isEmpty {
                         Text("No bookings yet").foregroundColor(.secondary)
                     } else {
@@ -70,6 +71,52 @@ struct BookingsView: View {
                         }
                     }
                 }
+
+                // Aggregated coach-side bookings (for the current user as a coach)
+                Section(header: Text("Coach-side Bookings")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(firestore.coachBookingsDebug.isEmpty ? "" : firestore.coachBookingsDebug)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        HStack {
+                            Spacer()
+                            Button("Refresh Coach Bookings") {
+                                // Fetch only the bookings under the currently authenticated coach's subcollection
+                                firestore.fetchBookingsForCurrentCoachSubcollection()
+                            }
+                            Spacer()
+                        }
+                    }
+
+                    if firestore.coachBookings.isEmpty {
+                        Text("No coach bookings found").foregroundColor(.secondary)
+                    } else {
+                        ForEach(firestore.coachBookings) { b in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(b.coachName ?? "Coach")
+                                        .font(.headline)
+                                    Spacer()
+                                    Text(b.status?.capitalized ?? "")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                if let start = b.startAt {
+                                    Text("Start: \(start, formatter: DateFormatter.shortDateTime)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                if let location = b.location {
+                                    Text(location).font(.body)
+                                }
+                                if let notes = b.notes {
+                                    Text(notes).font(.footnote).foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                }
             }
             .navigationTitle("Bookings")
             .toolbar {
@@ -83,7 +130,10 @@ struct BookingsView: View {
                 }
             }
             .onAppear {
+                // Load bookings where user is client
                 firestore.fetchBookingsForCurrentClientSubcollection()
+                // Also load bookings where user is coach
+                firestore.fetchBookingsForCurrentCoachSubcollection()
                 // ensure coaches are loaded so the NewBookingForm picker has items
                 firestore.fetchCoaches()
             }
