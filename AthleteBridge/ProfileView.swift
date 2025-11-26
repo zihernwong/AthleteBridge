@@ -189,6 +189,35 @@ struct ProfileView: View {
                         .frame(width: 100, height: 100)
                         .clipShape(Circle())
                         .shadow(radius: 4)
+                } else if role == .client, let url = firestore.currentClientPhotoURL {
+                    // show stored client photo
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 100, height: 100)
+                        case .success(let image):
+                            image.resizable().scaledToFill().frame(width: 100, height: 100).clipShape(Circle()).shadow(radius: 4)
+                        case .failure(_):
+                            Image(systemName: "person.crop.circle").resizable().frame(width: 80, height: 80).foregroundColor(.secondary)
+                        @unknown default:
+                            Image(systemName: "person.crop.circle").resizable().frame(width: 80, height: 80).foregroundColor(.secondary)
+                        }
+                    }
+                } else if role == .coach, let url = firestore.currentCoachPhotoURL {
+                    // show stored coach photo
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            ProgressView().frame(width: 100, height: 100)
+                        case .success(let image):
+                            image.resizable().scaledToFill().frame(width: 100, height: 100).clipShape(Circle()).shadow(radius: 4)
+                        case .failure(_):
+                            Image(systemName: "person.crop.circle").resizable().frame(width: 80, height: 80).foregroundColor(.secondary)
+                        @unknown default:
+                            Image(systemName: "person.crop.circle").resizable().frame(width: 80, height: 80).foregroundColor(.secondary)
+                        }
+                    }
                 } else {
                     Image(systemName: "person.crop.circle")
                         .resizable()
@@ -295,12 +324,14 @@ struct ProfileView: View {
                         if let err = err {
                             self.saveMessage = "Error saving client: \(err.localizedDescription)"
                         } else {
-                            self.showSavedConfirmation = true
-                            fm.showToast("Client profile saved")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                self.showSavedConfirmation = false
-                                presentationMode.wrappedValue.dismiss()
-                            }
+                            // Refresh cached profile so the stored photo URL is available immediately
+                            fm.fetchCurrentProfiles(for: uid)
+                             self.showSavedConfirmation = true
+                             fm.showToast("Client profile saved")
+                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                 self.showSavedConfirmation = false
+                                 presentationMode.wrappedValue.dismiss()
+                             }
                         }
                     }
                 }
@@ -317,12 +348,14 @@ struct ProfileView: View {
                         if let err = err {
                             self.saveMessage = "Error saving coach: \(err.localizedDescription)"
                         } else {
-                            self.showSavedConfirmation = true
-                            fm.showToast("Coach profile saved")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                self.showSavedConfirmation = false
-                                presentationMode.wrappedValue.dismiss()
-                            }
+                            // Refresh cached profile so the stored photo URL is available immediately
+                            fm.fetchCurrentProfiles(for: uid)
+                             self.showSavedConfirmation = true
+                             fm.showToast("Coach profile saved")
+                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                 self.showSavedConfirmation = false
+                                 presentationMode.wrappedValue.dismiss()
+                             }
                         }
                     }
                 }
@@ -340,7 +373,8 @@ struct ProfileView: View {
                 saveMessage = "Failed processing image"
                 return
             }
-            fm.uploadToCloudinary(data: jpegData, filename: "\(uid).jpg") { result in
+            // Use Firebase Storage upload helper instead of Cloudinary
+            fm.uploadProfileImageToStorage(data: jpegData, filename: "\(uid).jpg") { result in
                 DispatchQueue.main.async {
                     self.isUploadingImage = false
                     switch result {

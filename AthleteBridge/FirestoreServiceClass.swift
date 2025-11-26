@@ -2,6 +2,7 @@ import Foundation
 import Firebase
 import FirebaseFirestore
 import FirebaseAuth
+import FirebaseStorage
 import SwiftUI
 
 @MainActor
@@ -11,10 +12,13 @@ class FirestoreManager: ObservableObject {
 
     // Delay creating Firestore until after Firebase is configured in init
     private var db: Firestore!
+    private var authStateListenerHandle: AuthStateDidChangeListenerHandle?
 
     @Published var coaches: [Coach] = []
     @Published var currentClient: Client? = nil
+    @Published var currentClientPhotoURL: URL? = nil
     @Published var currentCoach: Coach? = nil
+    @Published var currentCoachPhotoURL: URL? = nil
 
     // MARK: - Bookings
     struct BookingItem: Identifiable {
@@ -81,11 +85,34 @@ class FirestoreManager: ObservableObject {
         }
         self.db = Firestore.firestore()
 
+        // Listen for auth state changes and fetch profiles when a user signs in
+        self.authStateListenerHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            guard let self = self else { return }
+            if let uid = user?.uid {
+                print("[FirestoreManager] auth state changed - user signed in: \(uid). Fetching profiles.")
+                self.fetchCurrentProfiles(for: uid)
+            } else {
+                // user signed out - clear cached profiles and photo URLs
+                DispatchQueue.main.async {
+                    self.currentClient = nil
+                    self.currentClientPhotoURL = nil
+                    self.currentCoach = nil
+                    self.currentCoachPhotoURL = nil
+                }
+            }
+        }
+
         // Optionally start listening to coaches collection
         fetchCoaches()
-        // Optionally listen for current user's profile
+        // Optionally fetch current user's profile if already signed in
         if let uid = Auth.auth().currentUser?.uid {
             fetchCurrentProfiles(for: uid)
+        }
+    }
+
+    deinit {
+        if let handle = authStateListenerHandle {
+            Auth.auth().removeStateDidChangeListener(handle)
         }
     }
 
@@ -114,47 +141,110 @@ class FirestoreManager: ObservableObject {
     }
 
     func fetchCurrentProfiles(for uid: String) {
-        // try client
-        self.db.collection("clients").document(uid).getDocument { snap, err in
+        // Fetch client document and resolve photo URL
+        let clientRef = db.collection("clients").document(uid)
+        clientRef.getDocument { snap, err in
             if let err = err {
                 print("fetchCurrentProfiles client err: \(err)")
             }
-            if let data = snap?.data() {
-                let id = snap?.documentID ?? uid
-                let name = data["name"] as? String ?? ""
-                let goals = data["goals"] as? [String] ?? []
-                // preferredAvailability may be stored as String or [String]; normalize to [String]
-                var preferredArr: [String]
-                if let arr = data["preferredAvailability"] as? [String] {
-                    preferredArr = arr
-                } else if let s = data["preferredAvailability"] as? String {
-                    preferredArr = [s]
-                } else {
-                    preferredArr = ["Morning"]
+            guard let data = snap?.data() else {
+                DispatchQueue.main.async {
+                    self.currentClient = nil
+                    self.currentClientPhotoURL = nil
                 }
+                return
+            }
+
+            let id = snap?.documentID ?? uid
+            let name = data["name"] as? String ?? ""
+            let goals = data["goals"] as? [String] ?? []
+            var preferredArr: [String]
+            if let arr = data["preferredAvailability"] as? [String] {
+                preferredArr = arr
+            } else if let s = data["preferredAvailability"] as? String {
+                preferredArr = [s]
+            } else {
+                preferredArr = ["Morning"]
+            }
+
+            let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
+            self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
                     self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr)
+                    self.currentClientPhotoURL = resolved
+                    if resolved == nil { print("fetchCurrentProfiles: no client photo for \(id)") }
                 }
             }
         }
 
-        // try coach
-        self.db.collection("coaches").document(uid).getDocument { snap, err in
+        // Fetch coach document and resolve photo URL
+        let coachRef = db.collection("coaches").document(uid)
+        coachRef.getDocument { snap, err in
             if let err = err {
                 print("fetchCurrentProfiles coach err: \(err)")
             }
-            if let data = snap?.data() {
-                let id = snap?.documentID ?? uid
-                let first = data["FirstName"] as? String ?? ""
-                let last = data["LastName"] as? String ?? ""
-                let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
-                let specialties = data["Specialties"] as? [String] ?? []
-                let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
-                let availability = data["Availability"] as? [String] ?? []
+            guard let data = snap?.data() else {
+                DispatchQueue.main.async {
+                    self.currentCoach = nil
+                    self.currentCoachPhotoURL = nil
+                }
+                return
+            }
+
+            let id = snap?.documentID ?? uid
+            let first = data["FirstName"] as? String ?? ""
+            let last = data["LastName"] as? String ?? ""
+            let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+            let specialties = data["Specialties"] as? [String] ?? []
+            let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
+            let availability = data["Availability"] as? [String] ?? []
+
+            let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
+            self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
                     self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability)
+                    self.currentCoachPhotoURL = resolved
+                    if resolved == nil { print("fetchCurrentProfiles: no coach photo for \(id)") }
                 }
             }
+        }
+    }
+
+    // Resolve a photo string (could be https URL, gs:// storage URL or plain storage path) into a downloadable https URL.
+    // Calls completion on background thread; completion may be called synchronously for simple URLs.
+    func resolvePhotoURL(_ photoStr: String?, completion: @escaping (URL?) -> Void) {
+        guard let s = photoStr, !s.isEmpty else { completion(nil); return }
+
+        // If it already looks like an http/https URL, pass through
+        if s.hasPrefix("http://") || s.hasPrefix("https://") {
+            completion(URL(string: s))
+            return
+        }
+
+        // If it's a storage gs:// URL
+        if s.hasPrefix("gs://") {
+            // try to get download URL from storage
+            let ref = Storage.storage().reference(forURL: s)
+            ref.downloadURL { url, err in
+                if let err = err { print("resolvePhotoURL: failed to downloadURL for gs:// path: \(err)"); completion(nil); return }
+                completion(url)
+            }
+            return
+        }
+
+        // Otherwise, treat as a storage path; strip leading slashes
+        var path = s
+        if path.hasPrefix("/") { path.removeFirst() }
+
+        // Create a reference for the path
+        let ref = Storage.storage().reference().child(path)
+        ref.downloadURL { url, err in
+            if let err = err {
+                print("resolvePhotoURL: failed to downloadURL for path \(path): \(err)")
+                completion(nil)
+                return
+            }
+            completion(url)
         }
     }
 
@@ -1076,6 +1166,35 @@ class FirestoreManager: ObservableObject {
     func showToast(_ message: String) {
         // placeholder for UI toast handling
         print("Toast: \(message)")
+    }
+
+    // Upload profile image to Firebase Storage and return a download URL.
+    // Stores images under "profileImages/<filename>" in the project's default storage bucket.
+    func uploadProfileImageToStorage(data: Data, filename: String, completion: @escaping (Result<URL, Error>) -> Void) {
+        // Ensure Storage is available
+        let storage = Storage.storage()
+        // Use a folder for profile images
+        let storageRef = storage.reference().child("profileImages")
+        let fileRef = storageRef.child(filename)
+
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+
+        fileRef.putData(data, metadata: metadata) { meta, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            fileRef.downloadURL { url, err in
+                if let err = err {
+                    completion(.failure(err))
+                } else if let url = url {
+                    completion(.success(url))
+                } else {
+                    completion(.failure(NSError(domain: "Storage", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown error getting download URL"])))
+                }
+            }
+        }
     }
 
     /// Fetch bookings stored under clients/{clientId}/bookings and set published `bookings`.
