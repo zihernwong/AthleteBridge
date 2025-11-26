@@ -156,7 +156,8 @@ struct NewBookingForm: View {
     @State private var coachSearchText: String = ""
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
-    @State private var location: String = "Burnsville High School"
+    // selectedLocationId references a document id in clients/{uid}/locations (firestore.locations)
+    @State private var selectedLocationId: String = ""
     @State private var notes: String = "notes"
 
     @State private var isSaving = false
@@ -238,7 +239,24 @@ struct NewBookingForm: View {
                 }
 
                 Section(header: Text("Details")) {
-                    TextField("Location", text: $location)
+                    // Only allow selecting from the current user's saved locations
+                    if firestore.locations.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("No saved locations found").foregroundColor(.secondary)
+                            Text("Save a location in the Locations tab before creating a booking.").font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Picker("Location", selection: $selectedLocationId) {
+                            ForEach(firestore.locations, id: \.id) { loc in
+                                Text(loc.name ?? "Unnamed").tag(loc.id)
+                            }
+                        }
+                        .onAppear {
+                            if selectedLocationId.isEmpty, let first = firestore.locations.first {
+                                selectedLocationId = first.id
+                            }
+                        }
+                    }
                     TextEditor(text: $notes).frame(minHeight: 80)
                 }
 
@@ -251,7 +269,7 @@ struct NewBookingForm: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveBooking() }
-                        .disabled(selectedCoachId.isEmpty || auth.user == nil)
+                        .disabled(selectedCoachId.isEmpty || auth.user == nil || selectedLocationId.isEmpty)
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -267,6 +285,8 @@ struct NewBookingForm: View {
                     firestore.fetchCurrentProfiles(for: uid)
                     // also load bookings stored under clients/{uid}/bookings
                     firestore.fetchBookingsFromClientSubcollection(clientId: uid)
+                    // ensure current user's saved locations are loaded for the location picker
+                    firestore.fetchLocationsForCurrentUser()
                 }
             }
         }
@@ -286,8 +306,10 @@ struct NewBookingForm: View {
         }
 
         isSaving = true
+        // Determine location name from the selected saved location id
+        let locationName = firestore.locations.first(where: { $0.id == selectedLocationId })?.name ?? ""
         // Always create bookings with default status "requested"
-        firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: location, notes: notes, status: "requested") { err in
+        firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
             DispatchQueue.main.async {
                 self.isSaving = false
                 if let err = err {
