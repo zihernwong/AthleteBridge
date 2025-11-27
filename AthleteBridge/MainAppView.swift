@@ -12,19 +12,20 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
                 .tag(0)
 
-            homeTab
+            // Wrap other tabs so they become inaccessible until a profile is created
+            RequiresProfile(content: { homeTab }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "house"); Text("Home") }
                 .tag(1)
 
-            ReviewsView()
+            RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "star.bubble"); Text("Reviews") }
                 .tag(2)
 
-            BookingsView()
+            RequiresProfile(content: { BookingsView() }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "calendar"); Text("Bookings") }
                 .tag(3)
 
-            LocationsView()
+            RequiresProfile(content: { LocationsView() }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
                 .tag(4)
         }
@@ -114,6 +115,50 @@ struct MainAppView: View {
                 }
             } else {
                 Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
+            }
+        }
+    }
+
+    // A lightweight wrapper view that disables/obscures its content when the
+    // signed-in user has no client or coach profile. The visual overlay includes
+    // a call-to-action which switches to the Profile tab to create a profile.
+    @ViewBuilder
+    private func RequiresProfile<Content: View>(content: @escaping () -> Content, selectedTab: Binding<Int>) -> some View {
+        let needsProfile = (auth.user != nil) && (firestore.currentClient == nil && firestore.currentCoach == nil)
+        ZStack {
+            content()
+                .disabled(needsProfile)
+                .blur(radius: needsProfile ? 4 : 0)
+
+            if needsProfile {
+                // Semi-opaque overlay with button
+                Color(.systemBackground).opacity(0.4).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Text("Create your profile to continue")
+                        .font(.headline)
+                    Text("Please create a client or coach profile (including a photo) before using the app")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+
+                    Button(action: {
+                        // Switch to Profile tab where the user can create their profile
+                        selectedTab.wrappedValue = 0
+                    }) {
+                        Text("Create Profile")
+                            .frame(minWidth: 180)
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                }
+                .padding()
+                .background(.thinMaterial)
+                .cornerRadius(12)
+                .shadow(radius: 8)
+                .padding(40)
             }
         }
     }

@@ -118,6 +118,17 @@ struct LocationsView: View {
                     region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
                 }
             }
+            .onChange(of: firestore.locations) { newLocations in
+                // When the locations list updates (for example after saving a new pin),
+                // re-center the map on the first user location (if any) so the UI reflects
+                // the filtered, user-only set immediately.
+                if let first = newLocations.first, let lat = first.latitude, let lng = first.longitude {
+                    withAnimation {
+                        region.center = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                        region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    }
+                }
+            }
             .alert(isPresented: $showSaveAlert) { Alert(title: Text("Save Error"), message: Text(saveAlertMessage), dismissButton: .default(Text("OK"))) }
         }
     }
@@ -178,18 +189,22 @@ struct ABMapView: UIViewRepresentable {
             uiView.setRegion(region, animated: true)
         }
 
-        // update existing location annotations
-        let existingIds = Set(uiView.annotations.compactMap { ($0 as? MKPointAnnotation)?.title })
-        // add missing annotations
+        // Remove stale annotations (keep user location and temporary pin), then re-add current existingLocations
+        uiView.annotations.forEach { ann in
+            if ann is MKUserLocation { return }
+            if let subtitle = (ann as? MKPointAnnotation)?.subtitle, subtitle == "__TEMP_PIN__" { return }
+            uiView.removeAnnotation(ann)
+        }
+
+        // add annotations for current existingLocations (use subtitle to store the location id)
         for loc in existingLocations {
             guard let lat = loc.latitude, let lng = loc.longitude else { continue }
             let title = loc.name ?? "Location"
-            if !existingIds.contains(title) {
-                let ann = MKPointAnnotation()
-                ann.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
-                ann.title = title
-                uiView.addAnnotation(ann)
-            }
+            let ann = MKPointAnnotation()
+            ann.coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            ann.title = title
+            ann.subtitle = loc.id
+            uiView.addAnnotation(ann)
         }
 
         // update marker annotation

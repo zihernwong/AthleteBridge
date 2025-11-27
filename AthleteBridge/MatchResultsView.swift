@@ -131,8 +131,8 @@ import SwiftUI
 
              // Calendar grid showing selectable time slots; existing bookings are greyed out
              Section(header: Text("Calendar")) {
-                 // Show today's calendar for this coach; pass coach.id (String) and a concrete date
-                 CoachCalendarGridView(coachID: coach.id, date: Date())
+                 // Show today's calendar for this coach. Use coach.id and a concrete date.
+                 CoachCalendarGridView(coachID: coach.id, date: Date(), showOnlyAvailable: false, onSlotSelected: nil)
                      .environmentObject(firestore)
              }
 

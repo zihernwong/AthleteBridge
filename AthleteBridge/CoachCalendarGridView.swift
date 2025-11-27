@@ -9,6 +9,8 @@ struct CoachCalendarGridView: View {
 
     let coachID: String
     let date: Date
+    /// When true, only render available slots (omit booked slots entirely)
+    let showOnlyAvailable: Bool
     let slotMinutes: Int = 30
     let startHour: Int = 6    // 6:00 AM
     let endHour: Int = 20     // 8:00 PM (exclusive)
@@ -41,6 +43,15 @@ struct CoachCalendarGridView: View {
         return s
     }
 
+    // Filtered slots depending on showOnlyAvailable flag
+    private var visibleSlots: [Date] {
+        if !showOnlyAvailable { return slots }
+        return slots.filter { slotStart in
+            let slotEnd = calendar.date(byAdding: .minute, value: slotMinutes, to: slotStart) ?? slotStart
+            return !isSlotBooked(start: slotStart, end: slotEnd)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -55,7 +66,7 @@ struct CoachCalendarGridView: View {
             // Grid of slots
             let columns = [GridItem(.adaptive(minimum: 100), spacing: 12)]
             LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(slots, id: \.self) { slotStart in
+                ForEach(visibleSlots, id: \.self) { slotStart in
                     let slotEnd = calendar.date(byAdding: .minute, value: slotMinutes, to: slotStart) ?? slotStart
                     let booked = isSlotBooked(start: slotStart, end: slotEnd)
                     Button(action: {
@@ -155,7 +166,7 @@ struct CoachCalendarGridView_Previews: PreviewProvider {
         let sample2 = FirestoreManager.BookingItem(id: "b2", clientID: "c2", clientName: "Bob", coachID: "coach123", coachName: "Reuben", startAt: todayStart.addingTimeInterval(60*60*5), endAt: todayStart.addingTimeInterval(60*60*6), location: "Lake Marion", notes: "", status: "Confirmed")
         fm.coachBookings = [sample1, sample2]
 
-        return CoachCalendarGridView(coachID: "coach123", date: now, onSlotSelected: { start, end in
+        return CoachCalendarGridView(coachID: "coach123", date: now, showOnlyAvailable: false, onSlotSelected: { start, end in
             print("Selected slot: \(start) -> \(end)")
         }).environmentObject(fm)
     }
