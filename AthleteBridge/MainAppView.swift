@@ -85,13 +85,31 @@ struct MainAppView: View {
 
     private var avatarView: some View {
         Group {
-            if let url = firestore.currentClientPhotoURL ?? firestore.currentCoachPhotoURL {
-                AsyncImage(url: url) { phase in
+            // Match ProfileView: prefer client photo, then coach photo, and use the same AsyncImage phase handling
+            if let clientURL = firestore.currentClientPhotoURL {
+                AsyncImage(url: clientURL) { phase in
                     switch phase {
-                    case .empty: ProgressView().frame(width: 44, height: 44)
-                    case .success(let image): image.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle())
-                    case .failure(_): Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-                    @unknown default: Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
+                    case .empty:
+                        ProgressView().frame(width: 44, height: 44)
+                    case .success(let image):
+                        image.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle()).shadow(radius: 4)
+                    case .failure(_):
+                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
+                    @unknown default:
+                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
+                    }
+                }
+            } else if let coachURL = firestore.currentCoachPhotoURL {
+                AsyncImage(url: coachURL) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView().frame(width: 44, height: 44)
+                    case .success(let image):
+                        image.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle()).shadow(radius: 4)
+                    case .failure(_):
+                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
+                    @unknown default:
+                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
                     }
                 }
             } else {

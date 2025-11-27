@@ -137,13 +137,7 @@ struct NewBookingForm: View {
     @EnvironmentObject var auth: AuthViewModel
     @Binding var showSheet: Bool
 
-    // Optional prefill values when launching the form from elsewhere
-    let initialCoachId: String? = nil
-    let initialStartAt: Date? = nil
-    let initialEndAt: Date? = nil
-    let initialLocationId: String? = nil
-
-    @State private var selectedCoachId: String? = nil
+    @State private var selectedCoachId: String = ""
     @State private var coachSearchText: String = ""
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
@@ -154,6 +148,13 @@ struct NewBookingForm: View {
     @State private var isSaving = false
     @State private var alertMessage: String = ""
     @State private var showAlert = false
+
+    // Inline suggestions for coach names (prefix match)
+    private var coachSuggestions: [Coach] {
+        let typed = coachSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard typed.count >= 1 else { return [] }
+        return firestore.coaches.filter { $0.name.lowercased().hasPrefix(typed) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -173,19 +174,46 @@ struct NewBookingForm: View {
                     if firestore.coaches.isEmpty {
                         Text("No coaches available").foregroundColor(.secondary)
                     } else {
-                        // Simple picker to select a coach; remove the inline suggestion chips and search field
-                        Picker("Coach", selection: $selectedCoachId) {
-                            // Placeholder option so no coach appears selected by default
-                            Text("Select a coach").tag(nil as String?)
-                            ForEach(firestore.coaches, id: \.id) { coach in
-                                Text(coach.name).tag(coach.id as String?)
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Search coach by name", text: $coachSearchText)
+                                .textFieldStyle(.roundedBorder)
+
+                            if !coachSuggestions.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(coachSuggestions.prefix(8), id: \.id) { coach in
+                                            Button(action: {
+                                                coachSearchText = coach.name
+                                                selectedCoachId = coach.id
+                                                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                            }) {
+                                                Text(coach.name)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(Color(UIColor.secondarySystemBackground))
+                                                    .cornerRadius(16)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+
+                            if let selected = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                                Text("Selected: \(selected.name)")
+                                    .font(.subheadline)
+                            } else if !selectedCoachId.isEmpty {
+                                Text("Selected coach id: \(selectedCoachId)")
+                                    .font(.subheadline)
                             }
                         }
-                        .pickerStyle(.menu)
                         .onAppear {
-                            // ensure coaches are loaded; do NOT auto-select any coach unless prefilling
                             firestore.fetchCoaches()
-                            if let pre = initialCoachId { selectedCoachId = pre }
+                            if selectedCoachId.isEmpty, let first = firestore.coaches.first {
+                                selectedCoachId = first.id
+                                coachSearchText = first.name
+                            }
                         }
                     }
                 }
@@ -226,7 +254,7 @@ struct NewBookingForm: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveBooking() }
-                        .disabled((selectedCoachId ?? "").isEmpty || auth.user == nil || selectedLocationId.isEmpty)
+                        .disabled(selectedCoachId.isEmpty || auth.user == nil || selectedLocationId.isEmpty)
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -235,13 +263,9 @@ struct NewBookingForm: View {
             .onAppear {
                 // ensure coaches and current client profile are available when the form appears
                 firestore.fetchCoaches()
-                // Apply any initial prefills provided by the caller
-                if let preCoach = initialCoachId { selectedCoachId = preCoach }
-                if let preStart = initialStartAt { startAt = preStart }
-                if let preEnd = initialEndAt { endAt = preEnd }
-                if let preLoc = initialLocationId { selectedLocationId = preLoc }
-                // keep search text empty by default
-                coachSearchText = ""
+                if selectedCoachId.isEmpty, let first = firestore.coaches.first {
+                    selectedCoachId = first.id
+                }
                 if let uid = auth.user?.uid {
                     firestore.fetchCurrentProfiles(for: uid)
                     // also load bookings stored under clients/{uid}/bookings
@@ -259,11 +283,12 @@ struct NewBookingForm: View {
             showAlert = true
             return
         }
-        guard let coachUid = selectedCoachId, !coachUid.isEmpty else {
-             alertMessage = "Select a coach"
-             showAlert = true
-             return
-         }
+        let coachUid = selectedCoachId
+        guard !coachUid.isEmpty else {
+            alertMessage = "Select a coach"
+            showAlert = true
+            return
+        }
 
         isSaving = true
         // Determine location name from the selected saved location id
@@ -282,7 +307,7 @@ struct NewBookingForm: View {
                     showSheet = false
                 }
             }
-         }
+        }
     }
 }
 

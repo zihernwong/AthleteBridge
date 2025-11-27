@@ -108,7 +108,9 @@ struct LocationsView: View {
             }
             .navigationTitle("Locations")
             .toolbar {
-                /* refresh button removed */
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button { firestore.fetchLocationsForCurrentUser() } label: { Image(systemName: "arrow.clockwise") }
+                }
             }
             .onAppear {
                 firestore.fetchLocationsForCurrentUser()

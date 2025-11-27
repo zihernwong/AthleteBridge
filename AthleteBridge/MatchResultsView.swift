@@ -10,6 +10,7 @@ import SwiftUI
 
      @EnvironmentObject var firestore: FirestoreManager
      @State private var coachReviews: [String: [FirestoreManager.ReviewItem]] = [:]
+     @State private var coachBookingCounts: [String: Int] = [:]
 
      init(client: Client, searchQuery: String? = nil) {
          self.client = client
@@ -26,33 +27,46 @@ import SwiftUI
          let items = filteredCoaches()
          List(items) { coach in
              NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
-                 HStack(alignment: .top) {
-                     VStack(alignment: .leading) {
-                         Text(coach.name)
-                             .font(.headline)
-                         if !coach.specialties.isEmpty {
-                             Text(coach.specialties.joined(separator: ", "))
-                                 .font(.subheadline)
-                                 .foregroundColor(.secondary)
-                         }
-                         Text("Experience: \(coach.experienceYears) years")
-                             .font(.caption)
-                             .foregroundColor(.secondary)
-                     }
-                     Spacer()
-                     if let reviews = coachReviews[coach.id], !reviews.isEmpty {
-                         let avg = averageRating(from: reviews)
-                         VStack {
-                             Text(String(format: "%.1f", avg))
+                 VStack(alignment: .leading, spacing: 8) {
+                     HStack(alignment: .top) {
+                         VStack(alignment: .leading) {
+                             Text(coach.name)
                                  .font(.headline)
-                             Text("(\(reviews.count))")
+                             if !coach.specialties.isEmpty {
+                                 Text(coach.specialties.joined(separator: ", "))
+                                     .font(.subheadline)
+                                     .foregroundColor(.secondary)
+                             }
+                             Text("Experience: \(coach.experienceYears) years")
                                  .font(.caption)
                                  .foregroundColor(.secondary)
                          }
-                     } else {
-                         Text("No reviews")
-                             .font(.caption)
-                             .foregroundColor(.secondary)
+                         Spacer()
+                         if let reviews = coachReviews[coach.id], !reviews.isEmpty {
+                             let avg = averageRating(from: reviews)
+                             VStack {
+                                 Text(String(format: "%.1f", avg))
+                                     .font(.headline)
+                                 Text("(\(reviews.count))")
+                                     .font(.caption)
+                                     .foregroundColor(.secondary)
+                             }
+                         } else {
+                             Text("No reviews")
+                                 .font(.caption)
+                                 .foregroundColor(.secondary)
+                         }
+                     }
+
+                     // Show number of bookings for this coach (lazy-loaded)
+                     HStack {
+                         Text("Bookings:").font(.caption).foregroundColor(.secondary)
+                         if let count = coachBookingCounts[coach.id] {
+                             Text("\(count)").font(.caption).bold()
+                         } else {
+                             Text("—").font(.caption).foregroundColor(.secondary)
+                         }
+                         Spacer()
                      }
                  }
                  .padding(.vertical, 6)
@@ -63,6 +77,14 @@ import SwiftUI
                      firestore.fetchReviewsForCoach(coachId: coach.id) { items in
                          DispatchQueue.main.async {
                              coachReviews[coach.id] = items
+                         }
+                     }
+                 }
+                 // lazy-load booking counts if missing
+                 if coachBookingCounts[coach.id] == nil {
+                     firestore.fetchBookingsForCoach(coachId: coach.id) { items in
+                         DispatchQueue.main.async {
+                             coachBookingCounts[coach.id] = items.count
                          }
                      }
                  }
@@ -90,6 +112,8 @@ import SwiftUI
      let coach: Coach
      @EnvironmentObject var firestore: FirestoreManager
      @State private var reviews: [FirestoreManager.ReviewItem] = []
+     @State private var bookings: [FirestoreManager.BookingItem] = []
+     @State private var loadingBookings: Bool = true
 
      var body: some View {
          List {
@@ -103,6 +127,13 @@ import SwiftUI
                          .font(.caption)
                          .foregroundColor(.secondary)
                  }
+             }
+
+             // Calendar grid showing selectable time slots; existing bookings are greyed out
+             Section(header: Text("Calendar")) {
+                 // Show today's calendar for this coach; pass coach.id (String) and a concrete date
+                 CoachCalendarGridView(coachID: coach.id, date: Date())
+                     .environmentObject(firestore)
              }
 
              Section(header: Text("Reviews")) {
@@ -130,6 +161,17 @@ import SwiftUI
          .onAppear {
              firestore.fetchReviewsForCoach(coachId: coach.id) { items in
                  DispatchQueue.main.async { self.reviews = items }
+             }
+             // fetch bookings for this coach and show them in the Calendar section
+             loadingBookings = true
+             firestore.fetchBookingsForCoach(coachId: coach.id) { items in
+                 DispatchQueue.main.async {
+                     // sort ascending by start date to show upcoming first
+                     self.bookings = items.sorted { (a,b) in
+                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                     }
+                     self.loadingBookings = false
+                 }
              }
          }
      }

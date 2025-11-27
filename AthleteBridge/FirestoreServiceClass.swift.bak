@@ -132,8 +132,7 @@ class FirestoreManager: ObservableObject {
                 let specialties = data["Specialties"] as? [String] ?? []
                 let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
                 let availability = data["Availability"] as? [String] ?? []
-                let bio = data["Bio"] as? String
-                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
+                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability)
             }
             DispatchQueue.main.async {
                 self.coaches = mapped
@@ -199,12 +198,11 @@ class FirestoreManager: ObservableObject {
             let specialties = data["Specialties"] as? [String] ?? []
             let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
             let availability = data["Availability"] as? [String] ?? []
-            let bio = data["Bio"] as? String
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability)
                     self.currentCoachPhotoURL = resolved
                     if resolved == nil { print("fetchCurrentProfiles: no coach photo for \(id)") }
                 }
@@ -252,86 +250,35 @@ class FirestoreManager: ObservableObject {
 
     // Save client document using provided id
     func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], photoURL: String?, completion: @escaping (Error?) -> Void) {
-        let docRef = self.db.collection("clients").document(id)
-
-        // Base payload for updates (always set updatedAt)
-        var updateData: [String: Any] = [
+        var data: [String: Any] = [
             "name": name,
             "goals": goals,
             "preferredAvailability": preferredAvailability,
             "updatedAt": FieldValue.serverTimestamp()
         ]
-        if let p = photoURL { updateData["photoURL"] = p }
-
-        // Check whether the document exists so we only set createdAt on creation
-        docRef.getDocument { snap, err in
-            if let err = err {
-                // Best-effort: if we can't determine existence, include createdAt so newly-created docs have the field.
-                print("saveClient: getDocument error: \(err). Proceeding to write with createdAt as a best-effort.")
-                var data = updateData
-                data["createdAt"] = FieldValue.serverTimestamp()
-                docRef.setData(data, merge: true, completion: completion)
-                return
-            }
-
-            if let exists = snap?.exists, exists {
-                // Document already exists — only update mutable fields (don't touch createdAt)
-                docRef.setData(updateData, merge: true, completion: completion)
-            } else {
-                // Document does not exist — include createdAt timestamps when creating
-                var data = updateData
-                data["createdAt"] = FieldValue.serverTimestamp()
-                // Create the document (no merge necessary) so createdAt is set once
-                docRef.setData(data, completion: completion)
-            }
-        }
+        if let p = photoURL { data["photoURL"] = p }
+        self.db.collection("clients").document(id).setData(data, merge: true, completion: completion)
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, photoURL: String?, bio: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
-        // Base payload (do not include createdAt here yet so we can control whether it is written)
-        var baseData: [String: Any] = [
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, photoURL: String?, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+        var data: [String: Any] = [
             "FirstName": firstName,
             "LastName": lastName,
             "Specialties": specialties,
             "Availability": availability,
             "ExperienceYears": experienceYears,
-            "Active": active
+            "Active": active,
+            "CreatedAt": FieldValue.serverTimestamp()
         ]
-        if let hr = hourlyRate { baseData["HourlyRate"] = hr }
-        if let p = photoURL { baseData["PhotoURL"] = p }
-        if let b = bio { baseData["Bio"] = b }
+        if let hr = hourlyRate { data["HourlyRate"] = hr }
+        if let p = photoURL { data["PhotoURL"] = p }
 
         let docRef = self.db.collection("coaches").document(id)
-
         if overwrite {
-            // Overwrite intent: treat as a fresh write and set createdAt to server timestamp
-            var dataToWrite = baseData
-            dataToWrite["createdAt"] = FieldValue.serverTimestamp()
-            docRef.setData(dataToWrite, completion: completion)
-            return
-        }
-
-        // Non-overwrite (merge) case: check existence to avoid overwriting createdAt
-        docRef.getDocument { snap, err in
-            if let err = err {
-                // If we can't determine existence, proceed with a merge that includes createdAt as a best-effort.
-                print("saveCoachWithSchema: getDocument error: \(err). Proceeding to merge with createdAt as a best-effort.")
-                var data = baseData
-                data["createdAt"] = FieldValue.serverTimestamp()
-                docRef.setData(data, merge: true, completion: completion)
-                return
-            }
-
-            if let exists = snap?.exists, exists {
-                // Document exists: merge update but DON'T overwrite createdAt
-                docRef.setData(baseData, merge: true, completion: completion)
-            } else {
-                // Document does not exist: include createdAt when creating
-                var data = baseData
-                data["createdAt"] = FieldValue.serverTimestamp()
-                docRef.setData(data, completion: completion)
-            }
+            docRef.setData(data, completion: completion)
+        } else {
+            docRef.setData(data, merge: true, completion: completion)
         }
     }
 
@@ -340,7 +287,7 @@ class FirestoreManager: ObservableObject {
         let data: [String: Any] = [
             "ClientID": clientID,
             "CoachID": coachID,
-            "createdAt": FieldValue.serverTimestamp(),
+            "CreatedAt": FieldValue.serverTimestamp(),
             "Rating": rating,
             "RatingMessage": ratingMessage
         ]
@@ -687,7 +634,7 @@ class FirestoreManager: ObservableObject {
                 var coachID = ""
                 var clientName: String? = nil
                 var coachName: String? = nil
-                let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
+                let createdAt = (data["CreatedAt"] as? Timestamp)?.dateValue()
 
                 // rating may be stored as number or string
                 var ratingStr: String? = nil
@@ -791,7 +738,7 @@ class FirestoreManager: ObservableObject {
                 let data = doc.data()
                 var clientID = ""
                 var clientName: String? = nil
-                let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
+                let createdAt = (data["CreatedAt"] as? Timestamp)?.dateValue()
 
                 // rating may be stored as number or string
                 var ratingStr: String? = nil
@@ -1094,7 +1041,7 @@ class FirestoreManager: ObservableObject {
             "Location": location ?? "",
             "Notes": notes ?? "",
             "Status": status,
-            "createdAt": FieldValue.serverTimestamp()
+            "CreatedAt": FieldValue.serverTimestamp()
         ]
         if let extra = extra { for (k,v) in extra { data[k] = v } }
 
@@ -1118,8 +1065,8 @@ class FirestoreManager: ObservableObject {
             // Use a concrete client-side timestamp for array elements; server-side
             // sentinels (FieldValue.serverTimestamp()) aren't allowed inside
             // arrayUnion payloads. The authoritative server timestamp still exists
-            // on the root booking document's createdAt field.
-            "createdAt": Timestamp(date: Date())
+            // on the root booking document's CreatedAt field.
+            "CreatedAt": Timestamp(date: Date())
         ]
 
         // Use arrayUnion to append without duplicating existing entries.

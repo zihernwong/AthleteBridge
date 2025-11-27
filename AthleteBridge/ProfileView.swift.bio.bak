@@ -29,7 +29,6 @@ struct ProfileView: View {
     @State private var experienceYears: Int = 0
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
-    @State private var bioText: String = ""
 
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
@@ -112,7 +111,7 @@ struct ProfileView: View {
 
     // MARK: - View pieces
     private var roleSection: some View {
-        Section(header: Text("I am a: ")) {
+        Section(header: Text("Role")) {
             Picker("Role", selection: $role) {
                 ForEach(Role.allCases) { r in
                     Text(r.rawValue).tag(r)
@@ -177,17 +176,6 @@ struct ProfileView: View {
             }, set: { newSet in
                 coachAvailabilitySelection = Array(newSet)
             }))
-
-            // Bio: multiline text editor for coach biography
-            VStack(alignment: .leading) {
-                Text("Biography")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                TextEditor(text: $bioText)
-                    .frame(minHeight: 120)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(UIColor.separator)))
-                    .padding(.top, 4)
-            }
         }
     }
 
@@ -231,8 +219,10 @@ struct ProfileView: View {
                         }
                     }
                 } else {
-                    // Use AvatarView which handles AsyncImage + fallback download
-                    AvatarView().environmentObject(firestore)
+                    Image(systemName: "person.crop.circle")
+                        .resizable()
+                        .frame(width: 80, height: 80)
+                        .foregroundColor(.secondary)
                 }
 
                 VStack(alignment: .leading) {
@@ -289,7 +279,6 @@ struct ProfileView: View {
                 selectedSpecialties = Set(coach.specialties)
                 experienceYears = coach.experienceYears
                 coachAvailabilitySelection = coach.availability
-                bioText = coach.bio ?? ""
             } else {
                 isEditMode = false
             }
@@ -309,7 +298,6 @@ struct ProfileView: View {
              selectedSpecialties = Set(coach.specialties)
              experienceYears = coach.experienceYears
              coachAvailabilitySelection = coach.availability
-             bioText = coach.bio ?? ""
         }
     }
 
@@ -354,7 +342,7 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, active: true, overwrite: true) { err in
+                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, active: true, overwrite: true) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
