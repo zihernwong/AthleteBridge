@@ -1,7 +1,6 @@
 import SwiftUI
 import PhotosUI
 import UIKit
-import CoreLocation
 
 struct ProfileView: View {
     enum Role: String, CaseIterable, Identifiable {
@@ -32,13 +31,6 @@ struct ProfileView: View {
     @State private var hourlyRateText: String = ""
     @State private var bioText: String = ""
 
-    // New fields for zipcode -> city suggestion
-    @State private var zipcode: String = ""
-    @State private var cityText: String = ""
-    @State private var suggestedCity: String? = nil
-    @State private var isGeocoding: Bool = false
-    @State private var geocodeWorkItem: DispatchWorkItem?
-
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
     @State private var showingPhotoPicker = false
@@ -56,7 +48,9 @@ struct ProfileView: View {
         ZStack {
             NavigationView {
                 Form {
-                    roleSection
+                    // Role selection removed: the app determines role from Firestore (userType) or existing profiles.
+                    // The form will automatically show either clientSection or coachSection based on the user's role.
+                    
                     nameSection
                     if role == .client {
                         clientSection
@@ -76,11 +70,38 @@ struct ProfileView: View {
                     // Ensure Firestore attempts to load the current user's client/coach documents
                     if let uid = auth.user?.uid {
                         firestore.fetchCurrentProfiles(for: uid)
+                        // Ensure we have userType (may already be loaded elsewhere)
+                        firestore.fetchUserType(for: uid)
                     }
-                    // Try to populate immediately from any already-loaded profiles
+
+                    // If userType is already known, set role accordingly; otherwise fall back to any loaded profile
+                    if let t = firestore.currentUserType?.uppercased() {
+                        role = (t == "COACH") ? .coach : .client
+                    } else if firestore.currentCoach != nil {
+                        role = .coach
+                    } else if firestore.currentClient != nil {
+                        role = .client
+                    }
+
+                    // Populate fields if any profile is already loaded
                     populateFromExisting()
-                    // determine initial edit/create mode based on the currently selected role
                     updateModeForRole()
+                }
+                // React to changes in user auth
+                .onReceive(auth.$user) { user in
+                    if let uid = user?.uid {
+                        firestore.fetchCurrentProfiles(for: uid)
+                        firestore.fetchUserType(for: uid)
+                    }
+                }
+                // React to changes in userType (e.g. fetched from Firestore) and update role appropriately
+                .onReceive(firestore.$currentUserType) { newType in
+                    if let t = newType?.uppercased() {
+                        role = (t == "COACH") ? .coach : .client
+                        if let uid = auth.user?.uid { firestore.fetchCurrentProfiles(for: uid) }
+                        populateFromExisting()
+                        updateModeForRole()
+                    }
                 }
                 // If auth.user becomes available after this view appears, trigger profile fetch
                 .onReceive(auth.$user) { user in
@@ -90,6 +111,9 @@ struct ProfileView: View {
                 }
                 // React to asynchronous updates from Firestore so the UI updates into Edit mode
                 .onReceive(firestore.$currentClient) { _ in
+                    updateModeForRole()
+                }
+                .onReceive(firestore.$currentCoach) { _ in
                     updateModeForRole()
                 }
             }
@@ -119,17 +143,6 @@ struct ProfileView: View {
     }
 
     // MARK: - View pieces
-    private var roleSection: some View {
-        Section(header: Text("I am a: ")) {
-            Picker("Role", selection: $role) {
-                ForEach(Role.allCases) { r in
-                    Text(r.rawValue).tag(r)
-                }
-            }
-            .pickerStyle(SegmentedPickerStyle())
-        }
-    }
-
     private var nameSection: some View {
         Section(header: Text("Full Name")) {
             TextField("Full Name", text: $name)
@@ -185,47 +198,6 @@ struct ProfileView: View {
             }, set: { newSet in
                 coachAvailabilitySelection = Array(newSet)
             }))
-
-            // Zip code + city suggestion
-            VStack(alignment: .leading) {
-                Text("Zip Code")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                HStack {
-                    TextField("ZIP code", text: $zipcode)
-                        .keyboardType(.numberPad)
-                        .textContentType(.postalCode)
-                        .onChange(of: zipcode) { newVal in
-                            // Debounce geocoding
-                            geocodeWorkItem?.cancel()
-                            suggestedCity = nil
-                            cityText = ""
-                            guard !newVal.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                            let work = DispatchWorkItem { performGeocode(for: newVal) }
-                            geocodeWorkItem = work
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-                        }
-                    if isGeocoding {
-                        ProgressView().scaleEffect(0.75)
-                    }
-                }
-
-                // Suggested city and editable city field
-                if let s = suggestedCity {
-                    HStack {
-                        Text("Suggested city: \(s)")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Button("Use") {
-                            cityText = s
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                    }
-                }
-                TextField("City", text: $cityText)
-                    .textInputAutocapitalization(.words)
-                    .padding(.vertical, 4)
-            }
 
             // Bio: multiline text editor for coach biography
             VStack(alignment: .leading) {
@@ -368,6 +340,9 @@ struct ProfileView: View {
         isSaving = true
         saveMessage = nil
 
+        // Capture the environment object into a local strong reference to avoid
+        // property-wrapper dynamic-member lookup issues when used inside nested
+        // functions and asynchronous closures.
         let fm = self.firestore
 
         func finalizeSave(withPhotoURL photoURL: String?) {
@@ -400,7 +375,7 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, zipCode: zipcode.isEmpty ? nil : zipcode, city: cityText.isEmpty ? nil : cityText, active: true, overwrite: true) { err in
+                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, active: true, overwrite: true) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
@@ -443,34 +418,6 @@ struct ProfileView: View {
             }
         } else {
             finalizeSave(withPhotoURL: nil)
-        }
-    }
-
-    private func performGeocode(for zip: String) {
-        let trimmed = zip.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        isGeocoding = true
-        let geocoder = CLGeocoder()
-        geocoder.geocodeAddressString(trimmed) { places, err in
-            DispatchQueue.main.async {
-                self.isGeocoding = false
-                if let err = err {
-                    print("geocode error: \(err)")
-                    self.suggestedCity = nil
-                    return
-                }
-                if let p = places?.first {
-                    // Prefer locality, fallback to subAdministrativeArea or administrativeArea
-                    let city = p.locality ?? p.subAdministrativeArea ?? p.administrativeArea
-                    self.suggestedCity = city
-                    // If user hasn't typed a city, prefill it for convenience
-                    if self.cityText.isEmpty, let c = city {
-                        self.cityText = c
-                    }
-                } else {
-                    self.suggestedCity = nil
-                }
-            }
         }
     }
 }

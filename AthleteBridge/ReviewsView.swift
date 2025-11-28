@@ -35,112 +35,188 @@ struct ReviewsView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Reviews about the current user (if they are a coach)
-                Section(header: Text("Reviews About You")) {
-                    if reviewsAboutUser.isEmpty {
-                        Text("No reviews about you yet").foregroundColor(.secondary)
-                    } else {
-                        ForEach(reviewsAboutUser) { item in
-                            HStack(alignment: .top, spacing: 12) {
-                                Circle()
-                                    .fill(Color.accentColor.opacity(0.15))
-                                    .frame(width: 44, height: 44)
-                                    .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
+                let userType = firestore.currentUserType?.uppercased()
 
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(item.clientName ?? "Client").font(.headline)
-                                        Spacer()
-                                        Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                    }
-
-                                    HStack(spacing: 4) {
-                                        let stars = Int(item.rating ?? "0") ?? 0
-                                        ForEach(1...5, id: \.self) { i in
-                                            Image(systemName: i <= stars ? "star.fill" : "star")
-                                                .foregroundColor(i <= stars ? .yellow : .secondary)
-                                        }
-                                    }
-                                    Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
-                                }
-                            }
-                            .padding(.vertical, 6)
-                        }
-                    }
-                }
-
-                // Reviews written by the current user
-                Section(header: Text("Your Reviews")) {
-                    if reviewsByUser.isEmpty {
-                        Text("You haven't written any reviews yet").foregroundColor(.secondary)
-                    } else {
-                        ForEach(reviewsByUser) { item in
-                            HStack(alignment: .top, spacing: 12) {
-                                Circle()
-                                    .fill(Color.accentColor.opacity(0.15))
-                                    .frame(width: 44, height: 44)
-                                    .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
-
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(item.coachName ?? "Coach").font(.headline)
-                                        Spacer()
-                                        Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                    }
-
-                                    HStack(spacing: 4) {
-                                        let stars = Int(item.rating ?? "0") ?? 0
-                                        ForEach(1...5, id: \.self) { i in
-                                            Image(systemName: i <= stars ? "star.fill" : "star")
-                                                .foregroundColor(i <= stars ? .yellow : .secondary)
-                                        }
-                                    }
-                                    Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
-                                }
-                            }
-                            .padding(.vertical, 6)
-                        }
-                    }
-                }
-
-                // Write a review form remains unchanged
-                Section(header: Text("Write a Review")) {
-                    if firestore.coaches.isEmpty {
-                        Text("No coaches available").foregroundColor(.secondary)
-                    } else {
-                        Picker("Coach", selection: $selectedCoachId) {
-                            ForEach(firestore.coaches, id: \.id) { coach in
-                                Text(coach.name).tag(coach.id)
-                            }
-                        }
-                        .onChange(of: selectedCoachId) { new in
-                            selectedCoachName = firestore.coaches.first(where: { $0.id == new })?.name ?? ""
-                        }
-                    }
-
-                    Picker("Rating", selection: $rating) {
-                        ForEach(1...5, id: \.self) { r in
-                            Text(String(r)).tag(r)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-
-                    TextEditor(text: $message)
-                        .frame(minHeight: 100)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(UIColor.separator)))
-
-                    HStack {
-                        Spacer()
-                        if isSubmitting {
-                            ProgressView()
+                // If the user is a coach, show only reviews about them
+                if userType == "COACH" {
+                    Section(header: Text("Reviews About You")) {
+                        if reviewsAboutUser.isEmpty {
+                            Text("No reviews about you yet").foregroundColor(.secondary)
                         } else {
-                            Button(action: submitReview) {
-                                Text("Submit Review")
-                                    .bold()
+                            ForEach(reviewsAboutUser) { item in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.clientName ?? "Client").font(.headline)
+                                            Spacer()
+                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                        }
+
+                                        HStack(spacing: 4) {
+                                            let stars = Int(item.rating ?? "0") ?? 0
+                                            ForEach(1...5, id: \.self) { i in
+                                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                                            }
+                                        }
+                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }
+                                }
+                                .padding(.vertical, 6)
                             }
-                            .disabled(selectedCoachId.isEmpty || auth.user == nil || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
-                        Spacer()
+                    }
+                } else if userType == "CLIENT" {
+                    // If the user is a client, show only reviews they've written
+                    Section(header: Text("Your Reviews")) {
+                        if reviewsByUser.isEmpty {
+                            Text("You haven't written any reviews yet").foregroundColor(.secondary)
+                        } else {
+                            ForEach(reviewsByUser) { item in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.coachName ?? "Coach").font(.headline)
+                                            Spacer()
+                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                        }
+
+                                        HStack(spacing: 4) {
+                                            let stars = Int(item.rating ?? "0") ?? 0
+                                            ForEach(1...5, id: \.self) { i in
+                                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                                            }
+                                        }
+                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback (unknown userType): show both sections as before
+
+                    // Reviews about the current user (if they are a coach)
+                    Section(header: Text("Reviews About You")) {
+                        if reviewsAboutUser.isEmpty {
+                            Text("No reviews about you yet").foregroundColor(.secondary)
+                        } else {
+                            ForEach(reviewsAboutUser) { item in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.clientName ?? "Client").font(.headline)
+                                            Spacer()
+                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                        }
+
+                                        HStack(spacing: 4) {
+                                            let stars = Int(item.rating ?? "0") ?? 0
+                                            ForEach(1...5, id: \.self) { i in
+                                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                                            }
+                                        }
+                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+
+                    // Reviews written by the current user
+                    Section(header: Text("Your Reviews")) {
+                        if reviewsByUser.isEmpty {
+                            Text("You haven't written any reviews yet").foregroundColor(.secondary)
+                        } else {
+                            ForEach(reviewsByUser) { item in
+                                HStack(alignment: .top, spacing: 12) {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(item.coachName ?? "Coach").font(.headline)
+                                            Spacer()
+                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                        }
+
+                                        HStack(spacing: 4) {
+                                            let stars = Int(item.rating ?? "0") ?? 0
+                                            ForEach(1...5, id: \.self) { i in
+                                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                                            }
+                                        }
+                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        }
+                    }
+                }
+
+                // Write a review form remains unchanged but is only shown to CLIENT users
+                if userType == "CLIENT" {
+                    Section(header: Text("Write a Review")) {
+                        if firestore.coaches.isEmpty {
+                            Text("No coaches available").foregroundColor(.secondary)
+                        } else {
+                            Picker("Coach", selection: $selectedCoachId) {
+                                ForEach(firestore.coaches, id: \.id) { coach in
+                                    Text(coach.name).tag(coach.id)
+                                }
+                            }
+                            .onChange(of: selectedCoachId) { new in
+                                selectedCoachName = firestore.coaches.first(where: { $0.id == new })?.name ?? ""
+                            }
+                        }
+
+                        Picker("Rating", selection: $rating) {
+                            ForEach(1...5, id: \.self) { r in
+                                Text(String(r)).tag(r)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+
+                        TextEditor(text: $message)
+                            .frame(minHeight: 100)
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(UIColor.separator)))
+
+                        HStack {
+                            Spacer()
+                            if isSubmitting {
+                                ProgressView()
+                            } else {
+                                Button(action: submitReview) {
+                                    Text("Submit Review")
+                                        .bold()
+                                }
+                                .disabled(selectedCoachId.isEmpty || auth.user == nil || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                            Spacer()
+                        }
                     }
                 }
 

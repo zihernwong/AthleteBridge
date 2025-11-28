@@ -14,7 +14,7 @@ struct MainAppView: View {
 
             // Wrap other tabs so they become inaccessible until a profile is created
             RequiresProfile(content: { homeTab }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "house"); Text("Home") }
+            .tabItem { Image(systemName: "house"); Text("Home") }
                 .tag(1)
 
             RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
@@ -46,37 +46,50 @@ struct MainAppView: View {
                     bg.resizable().scaledToFit().opacity(0.08).frame(maxWidth: 400).allowsHitTesting(false)
                 }
 
-                VStack {
-                    HStack(spacing: 12) {
-                        avatarView
+                // If user is a coach, show only a simple logout page (centered button)
+                if firestore.currentUserType == "COACH" {
+                    VStack {
+                        Spacer()
+                        Button("Logout") { auth.logout() }
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(.thinMaterial)
+                            .cornerRadius(10)
+                        Spacer()
+                    }
+                } else {
+                    VStack {
+                        HStack(spacing: 12) {
+                            avatarView
 
-                        VStack(alignment: .leading) {
-                            Text("Welcome, \(auth.user?.email ?? "User")!")
-                                .font(.title3)
-                            // Debug: show resolved photo URL if available
-                            if let clientURL = firestore.currentClientPhotoURL {
-                                Text("Client photo: \(clientURL.absoluteString)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            } else if let coachURL = firestore.currentCoachPhotoURL {
-                                Text("Coach photo: \(coachURL.absoluteString)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            } else {
-                                Text("No photo URL resolved")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            VStack(alignment: .leading) {
+                                Text("Welcome, \(auth.user?.email ?? "User")!")
+                                    .font(.title3)
+                                // Debug: show resolved photo URL if available
+                                if let clientURL = firestore.currentClientPhotoURL {
+                                    Text("Client photo: \(clientURL.absoluteString)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else if let coachURL = firestore.currentCoachPhotoURL {
+                                    Text("Coach photo: \(coachURL.absoluteString)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("No photo URL resolved")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Button("Logout") { auth.logout() }
+                                    .foregroundColor(.red)
                             }
-                            Button("Logout") { auth.logout() }
-                                .foregroundColor(.red)
+                            .padding(.horizontal)
+
+                            Spacer()
                         }
-                        .padding(.horizontal)
+                        .padding(.top, 12)
 
                         Spacer()
                     }
-                    .padding(.top, 12)
-
-                    Spacer()
                 }
             }
             .navigationTitle("AthleteBridge")

@@ -148,7 +148,7 @@ class FirestoreManager: ObservableObject {
 
     func fetchCurrentProfiles(for uid: String) {
         // Fetch client document and resolve photo URL
-        let clientRef = db.collection("clients").document(uid)
+        let clientRef = self.db.collection("clients").document(uid)
         clientRef.getDocument { snap, err in
             if let err = err {
                 print("fetchCurrentProfiles client err: \(err)")
@@ -184,7 +184,7 @@ class FirestoreManager: ObservableObject {
         }
 
         // Fetch coach document and resolve photo URL
-        let coachRef = db.collection("coaches").document(uid)
+        let coachRef = self.db.collection("coaches").document(uid)
         coachRef.getDocument { snap, err in
             if let err = err {
                 print("fetchCurrentProfiles coach err: \(err)")
@@ -368,7 +368,8 @@ class FirestoreManager: ObservableObject {
 
         DispatchQueue.main.async { self.bookingsDebug = "Querying bookings for uid=\(uid) by fetching all bookings and filtering locally" }
 
-        let bookingsColl = db.collection("bookings")
+        // capture a local reference to avoid implicit self capture inside the closure
+        let bookingsColl = self.db.collection("bookings")
         bookingsColl.getDocuments { snapshot, error in
             if let error = error {
                 let msg = "fetchBookingsForCurrentUser: failed to list bookings: \(error.localizedDescription)"
@@ -545,8 +546,8 @@ class FirestoreManager: ObservableObject {
     /// Deletes the `calendar` field on every coach and the `bookings` field on every client.
     /// Works in batched chunks to avoid exceeding the 500-operation per-batch limit.
     func removeBookingArraysFromParents(completion: @escaping (Error?) -> Void) {
-        let coachColl = db.collection("coaches")
-        let clientColl = db.collection("clients")
+        let coachColl = self.db.collection("coaches")
+        let clientColl = self.db.collection("clients")
 
         let group = DispatchGroup()
         var firstError: Error? = nil
@@ -557,7 +558,7 @@ class FirestoreManager: ObservableObject {
             var index = 0
             while index < docs.count {
                 let end = min(index + batchSize, docs.count)
-                let batch = db.batch()
+                let batch = self.db.batch()
                 for i in index..<end {
                     let docRef = docs[i].reference
                     // Only issue delete if the field exists in the snapshot
@@ -882,7 +883,7 @@ class FirestoreManager: ObservableObject {
 
     /// Add a new location document into the `locations` collection.
     func addLocation(name: String, address: String? = nil, latitude: Double, longitude: Double, ownerRefs: [DocumentReference]? = nil, clientRef: DocumentReference? = nil, coachRef: DocumentReference? = nil, completion: @escaping (Error?) -> Void) {
-        let coll = db.collection("locations")
+        let coll = self.db.collection("locations")
 
         // base payload
         var data: [String: Any] = [
@@ -905,7 +906,7 @@ class FirestoreManager: ObservableObject {
 
         // Create a new document ref and use a batch to optionally mirror to owner subcollections
         let newDocRef = coll.document()
-        let batch = db.batch()
+        let batch = self.db.batch()
         batch.setData(data, forDocument: newDocRef)
 
         if let owners = ownerRefs {
@@ -1041,7 +1042,7 @@ class FirestoreManager: ObservableObject {
     /// Migrate existing root `bookings` documents into per-coach and per-client subcollections.
     /// This is idempotent: it will set the same document data under each subcollection using the booking's root document ID.
     func migrateBookingsToSubcollections(completion: @escaping (Error?) -> Void) {
-        let bookingsColl = db.collection("bookings")
+        let bookingsColl = self.db.collection("bookings")
         bookingsColl.getDocuments { [weak self] snapshot, error in
             guard let self = self else { completion(nil); return }
             if let error = error { completion(error); return }
@@ -1087,9 +1088,9 @@ class FirestoreManager: ObservableObject {
                               notes: String? = nil,
                               extra: [String: Any]? = nil,
                               completion: @escaping (Error?) -> Void) {
-        let coachRef = db.collection("coaches").document(coachId)
-        let clientRef = db.collection("clients").document(clientId)
-        let bookingRef = db.collection("bookings").document()
+        let coachRef = self.db.collection("coaches").document(coachId)
+        let clientRef = self.db.collection("clients").document(clientId)
+        let bookingRef = self.db.collection("bookings").document()
         let coachBookingRef = coachRef.collection("bookings").document(bookingRef.documentID)
         let clientBookingRef = clientRef.collection("bookings").document(bookingRef.documentID)
 
@@ -1107,7 +1108,7 @@ class FirestoreManager: ObservableObject {
 
         print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId)")
 
-        let batch = db.batch()
+        let batch = self.db.batch()
         batch.setData(data, forDocument: bookingRef)
         batch.setData(data, forDocument: coachBookingRef)
         batch.setData(data, forDocument: clientBookingRef)
@@ -1193,7 +1194,7 @@ class FirestoreManager: ObservableObject {
     /// Debug helper to fetch all bookings (root collection) and append a readable dump into bookingsDebug.
     func fetchAllBookingsDebug() {
         DispatchQueue.main.async { self.bookingsDebug = "Starting fetchAllBookingsDebug..." }
-        let coll = db.collection("bookings")
+        let coll = self.db.collection("bookings")
         coll.getDocuments { snapshot, error in
             if let error = error {
                 let msg = "fetchAllBookingsDebug error: \(error.localizedDescription)"
@@ -1283,7 +1284,7 @@ class FirestoreManager: ObservableObject {
     /// Fetch all bookings stored under each coach's `bookings` subcollection and populate `coachBookings`.
     func fetchAllCoachBookings() {
         DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchAllCoachBookings..." }
-        let coachColl = db.collection("coaches")
+        let coachColl = self.db.collection("coaches")
         coachColl.getDocuments { snap, err in
             if let err = err {
                 let msg = "fetchAllCoachBookings: failed to list coaches: \(err.localizedDescription)"
@@ -1438,6 +1439,70 @@ class FirestoreManager: ObservableObject {
             }
             let t = (data["type"] as? String)?.uppercased()
             DispatchQueue.main.async { self.currentUserType = t }
+        }
+    }
+
+    /// Update the Status field for a booking across root and mirrored subcollections.
+    /// This is tolerant to CoachID/ClientID stored as DocumentReference or String.
+    func updateBookingStatus(bookingId: String, status: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        // Read the booking to resolve coach/client ids (if needed)
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("updateBookingStatus: failed to read booking \(bookingId): \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                // Booking missing: nothing to update
+                print("updateBookingStatus: booking \(bookingId) not found")
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            // Helper to extract document id from various representations
+            func extractId(from field: Any?) -> String? {
+                if let ref = field as? DocumentReference { return ref.documentID }
+                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
+                if let dict = field as? [String: Any] {
+                    if let id = dict["id"] as? String { return id }
+                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
+                }
+                return nil
+            }
+
+            let coachId = extractId(from: data["CoachID"])
+            let clientId = extractId(from: data["ClientID"])
+
+            // Build batch to update root booking and any mirrored subcollection documents
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(["Status": status], forDocument: bookingRef)
+
+            // Update coach mirror if possible
+            if let cId = coachId {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(["Status": status], forDocument: coachBookingRef)
+            }
+
+            // Update client mirror if possible
+            if let clId = clientId {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(["Status": status], forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("updateBookingStatus: batch commit failed: \(err)")
+                    completion(err)
+                } else {
+                    print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
+                    completion(nil)
+                }
+            }
         }
     }
 }

@@ -6,21 +6,22 @@ struct BookingsView: View {
 
     @State private var showingNewBooking = false
 
+    private var currentUserRole: String? { firestore.currentUserType?.uppercased() }
+
     var body: some View {
         NavigationStack {
             List {
-                // Debug info at the top for troubleshooting
+                // Debug section
                 Section(header: Text("Debug")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(firestore.bookingsDebug.isEmpty ? "No debug messages yet" : firestore.bookingsDebug)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(nil)
+
                         HStack {
                             Spacer()
-                            Button("Clear Debug") {
-                                firestore.bookingsDebug = ""
-                            }
+                            Button("Clear Debug") { firestore.bookingsDebug = "" }
                             Spacer()
                         }
                         .font(.caption2)
@@ -28,98 +29,54 @@ struct BookingsView: View {
                     .padding(.vertical, 4)
                 }
 
-                // Bookings where the current user is the client
-                Section(header: Text("My Bookings")) {
-                    if firestore.bookings.isEmpty {
-                        Text("No bookings yet").foregroundColor(.secondary)
-                    } else {
-                        ForEach(firestore.bookings) { b in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(b.coachName ?? "Coach")
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(b.status?.capitalized ?? "")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                // Requested bookings section for coaches
+                if currentUserRole == "COACH" {
+                    Section(header: Text("Requested Bookings")) {
+                        let requested = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "requested" }
+                        if requested.isEmpty {
+                            Text("No requested bookings").foregroundColor(.secondary)
+                        } else {
+                            ForEach(requested, id: \.id) { b in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    BookingRowView(item: b)
+                                    HStack {
+                                        Spacer()
+                                        Button(action: { acceptBooking(b) }) {
+                                            Text("Accept")
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.blue)
+                                    }
                                 }
-
-                                if let start = b.startAt {
-                                    Text("Start: \(start, formatter: DateFormatter.shortDateTime)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let end = b.endAt {
-                                    Text("End: \(end, formatter: DateFormatter.shortDateTime)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                if let location = b.location {
-                                    Text(location).font(.body)
-                                }
-                                if let notes = b.notes {
-                                    Text(notes).font(.footnote).foregroundColor(.secondary)
-                                }
+                                .padding(.vertical, 4)
                             }
-                            .padding(.vertical, 8)
                         }
                     }
                 }
 
-                // Aggregated coach-side bookings (for the current user as a coach)
-                Section(header: Text("Coach-side Bookings")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(firestore.coachBookingsDebug.isEmpty ? "" : firestore.coachBookingsDebug)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        /* refresh button removed */
-                    }
-
-                    if firestore.coachBookings.isEmpty {
-                        Text("No coach bookings found").foregroundColor(.secondary)
-                    } else {
-                        ForEach(firestore.coachBookings) { b in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(b.coachName ?? "Coach")
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(b.status?.capitalized ?? "")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let start = b.startAt {
-                                    Text("Start: \(start, formatter: DateFormatter.shortDateTime)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let location = b.location {
-                                    Text(location).font(.body)
-                                }
-                                if let notes = b.notes {
-                                    Text(notes).font(.footnote).foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                        }
-                    }
+                // Role-specific rendering
+                if currentUserRole == "CLIENT" {
+                    clientBookingsSection
+                } else if currentUserRole == "COACH" {
+                    coachBookingsSection
+                } else {
+                    // fallback: show both while role is unknown
+                    clientBookingsSection
+                    coachBookingsSection
                 }
             }
             .navigationTitle("Bookings")
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button(action: { showingNewBooking = true }) {
-                        Image(systemName: "plus")
+                    if currentUserRole == "CLIENT" {
+                        Button(action: { showingNewBooking = true }) { Image(systemName: "plus") }
                     }
                 }
             }
             .onAppear {
-                // Load bookings where user is client
+                // fetch both lists (safe) — we can optimize later to fetch only what's needed
                 firestore.fetchBookingsForCurrentClientSubcollection()
-                // Also load bookings where user is coach
                 firestore.fetchBookingsForCurrentCoachSubcollection()
-                // ensure coaches are loaded so the NewBookingForm picker has items
                 firestore.fetchCoaches()
             }
             .sheet(isPresented: $showingNewBooking) {
@@ -129,27 +86,107 @@ struct BookingsView: View {
             }
         }
     }
+
+    private func acceptBooking(_ b: FirestoreManager.BookingItem) {
+        firestore.updateBookingStatus(bookingId: b.id, status: "accepted") { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    // simple error indicator
+                    print("acceptBooking error: \(err)")
+                } else {
+                    // Refresh coach bookings
+                    firestore.fetchBookingsForCurrentCoachSubcollection()
+                    firestore.showToast("Booking accepted")
+                }
+            }
+        }
+    }
+
+    private var clientBookingsSection: some View {
+        Section(header: Text("My Bookings")) {
+            if firestore.bookings.isEmpty {
+                Text("No bookings yet").foregroundColor(.secondary)
+            } else {
+                ForEach(firestore.bookings, id: \.id) { b in
+                    BookingRowView(item: b)
+                }
+            }
+        }
+    }
+
+    private var coachBookingsSection: some View {
+        Section(header: Text("All Bookings")) {
+            VStack(alignment: .leading, spacing: 8) {
+                if !firestore.coachBookingsDebug.isEmpty {
+                    Text(firestore.coachBookingsDebug)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if firestore.coachBookings.isEmpty {
+                Text("No coach bookings found").foregroundColor(.secondary)
+            } else {
+                ForEach(firestore.coachBookings, id: \.id) { b in
+                    BookingRowView(item: b)
+                }
+            }
+        }
+    }
 }
 
-// New booking form that posts a booking to Firestore
+// Small reusable row view for displaying a booking
+struct BookingRowView: View {
+    let item: FirestoreManager.BookingItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(item.coachName ?? "Coach").font(.headline)
+                Spacer()
+                Text(item.status?.capitalized ?? "")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            if let start = item.startAt {
+                Text("Start: \(start, formatter: DateFormatter.shortDateTime)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            if let end = item.endAt {
+                Text("End: \(end, formatter: DateFormatter.shortDateTime)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            if let location = item.location {
+                Text(location).font(.body)
+            }
+            if let notes = item.notes {
+                Text(notes).font(.footnote).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+// New booking form (kept similar, but cleaned up)
 struct NewBookingForm: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
     @Binding var showSheet: Bool
 
-    // Optional prefill values when launching the form from elsewhere
     let initialCoachId: String? = nil
     let initialStartAt: Date? = nil
     let initialEndAt: Date? = nil
     let initialLocationId: String? = nil
 
     @State private var selectedCoachId: String? = nil
-    @State private var coachSearchText: String = ""
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
-    // selectedLocationId references a document id in clients/{uid}/locations (firestore.locations)
     @State private var selectedLocationId: String = ""
-    @State private var notes: String = "notes"
+    @State private var notes: String = ""
 
     @State private var isSaving = false
     @State private var alertMessage: String = ""
@@ -162,7 +199,6 @@ struct NewBookingForm: View {
                     if let client = firestore.currentClient {
                         Text("Signed in as: \(client.name)")
                     } else if let uid = auth.user?.uid {
-                        // fallback: show uid while we fetch profile
                         Text("Signed in as: \(uid)")
                     } else {
                         Text("Not signed in").foregroundColor(.secondary)
@@ -173,9 +209,7 @@ struct NewBookingForm: View {
                     if firestore.coaches.isEmpty {
                         Text("No coaches available").foregroundColor(.secondary)
                     } else {
-                        // Simple picker to select a coach; remove the inline suggestion chips and search field
                         Picker("Coach", selection: $selectedCoachId) {
-                            // Placeholder option so no coach appears selected by default
                             Text("Select a coach").tag(nil as String?)
                             ForEach(firestore.coaches, id: \.id) { coach in
                                 Text(coach.name).tag(coach.id as String?)
@@ -183,7 +217,6 @@ struct NewBookingForm: View {
                         }
                         .pickerStyle(.menu)
                         .onAppear {
-                            // ensure coaches are loaded; do NOT auto-select any coach unless prefilling
                             firestore.fetchCoaches()
                             if let pre = initialCoachId { selectedCoachId = pre }
                         }
@@ -196,7 +229,6 @@ struct NewBookingForm: View {
                 }
 
                 Section(header: Text("Details")) {
-                    // Only allow selecting from the current user's saved locations
                     if firestore.locations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("No saved locations found").foregroundColor(.secondary)
@@ -214,6 +246,7 @@ struct NewBookingForm: View {
                             }
                         }
                     }
+
                     TextEditor(text: $notes).frame(minHeight: 80)
                 }
 
@@ -221,9 +254,7 @@ struct NewBookingForm: View {
             }
             .navigationTitle("New Booking")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showSheet = false }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSheet = false } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveBooking() }
                         .disabled((selectedCoachId ?? "").isEmpty || auth.user == nil || selectedLocationId.isEmpty)
@@ -233,20 +264,14 @@ struct NewBookingForm: View {
                 Alert(title: Text("Error"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
             }
             .onAppear {
-                // ensure coaches and current client profile are available when the form appears
                 firestore.fetchCoaches()
-                // Apply any initial prefills provided by the caller
-                if let preCoach = initialCoachId { selectedCoachId = preCoach }
+                if let pre = initialCoachId { selectedCoachId = pre }
                 if let preStart = initialStartAt { startAt = preStart }
                 if let preEnd = initialEndAt { endAt = preEnd }
                 if let preLoc = initialLocationId { selectedLocationId = preLoc }
-                // keep search text empty by default
-                coachSearchText = ""
                 if let uid = auth.user?.uid {
                     firestore.fetchCurrentProfiles(for: uid)
-                    // also load bookings stored under clients/{uid}/bookings
                     firestore.fetchBookingsFromClientSubcollection(clientId: uid)
-                    // ensure current user's saved locations are loaded for the location picker
                     firestore.fetchLocationsForCurrentUser()
                 }
             }
@@ -260,33 +285,30 @@ struct NewBookingForm: View {
             return
         }
         guard let coachUid = selectedCoachId, !coachUid.isEmpty else {
-             alertMessage = "Select a coach"
-             showAlert = true
-             return
-         }
+            alertMessage = "Select a coach"
+            showAlert = true
+            return
+        }
 
         isSaving = true
-        // Determine location name from the selected saved location id
         let locationName = firestore.locations.first(where: { $0.id == selectedLocationId })?.name ?? ""
-        // Always create bookings with default status "requested"
         firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
             DispatchQueue.main.async {
-                self.isSaving = false
+                isSaving = false
                 if let err = err {
-                    self.alertMessage = "Failed to save booking: \(err.localizedDescription)"
-                    self.showAlert = true
+                    alertMessage = "Failed to save booking: \(err.localizedDescription)"
+                    showAlert = true
                 } else {
-                    // Refresh the client subcollection which is the canonical source
                     firestore.fetchBookingsForCurrentClientSubcollection()
                     firestore.showToast("Booking saved")
                     showSheet = false
                 }
             }
-         }
+        }
     }
 }
 
-// Simple date formatter helper
+// DateFormatter helper
 extension DateFormatter {
     static let shortDateTime: DateFormatter = {
         let f = DateFormatter()

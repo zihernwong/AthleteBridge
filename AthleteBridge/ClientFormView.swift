@@ -3,7 +3,8 @@ import SwiftUI
 struct ClientFormView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @State private var goals = ""
-    @State private var availability = "Morning"
+    // Support multi-select availability
+    @State private var selectedAvailability: Set<String> = []
     @State private var searchText: String = ""
     
     let availabilityOptions = ["Morning", "Afternoon", "Evening"]
@@ -60,22 +61,24 @@ struct ClientFormView: View {
                         }
                     }
 
-                    Section(header: Text("Your Coaching Goals")) {
+                    Section(header: Text("Desired Improvement Areas")) {
                         TextField("e.g. Confidence, Leadership", text: $goals)
                     }
                     
                     Section(header: Text("Preferred Availability")) {
-                        Picker("Availability", selection: $availability) {
-                            ForEach(availabilityOptions, id: \.self) { option in
-                                Text(option)
-                            }
-                        }
+                        Text("Preferred Availability")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        ChipMultiSelect(items: availabilityOptions, selection: $selectedAvailability)
                     }
                     
                     NavigationLink("Find Coaches") {
+                        // Fallback to Morning if user didn't select any availability
+                        let prefs = selectedAvailability.isEmpty ? ["Morning"] : Array(selectedAvailability)
                         let client = Client(name: "You",
                                             goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
-                                            preferredAvailability: [availability])
+                                            preferredAvailability: prefs)
                         
                         MatchResultsView(client: client, searchQuery: searchText)
                     }
