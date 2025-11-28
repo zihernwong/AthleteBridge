@@ -5,6 +5,7 @@ struct AuthScreen: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isLogin = true
+    @State private var selectedRole: String = "CLIENT" // default for signups
 
     var body: some View {
         ZStack {
@@ -22,9 +23,19 @@ struct AuthScreen: View {
                         .bold()
                 }
 
-                Text(isLogin ? "Login" : "Sign Up")
+                Text(isLogin ? "Login" : "Create An Account")
                     .font(.largeTitle)
                     .bold()
+
+                if !isLogin {
+                    // Show role toggle only during sign up
+                    Picker("I am a", selection: $selectedRole) {
+                        Text("Client").tag("CLIENT")
+                        Text("Coach").tag("COACH")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                }
 
                 TextField("Email", text: $email)
                     .textInputAutocapitalization(.never)
@@ -63,7 +74,7 @@ struct AuthScreen: View {
                         if isLogin {
                             await auth.login(email: trimmedEmail, password: trimmedPassword)
                         } else {
-                            await auth.signUp(email: trimmedEmail, password: trimmedPassword)
+                            await auth.signUp(email: trimmedEmail, password: trimmedPassword, userType: selectedRole)
                         }
                     }
                 }) {

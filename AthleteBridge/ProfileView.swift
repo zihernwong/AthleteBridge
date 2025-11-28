@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import CoreLocation
 
 struct ProfileView: View {
     enum Role: String, CaseIterable, Identifiable {
@@ -30,6 +31,13 @@ struct ProfileView: View {
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
     @State private var bioText: String = ""
+
+    // New fields for zipcode -> city suggestion
+    @State private var zipcode: String = ""
+    @State private var cityText: String = ""
+    @State private var suggestedCity: String? = nil
+    @State private var isGeocoding: Bool = false
+    @State private var geocodeWorkItem: DispatchWorkItem?
 
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
@@ -178,6 +186,47 @@ struct ProfileView: View {
                 coachAvailabilitySelection = Array(newSet)
             }))
 
+            // Zip code + city suggestion
+            VStack(alignment: .leading) {
+                Text("Zip Code")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                HStack {
+                    TextField("ZIP code", text: $zipcode)
+                        .keyboardType(.numberPad)
+                        .textContentType(.postalCode)
+                        .onChange(of: zipcode) { newVal in
+                            // Debounce geocoding
+                            geocodeWorkItem?.cancel()
+                            suggestedCity = nil
+                            cityText = ""
+                            guard !newVal.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                            let work = DispatchWorkItem { performGeocode(for: newVal) }
+                            geocodeWorkItem = work
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+                        }
+                    if isGeocoding {
+                        ProgressView().scaleEffect(0.75)
+                    }
+                }
+
+                // Suggested city and editable city field
+                if let s = suggestedCity {
+                    HStack {
+                        Text("Suggested city: \(s)")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button("Use") {
+                            cityText = s
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
+                }
+                TextField("City", text: $cityText)
+                    .textInputAutocapitalization(.words)
+                    .padding(.vertical, 4)
+            }
+
             // Bio: multiline text editor for coach biography
             VStack(alignment: .leading) {
                 Text("Biography")
@@ -319,9 +368,6 @@ struct ProfileView: View {
         isSaving = true
         saveMessage = nil
 
-        // Capture the environment object into a local strong reference to avoid
-        // property-wrapper dynamic-member lookup issues when used inside nested
-        // functions and asynchronous closures.
         let fm = self.firestore
 
         func finalizeSave(withPhotoURL photoURL: String?) {
@@ -354,7 +400,7 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, active: true, overwrite: true) { err in
+                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, zipCode: zipcode.isEmpty ? nil : zipcode, city: cityText.isEmpty ? nil : cityText, active: true, overwrite: true) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
@@ -397,6 +443,34 @@ struct ProfileView: View {
             }
         } else {
             finalizeSave(withPhotoURL: nil)
+        }
+    }
+
+    private func performGeocode(for zip: String) {
+        let trimmed = zip.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        isGeocoding = true
+        let geocoder = CLGeocoder()
+        geocoder.geocodeAddressString(trimmed) { places, err in
+            DispatchQueue.main.async {
+                self.isGeocoding = false
+                if let err = err {
+                    print("geocode error: \(err)")
+                    self.suggestedCity = nil
+                    return
+                }
+                if let p = places?.first {
+                    // Prefer locality, fallback to subAdministrativeArea or administrativeArea
+                    let city = p.locality ?? p.subAdministrativeArea ?? p.administrativeArea
+                    self.suggestedCity = city
+                    // If user hasn't typed a city, prefill it for convenience
+                    if self.cityText.isEmpty, let c = city {
+                        self.cityText = c
+                    }
+                } else {
+                    self.suggestedCity = nil
+                }
+            }
         }
     }
 }

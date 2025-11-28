@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import FirebaseAuth
 
 struct LocationsView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -11,13 +12,18 @@ struct LocationsView: View {
     @State private var isSavingInline = false
     @State private var showSaveAlert = false
     @State private var saveAlertMessage = ""
+    @State private var bookings: [FirestoreManager.BookingItem] = []
+    @State private var loading: Bool = true
+    @State private var selectedDate: Date = Date()
+    // Local list of locations associated with the currently authenticated user
+    @State private var userLocations: [FirestoreManager.LocationItem] = []
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Interactive map for placing a pin via long-press or by using the centered crosshair
                 ZStack {
-                    ABMapView(region: $region, markerCoordinate: $markerCoordinate, showsUserLocation: true, existingLocations: firestore.locations)
+                    ABMapView(region: $region, markerCoordinate: $markerCoordinate, showsUserLocation: true, existingLocations: userLocations)
                         .frame(height: 360)
                         .cornerRadius(8)
 
@@ -83,10 +89,10 @@ struct LocationsView: View {
 
                 List {
                     Section(header: Text("Saved Locations")) {
-                        if firestore.locations.isEmpty {
+                        if userLocations.isEmpty {
                             Text("No locations").foregroundColor(.secondary)
                         } else {
-                            ForEach(firestore.locations) { loc in
+                            ForEach(userLocations) { loc in
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(loc.name ?? "Unnamed location").font(.headline)
                                     if let address = loc.address { Text(address).font(.subheadline) }
@@ -111,23 +117,24 @@ struct LocationsView: View {
                 /* refresh button removed */
             }
             .onAppear {
-                firestore.fetchLocationsForCurrentUser()
-                // center map on first saved location if available
-                if let first = firestore.locations.first, let lat = first.latitude, let lng = first.longitude {
-                    region.center = CLLocationCoordinate2D(latitude: lat, longitude: lng)
-                    region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                // Load locations that belong to the current user (clients/{uid}/locations)
+                if let uid = Auth.auth().currentUser?.uid {
+                    firestore.fetchLocationsForClient(clientId: uid) { items in
+                        DispatchQueue.main.async {
+                            self.userLocations = items
+                            if let first = items.first, let lat = first.latitude, let lng = first.longitude {
+                                region.center = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                                region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                            }
+                        }
+                    }
                 }
             }
             .onChange(of: firestore.locations) { newLocations in
-                // When the locations list updates (for example after saving a new pin),
-                // re-center the map on the first user location (if any) so the UI reflects
-                // the filtered, user-only set immediately.
-                if let first = newLocations.first, let lat = first.latitude, let lng = first.longitude {
-                    withAnimation {
-                        region.center = CLLocationCoordinate2D(latitude: lat, longitude: lng)
-                        region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                    }
-                }
+                // Keep userLocations in sync if the global cache is updated elsewhere
+                // but prefer explicitly fetching client-only locations after saves.
+                // If you want to strictly use this global cache, uncomment the next line.
+                // self.userLocations = newLocations
             }
             .alert(isPresented: $showSaveAlert) { Alert(title: Text("Save Error"), message: Text(saveAlertMessage), dismissButton: .default(Text("OK"))) }
         }
@@ -144,11 +151,17 @@ struct LocationsView: View {
                     saveAlertMessage = err.localizedDescription
                     showSaveAlert = true
                 } else {
-                    // clear form and refresh
+                    // clear form and refresh user-specific locations
                     newName = ""
                     newAddress = ""
                     markerCoordinate = nil
-                    firestore.fetchLocationsForCurrentUser()
+                    if let uid = Auth.auth().currentUser?.uid {
+                        firestore.fetchLocationsForClient(clientId: uid) { items in
+                            DispatchQueue.main.async {
+                                self.userLocations = items
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -19,6 +19,8 @@ class FirestoreManager: ObservableObject {
     @Published var currentClientPhotoURL: URL? = nil
     @Published var currentCoach: Coach? = nil
     @Published var currentCoachPhotoURL: URL? = nil
+    // Published user type from `userType/{uid}` (e.g. "COACH" or "CLIENT")
+    @Published var currentUserType: String? = nil
 
     // MARK: - Bookings
     struct BookingItem: Identifiable {
@@ -91,6 +93,8 @@ class FirestoreManager: ObservableObject {
             if let uid = user?.uid {
                 print("[FirestoreManager] auth state changed - user signed in: \(uid). Fetching profiles.")
                 self.fetchCurrentProfiles(for: uid)
+                // Also load the userType document for quick role checks
+                self.fetchUserType(for: uid)
             } else {
                 // user signed out - clear cached profiles and photo URLs
                 DispatchQueue.main.async {
@@ -98,6 +102,7 @@ class FirestoreManager: ObservableObject {
                     self.currentClientPhotoURL = nil
                     self.currentCoach = nil
                     self.currentCoachPhotoURL = nil
+                    self.currentUserType = nil
                 }
             }
         }
@@ -288,7 +293,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, photoURL: String?, bio: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
         // Base payload (do not include createdAt here yet so we can control whether it is written)
         var baseData: [String: Any] = [
             "FirstName": firstName,
@@ -301,6 +306,8 @@ class FirestoreManager: ObservableObject {
         if let hr = hourlyRate { baseData["HourlyRate"] = hr }
         if let p = photoURL { baseData["PhotoURL"] = p }
         if let b = bio { baseData["Bio"] = b }
+        if let z = zipCode { baseData["ZipCode"] = z }
+        if let c = city { baseData["City"] = c }
 
         let docRef = self.db.collection("coaches").document(id)
 
@@ -1413,6 +1420,24 @@ class FirestoreManager: ObservableObject {
                 self.locations = items
                 self.locationsDebug += "\nFetched \(items.count) locations for client/\(uid)"
             }
+        }
+    }
+
+    /// Reads the `userType/{uid}` document and publishes the `type` field.
+    func fetchUserType(for uid: String) {
+        let docRef = db.collection("userType").document(uid)
+        docRef.getDocument { snap, err in
+            if let err = err {
+                print("fetchUserType error: \(err)")
+                DispatchQueue.main.async { self.currentUserType = nil }
+                return
+            }
+            guard let data = snap?.data() else {
+                DispatchQueue.main.async { self.currentUserType = nil }
+                return
+            }
+            let t = (data["type"] as? String)?.uppercased()
+            DispatchQueue.main.async { self.currentUserType = t }
         }
     }
 }

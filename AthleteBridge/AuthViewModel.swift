@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseAuth
+import FirebaseFirestore
 
 @MainActor
 class AuthViewModel: ObservableObject {
@@ -17,7 +18,7 @@ class AuthViewModel: ObservableObject {
     }
 
     // MARK: - Sign Up
-    func signUp(email: String, password: String) async {
+    func signUp(email: String, password: String, userType: String? = nil) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false } // ensure we always clear loading
@@ -25,6 +26,22 @@ class AuthViewModel: ObservableObject {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             self.user = result.user
+
+            // After creating the auth user, write the chosen user type to Firestore
+            if let uid = result.user.uid as String?, let type = userType {
+                let db = Firestore.firestore()
+                db.collection("userType").document(uid).setData(["type": type]) { err in
+                    if let err = err {
+                        print("AuthViewModel: failed to write userType for uid=\(uid): \(err)")
+                        // Don't treat Firestore write failure as fatal for signup; surface warning
+                        DispatchQueue.main.async {
+                            self.errorMessage = "Account created but failed to save user type. Please try again later."
+                        }
+                    } else {
+                        print("AuthViewModel: userType \(type) written for uid=\(uid)")
+                    }
+                }
+            }
         } catch {
             // Use centralized handler so we print all useful debug info
             errorMessage = handleAuthError(error)
