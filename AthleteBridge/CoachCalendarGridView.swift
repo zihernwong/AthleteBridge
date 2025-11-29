@@ -6,9 +6,10 @@ import SwiftUI
 /// - When an available slot is tapped the `onSlotSelected` closure is called with the start and end Date.
 struct CoachCalendarGridView: View {
     @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var auth: AuthViewModel
 
     let coachID: String
-    let date: Date
+    @Binding var date: Date
     /// When true, only render available slots (omit booked slots entirely)
     let showOnlyAvailable: Bool
     let slotMinutes: Int = 30
@@ -18,11 +19,19 @@ struct CoachCalendarGridView: View {
     // Callback when a free slot is selected
     var onSlotSelected: ((Date, Date) -> Void)? = nil
 
+    @State private var dayBookings: [FirestoreManager.BookingItem] = []
+    @State private var isLoading: Bool = false
+    // sheet state for creating a booking from a tapped slot
+    @State private var showingNewBooking: Bool = false
+    @State private var newBookingStart: Date = Date()
+    @State private var newBookingEnd: Date = Date().addingTimeInterval(60*30)
+    @State private var lastTappedSlot: Date? = nil
+
     private var calendar: Calendar { Calendar.current }
 
-    // Filter the firestore coachBookings for this coach and date
+    // Bookings for the currently selected date (fetched specifically for this coach & date)
     private var todaysBookings: [FirestoreManager.BookingItem] {
-        firestore.coachBookings.filter { $0.coachID == coachID && isSameDay($0.startAt, date) }
+        dayBookings
     }
 
     // Generate list of slot start times for the date
@@ -63,14 +72,30 @@ struct CoachCalendarGridView: View {
                 }
             }
 
+            if isLoading {
+                HStack { Spacer(); ProgressView(); Spacer() }
+            }
+
             // Grid of slots
             let columns = [GridItem(.adaptive(minimum: 100), spacing: 12)]
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(visibleSlots, id: \.self) { slotStart in
                     let slotEnd = calendar.date(byAdding: .minute, value: slotMinutes, to: slotStart) ?? slotStart
                     let booked = isSlotBooked(start: slotStart, end: slotEnd)
+                    // Disable slots that are already booked or in the past
+                    let isPast = slotStart < Date()
                     Button(action: {
-                        if !booked {
+                        if !booked && !isPast {
+                            print("[CoachCalendarGridView] slot tapped: \(slotStart) - preparing NewBookingForm (final)")
+                            // present booking form prefilled with this coach & times
+                            self.newBookingStart = slotStart
+                            self.newBookingEnd = slotEnd
+                            self.lastTappedSlot = slotStart
+                            DispatchQueue.main.async {
+                                self.showingNewBooking = true
+                                print("[CoachCalendarGridView] showingNewBooking set to true (main)")
+                            }
+                            // also call callback if caller provided one
                             onSlotSelected?(slotStart, slotEnd)
                         }
                     }) {
@@ -84,14 +109,81 @@ struct CoachCalendarGridView: View {
                         }
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(booked ? Color(UIColor.systemGray5) : Color.blue.opacity(0.2))
+                        .background(booked ? Color(UIColor.systemGray5) : (isPast ? Color(UIColor.systemGray4) : Color.blue.opacity(0.2)))
                         .cornerRadius(8)
                     }
-                    .disabled(booked)
+                    .disabled(booked || isPast)
                 }
             }
         }
         .padding()
+        .onAppear { fetchBookingsForSelectedDate() }
+        .onChange(of: date) { fetchBookingsForSelectedDate() }
+        // Present the NewBookingForm as a full-screen cover. This is more reliable
+        // inside nested NavigationStacks or Lists.
+        .fullScreenCover(isPresented: $showingNewBooking) {
+            NewBookingFormView(showSheet: $showingNewBooking, initialCoachId: coachID, initialStart: newBookingStart, initialEnd: newBookingEnd)
+                .environmentObject(firestore)
+                .environmentObject(auth)
+                .onAppear { print("[CoachCalendarGridView] fullScreenCover presenting NewBookingFormView for coach=\(coachID) start=\(newBookingStart)") }
+        }
+    }
+
+    // MARK: - Data fetch
+    private func fetchBookingsForSelectedDate() {
+        print("[CoachCalendarGridView] fetchBookingsForSelectedDate called for coach=\(coachID) date=\(date)")
+        isLoading = true
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: date)
+        guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else {
+            isLoading = false
+            return
+        }
+
+        // Fast-path: use cached aggregated coachBookings if available for immediate UI feedback
+        let cached = firestore.coachBookings.filter { $0.coachID == coachID && isSameDay($0.startAt, date) }
+        if !cached.isEmpty {
+            print("[CoachCalendarGridView] using cached coachBookings count=\(cached.count) for date=\(dayStart)")
+            self.dayBookings = cached.sorted { (a,b) in
+                (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+            }
+            self.isLoading = false
+            // still refresh from network in background
+            firestore.fetchBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+                DispatchQueue.main.async {
+                    if !items.isEmpty {
+                        self.dayBookings = items.sorted { (a,b) in
+                            (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                        }
+                    }
+                }
+            }
+            return
+        }
+
+        // Otherwise fetch from coach subcollection and fallback to root bookings if needed
+        firestore.fetchBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+            print("[CoachCalendarGridView] fetchBookingsForCoach returned \(items.count) items for date=\(dayStart)")
+            DispatchQueue.main.async {
+                if !items.isEmpty {
+                    self.dayBookings = items.sorted { (a,b) in
+                        (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                    }
+                    self.isLoading = false
+                } else {
+                    print("[CoachCalendarGridView] no items from coach subcollection — trying root bookings")
+                    firestore.fetchRootBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { rootItems in
+                        print("[CoachCalendarGridView] fetchRootBookingsForCoach returned \(rootItems.count) items for date=\(dayStart)")
+                        DispatchQueue.main.async {
+                            self.dayBookings = rootItems.sorted { (a,b) in
+                                (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                            }
+                            self.isLoading = false
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -166,7 +258,7 @@ struct CoachCalendarGridView_Previews: PreviewProvider {
         let sample2 = FirestoreManager.BookingItem(id: "b2", clientID: "c2", clientName: "Bob", coachID: "coach123", coachName: "Reuben", startAt: todayStart.addingTimeInterval(60*60*5), endAt: todayStart.addingTimeInterval(60*60*6), location: "Lake Marion", notes: "", status: "Confirmed")
         fm.coachBookings = [sample1, sample2]
 
-        return CoachCalendarGridView(coachID: "coach123", date: now, showOnlyAvailable: false, onSlotSelected: { start, end in
+        return CoachCalendarGridView(coachID: "coach123", date: .constant(now), showOnlyAvailable: false, onSlotSelected: { start, end in
             print("Selected slot: \(start) -> \(end)")
         }).environmentObject(fm)
     }

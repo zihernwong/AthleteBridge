@@ -22,11 +22,11 @@ struct CoachAvailabilityView: View {
                             if let status = b.status { Text(status.capitalized).font(.caption).foregroundColor(.secondary) }
                         }
                         if let start = b.startAt, let end = b.endAt {
-                            Text("\(DateFormatter.shortDateTime.string(from: start)) — \(DateFormatter.shortDateTime.string(from: end))")
+                            Text("\(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short)) — \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         } else if let start = b.startAt {
-                            Text(DateFormatter.shortDateTime.string(from: start)).font(.subheadline).foregroundColor(.secondary)
+                            Text(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short)).font(.subheadline).foregroundColor(.secondary)
                         }
                         if let loc = b.location, !loc.isEmpty { Text(loc).font(.caption).foregroundColor(.secondary) }
                         if let notes = b.notes, !notes.isEmpty { Text(notes).font(.caption2).foregroundColor(.secondary) }

@@ -18,29 +18,7 @@ struct CoachCalendarInlineView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(bookings) { b in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(b.clientName ?? b.clientID)
-                                    .font(.subheadline)
-                                    .bold()
-                                if let start = b.startAt {
-                                    Text(DateFormatter.shortDateTime.string(from: start))
-                                        .font(.caption2)
-                                        .foregroundColor(.primary)
-                                }
-                                if let end = b.endAt {
-                                    Text(DateFormatter.shortDateTime.string(from: end))
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let loc = b.location, !loc.isEmpty {
-                                    Text(loc).font(.caption2).foregroundColor(.secondary)
-                                }
-                                if let status = b.status { Text(status.capitalized).font(.caption2).foregroundColor(.secondary) }
-                            }
-                            .padding(10)
-                            .background(Color(UIColor.secondarySystemBackground))
-                            .cornerRadius(10)
-                            .shadow(radius: 0.5)
+                            BookingInlineCard(item: b)
                         }
                     }
                     .padding(.vertical, 6)
@@ -59,6 +37,40 @@ struct CoachCalendarInlineView: View {
                 }
             }
         }
+    }
+}
+
+// Small view to render a single booking card used inside the inline calendar
+fileprivate struct BookingInlineCard: View {
+    let item: FirestoreManager.BookingItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.clientName ?? item.clientID)
+                .font(.subheadline)
+                .bold()
+
+            if let start = item.startAt {
+                Text(DateFormatter.localizedString(from: start, dateStyle: .none, timeStyle: .short))
+                    .font(.caption2)
+                    .foregroundColor(.primary)
+            }
+            if let end = item.endAt {
+                Text(DateFormatter.localizedString(from: end, dateStyle: .none, timeStyle: .short))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            if let loc = item.location, !loc.isEmpty {
+                Text(loc).font(.caption2).foregroundColor(.secondary)
+            }
+            if let status = item.status {
+                Text(status.capitalized).font(.caption2).foregroundColor(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 0.5)
     }
 }
 

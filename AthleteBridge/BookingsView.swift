@@ -150,12 +150,12 @@ struct BookingRowView: View {
             }
 
             if let start = item.startAt {
-                Text("Start: \(start, formatter: DateFormatter.shortDateTime)")
+                Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
             if let end = item.endAt {
-                Text("End: \(end, formatter: DateFormatter.shortDateTime)")
+                Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -306,16 +306,6 @@ struct NewBookingForm: View {
             }
         }
     }
-}
-
-// DateFormatter helper
-extension DateFormatter {
-    static let shortDateTime: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        return f
-    }()
 }
 
 struct BookingsView_Previews: PreviewProvider {

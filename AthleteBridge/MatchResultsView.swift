@@ -114,6 +114,8 @@ import SwiftUI
      @State private var reviews: [FirestoreManager.ReviewItem] = []
      @State private var bookings: [FirestoreManager.BookingItem] = []
      @State private var loadingBookings: Bool = true
+     // selected date for the embedded coach calendar
+     @State private var selectedDate: Date = Date()
 
      var body: some View {
          List {
@@ -131,10 +133,38 @@ import SwiftUI
 
              // Calendar grid showing selectable time slots; existing bookings are greyed out
              Section(header: Text("Calendar")) {
-                 // Show today's calendar for this coach. Use coach.id and a concrete date.
-                 CoachCalendarGridView(coachID: coach.id, date: Date(), showOnlyAvailable: false, onSlotSelected: nil)
+                 // Calendar controls: previous / selected date / next
+                 HStack {
+                     Button(action: {
+                         // previous day
+                         selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+                         print("[CoachDetailView] <- pressed, selectedDate=\(selectedDate)")
+                     }) {
+                         Image(systemName: "chevron.left")
+                             .font(.headline)
+                     }
+                     .buttonStyle(.plain)
+                     Spacer()
+                     Text(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))
+                         .font(.subheadline)
+                         .bold()
+                     Spacer()
+                     Button(action: {
+                         // next day
+                         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+                         print("[CoachDetailView] -> pressed, selectedDate=\(selectedDate)")
+                     }) {
+                         Image(systemName: "chevron.right")
+                             .font(.headline)
+                     }
+                     .buttonStyle(.plain)
+                 }
+                 .padding(.vertical, 6)
+
+                 // Embedded calendar grid that reflects the selectedDate (pass binding so changes propagate)
+                 CoachCalendarGridView(coachID: coach.id, date: $selectedDate, showOnlyAvailable: false, onSlotSelected: nil)
                      .environmentObject(firestore)
-             }
+              }
 
              Section(header: Text("Reviews")) {
                  if reviews.isEmpty {
@@ -150,7 +180,7 @@ import SwiftUI
                                      .font(.subheadline)
                              }
                              if let msg = r.ratingMessage { Text(msg).font(.body) }
-                             if let date = r.createdAt { Text(DateFormatter.shortDateTime.string(from: date)).font(.caption).foregroundColor(.secondary) }
+                             if let date = r.createdAt { Text(DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)).font(.caption).foregroundColor(.secondary) }
                          }
                          .padding(.vertical, 6)
                      }
@@ -164,13 +194,34 @@ import SwiftUI
              }
              // fetch bookings for this coach and show them in the Calendar section
              loadingBookings = true
-             firestore.fetchBookingsForCoach(coachId: coach.id) { items in
+             // initial fetch: get bookings around the selectedDate (the day)
+             let cal = Calendar.current
+             let dayStart = cal.startOfDay(for: selectedDate)
+             let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
+             firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
                  DispatchQueue.main.async {
                      // sort ascending by start date to show upcoming first
                      self.bookings = items.sorted { (a,b) in
                          (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
                      }
                      self.loadingBookings = false
+                     // booking load completed; the grid will update via binding/onChange
+                 }
+             }
+         }
+         .onChange(of: selectedDate) { new in
+             // when date changes, fetch bookings for that specific day and refresh the calendar
+             let cal = Calendar.current
+             let dayStart = cal.startOfDay(for: new)
+             let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
+             self.loadingBookings = true
+             firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
+                 DispatchQueue.main.async {
+                     self.bookings = items.sorted { (a,b) in
+                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                     }
+                     self.loadingBookings = false
+                     // the grid will update via binding/onChange
                  }
              }
          }

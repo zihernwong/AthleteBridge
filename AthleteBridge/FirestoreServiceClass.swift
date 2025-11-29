@@ -1505,4 +1505,35 @@ class FirestoreManager: ObservableObject {
             }
         }
     }
+
+    /// Fetch bookings from the root `bookings` collection for a specific coach within an optional date range.
+    /// This is a fallback for projects that don't mirror bookings into coaches/{id}/bookings.
+    func fetchRootBookingsForCoach(coachId: String, start: Date? = nil, end: Date? = nil, completion: @escaping ([BookingItem]) -> Void) {
+        var query: Query = db.collection("bookings")
+        if let s = start { query = query.whereField("StartAt", isGreaterThanOrEqualTo: Timestamp(date: s)) }
+        if let e = end { query = query.whereField("StartAt", isLessThan: Timestamp(date: e)) }
+        query.getDocuments { snapshot, error in
+            if let error = error { print("fetchRootBookingsForCoach error: \(error)"); completion([]); return }
+            let docs = snapshot?.documents ?? []
+            var items: [BookingItem] = []
+            for d in docs {
+                let data = d.data()
+                // resolve coach id either as DocumentReference or String
+                var docCoachId: String = ""
+                if let cref = data["CoachID"] as? DocumentReference { docCoachId = cref.documentID }
+                else if let s = data["CoachID"] as? String { docCoachId = s.split(separator: "/").last.map(String.init) ?? s }
+                if docCoachId != coachId { continue }
+                let id = d.documentID
+                let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
+                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
+                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                let status = data["Status"] as? String
+                let location = data["Location"] as? String
+                let notes = data["Notes"] as? String
+                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                items.append(item)
+            }
+            completion(items)
+        }
+    }
 }
