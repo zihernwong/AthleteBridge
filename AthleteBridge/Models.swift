@@ -8,14 +8,16 @@ struct Coach: Identifiable, Hashable {
     let experienceYears: Int
     let availability: [String] // e.g., "Morning", "Evening"
     let bio: String? // optional biography text
+    let hourlyRate: Double? // optional hourly rate in USD
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil) {
         self.id = id
         self.name = name
         self.specialties = specialties
         self.experienceYears = experienceYears
         self.availability = availability
         self.bio = bio
+        self.hourlyRate = hourlyRate
     }
 }
 

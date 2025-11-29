@@ -115,7 +115,7 @@ struct BookingsView: View {
     }
 
     private var coachBookingsSection: some View {
-        Section(header: Text("All Bookings")) {
+        Section(header: Text("Accepted Bookings")) {
             VStack(alignment: .leading, spacing: 8) {
                 if !firestore.coachBookingsDebug.isEmpty {
                     Text(firestore.coachBookingsDebug)

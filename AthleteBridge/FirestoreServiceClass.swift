@@ -21,6 +21,7 @@ class FirestoreManager: ObservableObject {
     @Published var currentCoachPhotoURL: URL? = nil
     // Published user type from `userType/{uid}` (e.g. "COACH" or "CLIENT")
     @Published var currentUserType: String? = nil
+    @Published var userTypeLoaded: Bool = false
 
     // MARK: - Bookings
     struct BookingItem: Identifiable {
@@ -103,6 +104,7 @@ class FirestoreManager: ObservableObject {
                     self.currentCoach = nil
                     self.currentCoachPhotoURL = nil
                     self.currentUserType = nil
+                    self.userTypeLoaded = false
                 }
             }
         }
@@ -112,6 +114,7 @@ class FirestoreManager: ObservableObject {
         // Optionally fetch current user's profile if already signed in
         if let uid = Auth.auth().currentUser?.uid {
             fetchCurrentProfiles(for: uid)
+            fetchUserType(for: uid)
         }
     }
 
@@ -138,7 +141,12 @@ class FirestoreManager: ObservableObject {
                 let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
                 let availability = data["Availability"] as? [String] ?? []
                 let bio = data["Bio"] as? String
-                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
+                // HourlyRate may be stored as Double or String or Int
+                var hr: Double? = nil
+                if let dhr = data["HourlyRate"] as? Double { hr = dhr }
+                else if let ihr = data["HourlyRate"] as? Int { hr = Double(ihr) }
+                else if let shr = data["HourlyRate"] as? String, let parsed = Double(shr) { hr = parsed }
+                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hr)
             }
             DispatchQueue.main.async {
                 self.coaches = mapped
@@ -207,9 +215,16 @@ class FirestoreManager: ObservableObject {
             let bio = data["Bio"] as? String
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
+            // try to parse hourly rate from various possible types
+            var hr: Double? = nil
+            if let dhr = data["HourlyRate"] as? Double { hr = dhr }
+            else if let ihr = data["HourlyRate"] as? Int { hr = Double(ihr) }
+            else if let shr = data["HourlyRate"] as? String, let parsed = Double(shr) { hr = parsed }
+
+            // Resolve photo URL then assign currentCoach and photo URL together
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hr)
                     self.currentCoachPhotoURL = resolved
                     if resolved == nil { print("fetchCurrentProfiles: no coach photo for \(id)") }
                 }
@@ -662,7 +677,7 @@ class FirestoreManager: ObservableObject {
 
     /// Count bookings for a client (reads the client's bookings subcollection)
     func countBookingsForClient(clientId: String, completion: @escaping (Int?, Error?) -> Void) {
-        let coll = db.collection("clients").document(clientId).collection("bookings")
+        let coll = self.db.collection("clients").document(clientId).collection("bookings")
         coll.getDocuments { snapshot, error in
             if let error = error { completion(nil, error); return }
             completion(snapshot?.documents.count ?? 0, nil)
@@ -1426,20 +1441,69 @@ class FirestoreManager: ObservableObject {
 
     /// Reads the `userType/{uid}` document and publishes the `type` field.
     func fetchUserType(for uid: String) {
-        let docRef = db.collection("userType").document(uid)
-        docRef.getDocument { snap, err in
-            if let err = err {
-                print("fetchUserType error: \(err)")
-                DispatchQueue.main.async { self.currentUserType = nil }
-                return
+        let candidateCollections = ["userType", "userTypes", "user_type", "user_types", "user-type"]
+        let candidateKeys = ["type", "Type", "userType", "user_type", "role", "Role"]
+
+        func finishWith(_ val: String?) {
+            DispatchQueue.main.async {
+                if let v = val, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.currentUserType = v.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                } else {
+                    self.currentUserType = nil
+                }
+                self.userTypeLoaded = true
             }
-            guard let data = snap?.data() else {
-                DispatchQueue.main.async { self.currentUserType = nil }
-                return
-            }
-            let t = (data["type"] as? String)?.uppercased()
-            DispatchQueue.main.async { self.currentUserType = t }
         }
+
+        // Try collections sequentially until we find a usable value or run out
+        func tryCollection(_ index: Int) {
+            if index >= candidateCollections.count {
+                finishWith(nil)
+                return
+            }
+            let collName = candidateCollections[index]
+            let docRef = db.collection(collName).document(uid)
+            docRef.getDocument { snap, err in
+                if let err = err {
+                    print("fetchUserType: error reading \(collName)/\(uid): \(err)")
+                    // try next collection
+                    tryCollection(index + 1)
+                    return
+                }
+
+                guard let data = snap?.data(), !data.isEmpty else {
+                    tryCollection(index + 1)
+                    return
+                }
+
+                // Look for known keys
+                for k in candidateKeys {
+                    if let s = data[k] as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        finishWith(s)
+                        return
+                    }
+                    if let n = data[k] as? Int {
+                        finishWith(String(n))
+                        return
+                    }
+                    if let d = data[k] as? Double {
+                        finishWith(String(Int(d)))
+                        return
+                    }
+                }
+
+                // If doc has a single string value, use it
+                if data.count == 1, let only = data.first?.value as? String {
+                    finishWith(only)
+                    return
+                }
+
+                // No usable field in this document - try next collection
+                tryCollection(index + 1)
+            }
+        }
+
+        tryCollection(0)
     }
 
     /// Update the Status field for a booking across root and mirrored subcollections.
