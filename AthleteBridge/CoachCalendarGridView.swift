@@ -255,21 +255,173 @@ import SwiftUI
 
  struct CoachCalendarGridView: View {
      let coachID: String
+     @EnvironmentObject var firestore: FirestoreManager
      @Binding var date: Date
      var showOnlyAvailable: Bool = false
      var onSlotSelected: ((FirestoreManager.BookingItem) -> Void)?
 
-     var body: some View {
-         // Stub: replace with full implementation later
-         Text("Calendar grid for \(coachID) on \(date, formatter: dateFormatter)")
-             .font(.caption)
-             .foregroundColor(.secondary)
+     @State private var bookings: [FirestoreManager.BookingItem] = []
+     @State private var loading: Bool = true
+     @State private var showingNewBookingSheet: Bool = false
+     @State private var prefillStart: Date? = nil
+     @State private var prefillEnd: Date? = nil
+
+     // Configuration
+     private let startHour = 6
+     private let endHour = 22
+     private let slotMinutes = 30
+
+     private var slots: [Date] {
+         generateTimeSlots(for: date, startHour: startHour, endHour: endHour, intervalMinutes: slotMinutes)
      }
 
-     private var dateFormatter: DateFormatter {
-         let fmt = DateFormatter()
-         fmt.dateStyle = .short
-         fmt.timeStyle = .none
-         return fmt
+     var body: some View {
+         VStack(alignment: .leading, spacing: 8) {
+             HStack {
+                 DatePicker("Date", selection: $date, displayedComponents: .date)
+                     .datePickerStyle(.compact)
+                     .labelsHidden()
+                 Spacer()
+             }
+             .padding(.vertical, 4)
+
+             HStack(spacing: 12) {
+                 HStack(spacing: 6) {
+                     RoundedRectangle(cornerRadius: 4).fill(Color.gray.opacity(0.35)).frame(width: 18, height: 18)
+                     Text("Booked").font(.caption).foregroundColor(.secondary)
+                 }
+                 HStack(spacing: 6) {
+                     RoundedRectangle(cornerRadius: 4).fill(Color.accentColor.opacity(0.2)).frame(width: 18, height: 18)
+                     Text("Available").font(.caption).foregroundColor(.secondary)
+                 }
+                 Spacer()
+             }
+             .padding(.bottom, 4)
+
+             if loading {
+                 HStack { Spacer(); ProgressView(); Spacer() }
+             } else {
+                 // Grid of slots
+                 let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+                 ScrollView {
+                     LazyVGrid(columns: columns, spacing: 10) {
+                         ForEach(slots, id: \.self) { slot in
+                             let booked = isSlotBooked(slotStart: slot, slotMinutes: slotMinutes, bookings: bookings)
+                             let slotEnd = Calendar.current.date(byAdding: .minute, value: slotMinutes, to: slot) ?? slot
+                             Button(action: {
+                                 if !booked {
+                                     prefillStart = slot
+                                     prefillEnd = slotEnd
+                                     // if caller supplied a selection handler, call it with a synthetic BookingItem
+                                     if let onSelect = onSlotSelected {
+                                         var bi = FirestoreManager.BookingItem()
+                                         bi.startAt = slot
+                                         bi.endAt = slotEnd
+                                         bi.coachID = coachID
+                                         onSelect(bi)
+                                     } else {
+                                         showingNewBookingSheet = true
+                                     }
+                                 }
+                             }) {
+                                 VStack(alignment: .leading, spacing: 4) {
+                                     Text(shortTimeString(from: slot))
+                                         .font(.subheadline)
+                                         .foregroundColor(.primary)
+                                     if booked, let overlap = overlappingBookingForSlot(slotStart: slot, slotMinutes: slotMinutes, bookings: bookings) {
+                                         Text(overlap.clientName ?? overlap.clientID)
+                                             .font(.caption2)
+                                             .foregroundColor(.secondary)
+                                             .lineLimit(1)
+                                     } else {
+                                         Text("Available")
+                                             .font(.caption2)
+                                             .foregroundColor(.secondary)
+                                     }
+                                 }
+                                 .padding(8)
+                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                 .background(booked ? Color.gray.opacity(0.25) : Color.accentColor.opacity(0.12))
+                                 .cornerRadius(8)
+                             }
+                             .buttonStyle(PlainButtonStyle())
+                         }
+                     }
+                     .padding(.vertical, 4)
+                 }
+                 .frame(minHeight: 120, maxHeight: 420)
+             }
+         }
+         .onAppear(perform: loadBookings)
+         .onChange(of: date) { _ in loadBookings() }
+         .sheet(isPresented: $showingNewBookingSheet) {
+             // Present the NewBookingForm prefilled with coach and times if available
+             NewBookingForm(showSheet: $showingNewBookingSheet, initialCoachId: coachID, initialStartAt: prefillStart, initialEndAt: prefillEnd, initialLocationId: nil)
+                 .environmentObject(firestore)
+                 .environmentObject(AuthViewModel())
+         }
+     }
+
+     private func loadBookings() {
+         loading = true
+         firestore.fetchBookingsForCoach(coachId: coachID, start: Calendar.current.startOfDay(for: date), end: Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!) { items in
+             DispatchQueue.main.async {
+                 self.bookings = items.sorted { (a,b) in
+                     (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                 }
+                 self.loading = false
+             }
+         }
+     }
+
+     private func generateTimeSlots(for date: Date, startHour: Int, endHour: Int, intervalMinutes: Int) -> [Date] {
+         var result: [Date] = []
+         let calendar = Calendar.current
+         var components = calendar.dateComponents([.year, .month, .day], from: date)
+         components.hour = startHour
+         components.minute = 0
+
+         guard let startDate = calendar.date(from: components) else { return [] }
+         var current = startDate
+         while true {
+             let hour = calendar.component(.hour, from: current)
+             if hour >= endHour { break }
+             result.append(current)
+             if let next = calendar.date(byAdding: .minute, value: intervalMinutes, to: current) {
+                 current = next
+             } else { break }
+         }
+         return result
+     }
+
+     private func isSlotBooked(slotStart: Date, slotMinutes: Int, bookings: [FirestoreManager.BookingItem]) -> Bool {
+         let slotEnd = Calendar.current.date(byAdding: .minute, value: slotMinutes, to: slotStart) ?? slotStart
+         for b in bookings {
+             if let s = b.startAt, let e = b.endAt {
+                 if s < slotEnd && e > slotStart {
+                     return true
+                 }
+             }
+         }
+         return false
+     }
+
+     private func overlappingBookingForSlot(slotStart: Date, slotMinutes: Int, bookings: [FirestoreManager.BookingItem]) -> FirestoreManager.BookingItem? {
+         let slotEnd = Calendar.current.date(byAdding: .minute, value: slotMinutes, to: slotStart) ?? slotStart
+         for b in bookings {
+             if let s = b.startAt, let e = b.endAt {
+                 if s < slotEnd && e > slotStart {
+                     return b
+                 }
+             }
+         }
+         return nil
+     }
+
+     private func shortTimeString(from date: Date) -> String {
+         let f = DateFormatter()
+         f.timeStyle = .short
+         f.dateStyle = .none
+         return f.string(from: date)
      }
  }
