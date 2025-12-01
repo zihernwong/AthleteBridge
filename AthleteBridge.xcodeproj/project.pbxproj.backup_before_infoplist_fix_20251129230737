@@ -32,7 +32,6 @@
 		4B4157E12ECFE20E00C67BEC /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E02ECFE20E00C67BEC /* FirebaseRemoteConfig */; };
 		4B4157E32ECFE20E00C67BEC /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E22ECFE20E00C67BEC /* FirebaseStorage */; };
 		4B4157E52ECFE20E00C67BEC /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E42ECFE20E00C67BEC /* FirebaseStorageCombine-Community */; };
-		4B74E5E42EDD451E0030F699 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4B74E5E32EDD451E0030F699 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,25 +55,11 @@
 		4B285B3E2ECEBBAB00241189 /* AthleteBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AthleteBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B285B4B2ECEBBAD00241189 /* AthleteBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AthleteBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B285B552ECEBBAD00241189 /* AthleteBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AthleteBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		4B74E5E32EDD451E0030F699 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		4BB71B762EDC0DBF00DAE08F /* Exceptions for "AthleteBridge" folder in "AthleteBridge" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 4B285B3D2ECEBBAB00241189 /* AthleteBridge */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4B285B402ECEBBAB00241189 /* AthleteBridge */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				4BB71B762EDC0DBF00DAE08F /* Exceptions for "AthleteBridge" folder in "AthleteBridge" target */,
-			);
 			path = AthleteBridge;
 			sourceTree = "<group>";
 		};
@@ -143,7 +128,6 @@
 		4B285B352ECEBBAB00241189 = {
 			isa = PBXGroup;
 			children = (
-				4B74E5E32EDD451E0030F699 /* LaunchScreen.storyboard */,
 				4B285B402ECEBBAB00241189 /* AthleteBridge */,
 				4B285B4E2ECEBBAD00241189 /* AthleteBridgeTests */,
 				4B285B582ECEBBAD00241189 /* AthleteBridgeUITests */,
@@ -310,7 +294,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4B74E5E42EDD451E0030F699 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -420,7 +403,6 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_FILE = AthleteBridge/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -478,7 +460,6 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_FILE = AthleteBridge/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -498,7 +479,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q27LVA8STD;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -526,7 +507,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q27LVA8STD;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
