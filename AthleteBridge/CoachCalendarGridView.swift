@@ -261,8 +261,13 @@ import SwiftUI
      var onSlotSelected: ((FirestoreManager.BookingItem) -> Void)?
 
      @EnvironmentObject var firestore: FirestoreManager
+     @EnvironmentObject var auth: AuthViewModel
      @State private var bookings: [FirestoreManager.BookingItem] = []
      @State private var loading: Bool = true
+     // Sheet state for creating a new booking when tapping an available slot
+     @State private var showBookingSheet: Bool = false
+     @State private var selectedSlotStart: Date = Date()
+     @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*30)
 
      // Configuration: generate slots between these hours
      private let startHour = 6
@@ -331,7 +336,11 @@ import SwiftUI
                                      if let b = overlapping {
                                          onSlotSelected?(b)
                                      } else {
-                                         // available slot tapped — no-op for now; could present booking flow
+                                         // available slot tapped — present booking form prefilled
+                                         selectedSlotStart = slot.start
+                                         selectedSlotEnd = slot.end
+                                         // present sheet with NewBookingFormView
+                                         showBookingSheet = true
                                      }
                                  }
                              }
@@ -343,7 +352,19 @@ import SwiftUI
              }
          }
          .onAppear { fetchForSelectedDate() }
-         .onChange(of: date) { _, _ in fetchForSelectedDate() }
+         .onChange(of: date) { _ in fetchForSelectedDate() }
+         // Present booking form when user taps available slot
+         .sheet(isPresented: $showBookingSheet) {
+             NewBookingFormView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
+                 .environmentObject(firestore)
+                 .environmentObject(auth)
+         }
+         // When the booking sheet is dismissed, refresh bookings for the selected date
+         .onChange(of: showBookingSheet) { newVal in
+             if newVal == false {
+                 fetchForSelectedDate()
+             }
+         }
      }
 
      private func fetchForSelectedDate() {

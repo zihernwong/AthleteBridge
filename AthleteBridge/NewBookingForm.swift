@@ -97,26 +97,40 @@ struct NewBookingFormView: View {
 
                 Section(header: Text("When")) {
                     DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: startAt) { newStart in
+                            // If the user picks a start that is at/after the current end, bump the end to start + 30m
+                            if newStart >= endAt {
+                                endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                            }
+                        }
+
                     DatePicker("End", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: endAt) { newEnd in
+                            // If the user picks an end that is at/earlier than the current start, move the start to end - 30m
+                            if newEnd <= startAt {
+                                startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                            }
+                        }
                 }
 
                 Section(header: Text("Details")) {
-                    // Only allow selecting from the current user's saved locations
+                    // Location is optional. If the user has saved locations they can pick one,
+                    // otherwise they can proceed without selecting a location (e.g., virtual session).
                     if firestore.locations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("No saved locations found").foregroundColor(.secondary)
-                            Text("Save a location in the Locations tab before creating a booking.").font(.caption).foregroundColor(.secondary)
+                            Text("Location is optional; leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
                         }
                     } else {
-                        Picker("Location", selection: $selectedLocationId) {
+                        Picker("Location (optional)", selection: $selectedLocationId) {
+                            // allow an explicit 'none' option
+                            Text("None").tag("")
                             ForEach(firestore.locations, id: \.id) { loc in
                                 Text(loc.name ?? "Unnamed").tag(loc.id)
                             }
                         }
                         .onAppear {
-                            if selectedLocationId.isEmpty, let first = firestore.locations.first {
-                                selectedLocationId = first.id
-                            }
+                            // Do not auto-select a saved location — keep location optional.
                         }
                     }
                     TextEditor(text: $notes).frame(minHeight: 80)
@@ -131,7 +145,8 @@ struct NewBookingFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveBooking() }
-                        .disabled(selectedCoachId.isEmpty || auth.user == nil || selectedLocationId.isEmpty)
+                        // Disable save if coach not selected, not signed in, or times invalid (start must be before end)
+                        .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt))
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -143,6 +158,7 @@ struct NewBookingFormView: View {
                 if selectedCoachId.isEmpty, let first = firestore.coaches.first {
                     selectedCoachId = first.id
                 }
+                // Do not auto-select a saved location; location remains optional.
                 if let uid = auth.user?.uid {
                     firestore.fetchCurrentProfiles(for: uid)
                     // also load bookings stored under clients/{uid}/bookings
@@ -167,9 +183,16 @@ struct NewBookingFormView: View {
             return
         }
 
+        // Validate times before attempting to save
+        if !(startAt < endAt) {
+            alertMessage = "Start time must be before end time"
+            showAlert = true
+            return
+        }
+
         isSaving = true
-        // Determine location name from the selected saved location id
-        let locationName = firestore.locations.first(where: { $0.id == selectedLocationId })?.name ?? ""
+        // Determine location name from the selected saved location id; allow nil for no selection
+        let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
         // Always create bookings with default status "requested"
         firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
             DispatchQueue.main.async {
