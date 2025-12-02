@@ -12,6 +12,14 @@ struct MainAppView: View {
     // Flag set when the user manually selects a tab so we don't override their choice
     @State private var userDidSelectTab: Bool = false
 
+    // Computed flag: true when the signed-in user should be treated as a coach
+    private var isCoachUserComputed: Bool {
+        if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
+        if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
+        if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
+        return false
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             ProfileView()
@@ -47,14 +55,16 @@ struct MainAppView: View {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            navigateToClientForm = auth.user != nil
+            // Only navigate to ClientForm for non-coach users
+            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         .onChange(of: auth.user?.uid) { oldValue, newValue in
             if let uid = newValue {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            navigateToClientForm = newValue != nil
+            // Only navigate to ClientForm for non-coach users
+            navigateToClientForm = (newValue != nil) && !isCoachUserComputed
         }
         // React to role changes so the UI switches to the coach logout view as soon as we know the user is a coach
         .onChange(of: firestore.currentUserType) { oldType, newType in
@@ -67,6 +77,8 @@ struct MainAppView: View {
                     didAutoSelectCoachHome = true
                 }
             }
+            // Recompute whether we should navigate to ClientForm (only for non-coach users)
+            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         // If the userType document finished loading and indicates COACH, make sure Home is set to the coach view.
         .onChange(of: firestore.userTypeLoaded) { oldLoaded, newLoaded in
@@ -86,6 +98,8 @@ struct MainAppView: View {
                     didAutoSelectCoachHome = true
                 }
             }
+            // Recompute navigateToClientForm when currentCoach changes
+            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         // When the coaches list finishes loading, check whether the signed-in user is among them and, if so, switch to the coach Home view.
         .onChange(of: firestore.coaches.count) { oldCount, newCount in
@@ -94,6 +108,14 @@ struct MainAppView: View {
                     selectedTab = 1
                     didAutoSelectCoachHome = true
                 }
+            }
+            // Recompute navigateToClientForm when coaches list updates
+            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
+        }
+        // Also re-evaluate when userTypeLoaded flips (role info became available)
+        .onChange(of: firestore.userTypeLoaded) { oldLoaded, newLoaded in
+            if newLoaded {
+                navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
             }
         }
     }
@@ -122,15 +144,15 @@ struct MainAppView: View {
                     return res
                 }()
 
-                // If user is a coach, show only a simple logout page (centered button)
-                if isCoachUser {
+                // If user is a coach, show only the AthleteBridge logo (no other functionality)
+                if isCoachUserComputed {
                     VStack {
                         Spacer()
-                        Button("Logout") { auth.logout() }
-                            .foregroundColor(.red)
-                            .padding()
-                            .background(.thinMaterial)
-                            .cornerRadius(10)
+                        if let img = appLogoImageSwiftUI() {
+                            img.resizable().scaledToFit().frame(maxWidth: 300).padding()
+                        } else {
+                            Image("AthleteBridgeLogo").resizable().scaledToFit().frame(maxWidth: 300).padding()
+                        }
                         Spacer()
                     }
                 } else {
