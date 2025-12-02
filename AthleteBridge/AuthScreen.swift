@@ -15,12 +15,12 @@ struct AuthScreen: View {
                     logo
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 160, height: 160)
-                        .padding(.bottom, 8)
+                        .frame(width: min(560, UIScreen.main.bounds.width * 0.85), height: min(560, UIScreen.main.bounds.width * 0.85))
+                        .padding(.bottom, 14)
                 } else {
                     Text("AthletesBridge")
-                        .font(.largeTitle)
-                        .bold()
+                        .font(.system(size: 84, weight: .bold, design: .default))
+                        .padding(.bottom, 10)
                 }
 
                 Text(isLogin ? "Login" : "Create An Account")
