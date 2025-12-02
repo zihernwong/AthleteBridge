@@ -225,25 +225,39 @@ struct NewBookingForm: View {
 
                 Section(header: Text("When")) {
                     DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: startAt) { _, newStart in
+                            // If start is at/after end, bump end to start + 30min
+                            if newStart >= endAt {
+                                endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                            }
+                        }
+
                     DatePicker("End", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: endAt) { _, newEnd in
+                            // If end is at/earlier than start, move start to end - 30min
+                            if newEnd <= startAt {
+                                startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                            }
+                        }
                 }
 
                 Section(header: Text("Details")) {
+                    // Location is optional for the booking form in the Bookings tab.
                     if firestore.locations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("No saved locations found").foregroundColor(.secondary)
-                            Text("Save a location in the Locations tab before creating a booking.").font(.caption).foregroundColor(.secondary)
+                            Text("leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
                         }
                     } else {
-                        Picker("Location", selection: $selectedLocationId) {
+                        Picker("Location (optional)", selection: $selectedLocationId) {
+                            // Explicit 'None' option to allow no-location bookings
+                            Text("None").tag("")
                             ForEach(firestore.locations, id: \.id) { loc in
                                 Text(loc.name ?? "Unnamed").tag(loc.id)
                             }
                         }
                         .onAppear {
-                            if selectedLocationId.isEmpty, let first = firestore.locations.first {
-                                selectedLocationId = first.id
-                            }
+                            // Do not auto-select a saved location here; keep it optional.
                         }
                     }
 
@@ -257,7 +271,8 @@ struct NewBookingForm: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSheet = false } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveBooking() }
-                        .disabled((selectedCoachId ?? "").isEmpty || auth.user == nil || selectedLocationId.isEmpty)
+                        // Disable save if coach not selected, not signed in, or times invalid (start must be before end)
+                        .disabled((selectedCoachId ?? "").isEmpty || auth.user == nil || !(startAt < endAt))
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -290,8 +305,16 @@ struct NewBookingForm: View {
             return
         }
 
+        // Validate times before saving
+        if !(startAt < endAt) {
+            alertMessage = "Start time must be before end time"
+            showAlert = true
+            return
+        }
+
         isSaving = true
-        let locationName = firestore.locations.first(where: { $0.id == selectedLocationId })?.name ?? ""
+        // Allow nil location when no selection made
+        let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
         firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
             DispatchQueue.main.async {
                 isSaving = false
