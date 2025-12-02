@@ -97,7 +97,7 @@ struct NewBookingFormView: View {
 
                 Section(header: Text("When")) {
                     DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: startAt) { newStart in
+                        .onChange(of: startAt) { _, newStart in
                             // If the user picks a start that is at/after the current end, bump the end to start + 30m
                             if newStart >= endAt {
                                 endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
@@ -105,7 +105,7 @@ struct NewBookingFormView: View {
                         }
 
                     DatePicker("End", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: endAt) { newEnd in
+                        .onChange(of: endAt) { _, newEnd in
                             // If the user picks an end that is at/earlier than the current start, move the start to end - 30m
                             if newEnd <= startAt {
                                 startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)

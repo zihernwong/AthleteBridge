@@ -11,6 +11,9 @@ import SwiftUI
      @EnvironmentObject var firestore: FirestoreManager
      @State private var coachReviews: [String: [FirestoreManager.ReviewItem]] = [:]
      @State private var coachBookingCounts: [String: Int] = [:]
+    
+    // Local search text for inline Find a Coach search bar (used when searchQuery is nil)
+    @State private var localSearchText: String = ""
 
      init(client: Client, searchQuery: String? = nil) {
          self.client = client
@@ -19,102 +22,108 @@ import SwiftUI
 
      private func filteredCoaches() -> [Coach] {
          let all = firestore.coaches
-         guard let q = searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return all }
+         // If the caller provided a searchQuery, prefer that. Otherwise use localSearchText.
+         let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
+         guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return all }
          return all.filter { $0.name.localizedCaseInsensitiveContains(q) }
      }
 
      var body: some View {
          let items = filteredCoaches()
-         List(items) { coach in
-             NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
-                 VStack(alignment: .leading, spacing: 8) {
-                     HStack(alignment: .top) {
-                         VStack(alignment: .leading) {
-                             Text(coach.name)
-                                 .font(.headline)
-                             if !coach.specialties.isEmpty {
-                                 Text(coach.specialties.joined(separator: ", "))
-                                     .font(.subheadline)
-                                     .foregroundColor(.secondary)
-                             }
-                             Text("Experience: \(coach.experienceYears) years")
-                                 .font(.caption)
-                                 .foregroundColor(.secondary)
-                             // Hourly rate (or fallback)
-                             if let rate = coach.hourlyRate {
-                                 Text(String(format: "$%.0f / hr", rate))
-                                     .font(.caption)
-                                     .foregroundColor(.primary)
-                             } else {
-                                 Text("Hourly rate to be discussed")
-                                     .font(.caption)
-                                     .foregroundColor(.secondary)
-                             }
-                         }
-                         Spacer()
-                         if let reviews = coachReviews[coach.id], !reviews.isEmpty {
-                             let avg = averageRating(from: reviews)
-                             VStack {
-                                 Text(String(format: "%.1f", avg))
-                                     .font(.headline)
-                                 Text("(\(reviews.count))")
-                                     .font(.caption)
-                                     .foregroundColor(.secondary)
-                             }
-                         } else {
-                             Text("No reviews")
-                                 .font(.caption)
-                                 .foregroundColor(.secondary)
-                         }
-                     }
 
-                     // Show number of bookings for this coach (lazy-loaded)
-                     HStack {
-                         Text("Bookings:").font(.caption).foregroundColor(.secondary)
-                         if let count = coachBookingCounts[coach.id] {
-                             Text("\(count)").font(.caption).bold()
-                         } else {
-                             Text("—").font(.caption).foregroundColor(.secondary)
-                         }
-                         Spacer()
+         // If an external searchQuery was provided, show just the list filtered by it.
+         // Otherwise show a local SearchBar above the list.
+         Group {
+             if searchQuery == nil {
+                 VStack(spacing: 0) {
+                     SearchBar(text: $localSearchText, placeholder: "Search coaches")
+                         .padding([.horizontal, .top])
+
+                     List(items) { coach in
+                         coachRow(for: coach)
+                             .onAppear {
+                                 lazyLoadForCoach(coach)
+                             }
                      }
                  }
-                 .padding(.vertical, 6)
-             }
-             .onAppear {
-                 // lazy-load reviews if missing
-                 if coachReviews[coach.id] == nil {
-                     firestore.fetchReviewsForCoach(coachId: coach.id) { items in
-                         DispatchQueue.main.async {
-                             coachReviews[coach.id] = items
-                         }
-                     }
-                 }
-                 // lazy-load booking counts if missing
-                 if coachBookingCounts[coach.id] == nil {
-                     firestore.fetchBookingsForCoach(coachId: coach.id) { items in
-                         DispatchQueue.main.async {
-                             coachBookingCounts[coach.id] = items.count
-                         }
-                     }
+             } else {
+                 List(items) { coach in
+                     coachRow(for: coach)
+                         .onAppear { lazyLoadForCoach(coach) }
                  }
              }
          }
          .navigationTitle("Your Matches")
-         .onAppear {
-             // ensure coaches are loaded
-             firestore.fetchCoaches()
-         }
+         .onAppear { firestore.fetchCoaches() }
      }
 
-     private func averageRating(from reviews: [FirestoreManager.ReviewItem]) -> Double {
-         let nums = reviews.compactMap { r -> Double? in
-             if let s = r.rating, let d = Double(s) { return d }
-             return nil
-         }
-         guard !nums.isEmpty else { return 0 }
-         return nums.reduce(0, +) / Double(nums.count)
-     }
+    // Small helper to render a coach row
+    @ViewBuilder
+    private func coachRow(for coach: Coach) -> some View {
+        NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading) {
+                        Text(coach.name).font(.headline)
+                        if !coach.specialties.isEmpty {
+                            Text(coach.specialties.joined(separator: ", ")).font(.subheadline).foregroundColor(.secondary)
+                        }
+                        Text("Experience: \(coach.experienceYears) years").font(.caption).foregroundColor(.secondary)
+                        if let rate = coach.hourlyRate {
+                            Text(String(format: "$%.0f / hr", rate)).font(.caption).foregroundColor(.primary)
+                        } else {
+                            Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    Spacer()
+                    if let reviews = coachReviews[coach.id], !reviews.isEmpty {
+                        let avg = averageRating(from: reviews)
+                        VStack {
+                            Text(String(format: "%.1f", avg)).font(.headline)
+                            Text("(\(reviews.count))").font(.caption).foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("No reviews").font(.caption).foregroundColor(.secondary)
+                    }
+                }
+
+                HStack {
+                    Text("Bookings:").font(.caption).foregroundColor(.secondary)
+                    if let count = coachBookingCounts[coach.id] { Text("\(count)").font(.caption).bold() }
+                    else { Text("—").font(.caption).foregroundColor(.secondary) }
+                    Spacer()
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func lazyLoadForCoach(_ coach: Coach) {
+        if coachReviews[coach.id] == nil {
+            firestore.fetchReviewsForCoach(coachId: coach.id) { items in
+                DispatchQueue.main.async { coachReviews[coach.id] = items }
+            }
+        }
+        if coachBookingCounts[coach.id] == nil {
+            firestore.fetchBookingsForCoach(coachId: coach.id) { items in
+                DispatchQueue.main.async { coachBookingCounts[coach.id] = items.count }
+            }
+        }
+    }
+    
+    private func averageRating(from reviews: [FirestoreManager.ReviewItem]) -> Double {
+        let nums = reviews.compactMap { r -> Double? in
+            if let s = r.rating, let d = Double(s) { return d }
+            return nil
+        }
+        guard !nums.isEmpty else { return 0 }
+        return nums.reduce(0, +) / Double(nums.count)
+    }
+
+    // Added helper duplicate to use inside coachRow scope
+    private func averageRatingFor(_ reviews: [FirestoreManager.ReviewItem]) -> Double {
+        return averageRating(from: reviews)
+    }
  }
 
  // New simple coach detail view that lists reviews for a coach
@@ -352,7 +361,7 @@ import SwiftUI
              }
          }
          .onAppear { fetchForSelectedDate() }
-         .onChange(of: date) { _ in fetchForSelectedDate() }
+         .onChange(of: date) { _, _ in fetchForSelectedDate() }
          // Present booking form when user taps available slot
          .sheet(isPresented: $showBookingSheet) {
              NewBookingFormView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)

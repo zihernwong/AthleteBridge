@@ -15,6 +15,7 @@ struct ReviewsView: View {
     // form state
     @State private var selectedCoachId: String = ""
     @State private var selectedCoachName: String = ""
+    @State private var coachSearchText: String = ""
     @State private var rating: Int = 5
     @State private var message: String = ""
     @State private var isSubmitting = false
@@ -30,6 +31,13 @@ struct ReviewsView: View {
     private var reviewsByUser: [FirestoreManager.ReviewItem] {
         guard let uid = auth.user?.uid else { return [] }
         return firestore.reviews.filter { $0.clientID == uid }
+    }
+
+    // Inline suggestions for coach names (contains match)
+    private var coachSuggestions: [Coach] {
+        let typed = coachSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard typed.count >= 1 else { return [] }
+        return firestore.coaches.filter { $0.name.lowercased().contains(typed) }
     }
 
     var body: some View {
@@ -183,13 +191,37 @@ struct ReviewsView: View {
                         if firestore.coaches.isEmpty {
                             Text("No coaches available").foregroundColor(.secondary)
                         } else {
-                            Picker("Coach", selection: $selectedCoachId) {
-                                ForEach(firestore.coaches, id: \.id) { coach in
-                                    Text(coach.name).tag(coach.id)
+                            // Searchable coach picker: type to filter and tap a suggestion to select
+                            VStack(alignment: .leading, spacing: 8) {
+                                SearchBar(text: $coachSearchText, placeholder: "Search coach by name")
+
+                                if !coachSuggestions.isEmpty {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(coachSuggestions.prefix(8), id: \.id) { coach in
+                                                Button(action: {
+                                                    selectedCoachId = coach.id
+                                                    selectedCoachName = coach.name
+                                                    coachSearchText = coach.name
+                                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                                }) {
+                                                    Text(coach.name)
+                                                        .padding(.horizontal, 12)
+                                                        .padding(.vertical, 8)
+                                                        .background(Color(UIColor.secondarySystemBackground))
+                                                        .cornerRadius(16)
+                                                }
+                                                .buttonStyle(PlainButtonStyle())
+                                            }
+                                        }
+                                        .padding(.vertical, 4)
+                                    }
                                 }
-                            }
-                            .onChange(of: selectedCoachId) { new in
-                                selectedCoachName = firestore.coaches.first(where: { $0.id == new })?.name ?? ""
+
+                                if !selectedCoachName.isEmpty {
+                                    Text("Selected: \(selectedCoachName)")
+                                        .font(.subheadline)
+                                }
                             }
                         }
 
@@ -237,9 +269,11 @@ struct ReviewsView: View {
                 firestore.fetchAllReviews()
             }
             .onChange(of: firestore.coaches) { _, newCoaches in
-                if selectedCoachId.isEmpty, let first = newCoaches.first {
-                    selectedCoachId = first.id
-                    selectedCoachName = first.name
+                // If previously selected coach no longer exists, clear selection
+                let ids = newCoaches.map { $0.id }
+                if !selectedCoachId.isEmpty && !ids.contains(selectedCoachId) {
+                    selectedCoachId = ""
+                    selectedCoachName = ""
                 }
             }
             .alert(isPresented: $showAlert) {
