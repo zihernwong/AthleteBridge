@@ -11,8 +11,11 @@ struct Coach: Identifiable, Hashable {
     let hourlyRate: Double? // optional hourly rate in USD
     // Optional meeting preference for coach (e.g., "In-Person" / "Virtual")
     let meetingPreference: String?
+    // Optional location info
+    let zipCode: String?
+    let city: String?
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, meetingPreference: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil) {
         self.id = id
         self.name = name
         self.specialties = specialties
@@ -21,6 +24,8 @@ struct Coach: Identifiable, Hashable {
         self.bio = bio
         self.hourlyRate = hourlyRate
         self.meetingPreference = meetingPreference
+        self.zipCode = zipCode
+        self.city = city
     }
 }
 
@@ -34,13 +39,18 @@ struct Client: Identifiable, Hashable {
     let meetingPreference: String?
     // Optional skill level for clients
     let skillLevel: String?
+    // Optional location info
+    let zipCode: String?
+    let city: String?
 
-    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, skillLevel: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil) {
         self.id = id
         self.name = name
         self.goals = goals
         self.preferredAvailability = preferredAvailability
         self.meetingPreference = meetingPreference
         self.skillLevel = skillLevel
+        self.zipCode = zipCode
+        self.city = city
     }
 }

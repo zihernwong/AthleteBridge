@@ -174,13 +174,15 @@ class FirestoreManager: ObservableObject {
                 preferredArr = ["Morning"]
             }
 
-            // Read meeting preference if present
+            // Read meeting preference and location if present
             let meetingPref = data["meetingPreference"] as? String
+            let zip = data["zipCode"] as? String ?? data["ZipCode"] as? String
+            let city = data["city"] as? String ?? data["City"] as? String
 
             let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref)
+                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city)
                     self.currentClientPhotoURL = resolved
                     if resolved == nil { print("fetchCurrentProfiles: no client photo for \(id)") }
                 }
@@ -263,7 +265,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save client document using provided id
-    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
+    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
         let docRef = self.db.collection("clients").document(id)
 
         // Base payload for updates (always set updatedAt)
@@ -274,6 +276,8 @@ class FirestoreManager: ObservableObject {
             "updatedAt": FieldValue.serverTimestamp()
         ]
         if let p = photoURL { updateData["photoURL"] = p }
+        if let z = zipCode { updateData["zipCode"] = z }
+        if let c = city { updateData["city"] = c }
         // If caller asked to clear the meetingPreference, request deletion in a merge/update operation
         if meetingPreferenceClear {
             updateData["meetingPreference"] = FieldValue.delete()
