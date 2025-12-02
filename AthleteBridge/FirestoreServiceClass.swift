@@ -104,7 +104,6 @@ class FirestoreManager: ObservableObject {
                     self.currentCoach = nil
                     self.currentCoachPhotoURL = nil
                     self.currentUserType = nil
-                    self.userTypeLoaded = false
                 }
             }
         }
@@ -114,7 +113,6 @@ class FirestoreManager: ObservableObject {
         // Optionally fetch current user's profile if already signed in
         if let uid = Auth.auth().currentUser?.uid {
             fetchCurrentProfiles(for: uid)
-            fetchUserType(for: uid)
         }
     }
 
@@ -141,12 +139,7 @@ class FirestoreManager: ObservableObject {
                 let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
                 let availability = data["Availability"] as? [String] ?? []
                 let bio = data["Bio"] as? String
-                // HourlyRate may be stored as Double or String or Int
-                var hr: Double? = nil
-                if let dhr = data["HourlyRate"] as? Double { hr = dhr }
-                else if let ihr = data["HourlyRate"] as? Int { hr = Double(ihr) }
-                else if let shr = data["HourlyRate"] as? String, let parsed = Double(shr) { hr = parsed }
-                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hr)
+                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
             }
             DispatchQueue.main.async {
                 self.coaches = mapped
@@ -181,10 +174,13 @@ class FirestoreManager: ObservableObject {
                 preferredArr = ["Morning"]
             }
 
+            // Read meeting preference if present
+            let meetingPref = data["meetingPreference"] as? String
+
             let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr)
+                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref)
                     self.currentClientPhotoURL = resolved
                     if resolved == nil { print("fetchCurrentProfiles: no client photo for \(id)") }
                 }
@@ -214,17 +210,13 @@ class FirestoreManager: ObservableObject {
             let availability = data["Availability"] as? [String] ?? []
             let bio = data["Bio"] as? String
 
-            let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
-            // try to parse hourly rate from various possible types
-            var hr: Double? = nil
-            if let dhr = data["HourlyRate"] as? Double { hr = dhr }
-            else if let ihr = data["HourlyRate"] as? Int { hr = Double(ihr) }
-            else if let shr = data["HourlyRate"] as? String, let parsed = Double(shr) { hr = parsed }
+            // Read meeting preference if present (standardize key to lowercase)
+            let meetingPref = data["meetingPreference"] as? String
 
-            // Resolve photo URL then assign currentCoach and photo URL together
+            let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hr)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, meetingPreference: meetingPref)
                     self.currentCoachPhotoURL = resolved
                     if resolved == nil { print("fetchCurrentProfiles: no coach photo for \(id)") }
                 }
@@ -271,7 +263,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save client document using provided id
-    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], photoURL: String?, completion: @escaping (Error?) -> Void) {
+    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
         let docRef = self.db.collection("clients").document(id)
 
         // Base payload for updates (always set updatedAt)
@@ -282,6 +274,16 @@ class FirestoreManager: ObservableObject {
             "updatedAt": FieldValue.serverTimestamp()
         ]
         if let p = photoURL { updateData["photoURL"] = p }
+        // If caller asked to clear the meetingPreference, request deletion in a merge/update operation
+        if meetingPreferenceClear {
+            updateData["meetingPreference"] = FieldValue.delete()
+        } else if let mp = meetingPreference {
+            updateData["meetingPreference"] = mp
+        }
+        // skillLevel handling: if provided as nil we don't touch it; if non-nil (including empty) we set it; caller can pass nil to leave unchanged
+        if let sl = skillLevel {
+            updateData["skillLevel"] = sl
+        }
 
         // Check whether the document exists so we only set createdAt on creation
         docRef.getDocument { snap, err in
@@ -308,7 +310,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
         // Base payload (do not include createdAt here yet so we can control whether it is written)
         var baseData: [String: Any] = [
             "FirstName": firstName,
@@ -323,6 +325,7 @@ class FirestoreManager: ObservableObject {
         if let b = bio { baseData["Bio"] = b }
         if let z = zipCode { baseData["ZipCode"] = z }
         if let c = city { baseData["City"] = c }
+        if let mp = meetingPreference { baseData["meetingPreference"] = mp }
 
         let docRef = self.db.collection("coaches").document(id)
 
@@ -677,7 +680,7 @@ class FirestoreManager: ObservableObject {
 
     /// Count bookings for a client (reads the client's bookings subcollection)
     func countBookingsForClient(clientId: String, completion: @escaping (Int?, Error?) -> Void) {
-        let coll = self.db.collection("clients").document(clientId).collection("bookings")
+        let coll = db.collection("clients").document(clientId).collection("bookings")
         coll.getDocuments { snapshot, error in
             if let error = error { completion(nil, error); return }
             completion(snapshot?.documents.count ?? 0, nil)
@@ -1441,69 +1444,21 @@ class FirestoreManager: ObservableObject {
 
     /// Reads the `userType/{uid}` document and publishes the `type` field.
     func fetchUserType(for uid: String) {
-        let candidateCollections = ["userType", "userTypes", "user_type", "user_types", "user-type"]
-        let candidateKeys = ["type", "Type", "userType", "user_type", "role", "Role"]
-
-        func finishWith(_ val: String?) {
-            DispatchQueue.main.async {
-                if let v = val, !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.currentUserType = v.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                } else {
-                    self.currentUserType = nil
-                }
-                self.userTypeLoaded = true
-            }
-        }
-
-        // Try collections sequentially until we find a usable value or run out
-        func tryCollection(_ index: Int) {
-            if index >= candidateCollections.count {
-                finishWith(nil)
+        let docRef = db.collection("userType").document(uid)
+        DispatchQueue.main.async { self.userTypeLoaded = false }
+        docRef.getDocument { snap, err in
+            if let err = err {
+                print("fetchUserType error: \(err)")
+                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true }
                 return
             }
-            let collName = candidateCollections[index]
-            let docRef = db.collection(collName).document(uid)
-            docRef.getDocument { snap, err in
-                if let err = err {
-                    print("fetchUserType: error reading \(collName)/\(uid): \(err)")
-                    // try next collection
-                    tryCollection(index + 1)
-                    return
-                }
-
-                guard let data = snap?.data(), !data.isEmpty else {
-                    tryCollection(index + 1)
-                    return
-                }
-
-                // Look for known keys
-                for k in candidateKeys {
-                    if let s = data[k] as? String, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        finishWith(s)
-                        return
-                    }
-                    if let n = data[k] as? Int {
-                        finishWith(String(n))
-                        return
-                    }
-                    if let d = data[k] as? Double {
-                        finishWith(String(Int(d)))
-                        return
-                    }
-                }
-
-                // If doc has a single string value, use it
-                if data.count == 1, let only = data.first?.value as? String {
-                    finishWith(only)
-                    return
-                }
-
-                // No usable field in this document - try next collection
-                tryCollection(index + 1)
+            guard let data = snap?.data() else {
+                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true }
+                return
             }
+            let t = (data["type"] as? String)?.uppercased()
+            DispatchQueue.main.async { self.currentUserType = t; self.userTypeLoaded = true }
         }
-
-        tryCollection(0)
     }
 
     /// Update the Status field for a booking across root and mirrored subcollections.

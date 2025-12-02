@@ -22,6 +22,12 @@ struct ProfileView: View {
     // client preferred availability now supports multiple selections
     @State private var selectedClientAvailability: Set<String> = []
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
+    // Client skill level selection
+    private let skillLevels: [String] = ["No Preference", "Beginner", "Intermediate", "Advanced"]
+    @State private var selectedClientSkillLevel: String = "No Preference"
+    // New: meeting preference options
+    private let meetingOptions: [String] = ["No preference", "In-Person", "Virtual"]
+    @State private var selectedClientMeetingPreference: String = "No preference"
 
     // Coach fields: fixed multi-select specialties
     @State private var selectedSpecialties: Set<String> = []
@@ -30,6 +36,8 @@ struct ProfileView: View {
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
     @State private var bioText: String = ""
+    // New: coach meeting preference
+    @State private var selectedCoachMeetingPreference: String = "No preference"
 
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
@@ -63,9 +71,10 @@ struct ProfileView: View {
                 .navigationTitle(isEditMode ? "Edit Profile" : "Create Profile")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Logout") {
-                            // Sign the user out and dismiss the profile screen
-                            auth.logout()
+                        Button(isEditMode ? "Logout" : "Cancel") {
+                            if isEditMode {
+                                auth.logout()
+                            }
                             presentationMode.wrappedValue.dismiss()
                         }
                     }
@@ -166,6 +175,28 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             ChipMultiSelect(items: availableAvailability, selection: $selectedClientAvailability)
+
+            Text("Meeting Preference")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Picker("Meeting Preference", selection: $selectedClientMeetingPreference) {
+                ForEach(meetingOptions, id: \.self) { opt in
+                    Text(opt).tag(opt)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.vertical, 8)
+
+            Text("Skill Level")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Picker("Skill Level", selection: $selectedClientSkillLevel) {
+                ForEach(skillLevels, id: \.self) { level in
+                    Text(level).tag(level)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.vertical, 8)
         }
     }
 
@@ -202,6 +233,17 @@ struct ProfileView: View {
             }, set: { newSet in
                 coachAvailabilitySelection = Array(newSet)
             }))
+
+            Text("Meeting Preference")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Picker("Meeting Preference", selection: $selectedCoachMeetingPreference) {
+                ForEach(meetingOptions, id: \.self) { opt in
+                    Text(opt).tag(opt)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.vertical, 8)
 
             // Bio: multiline text editor for coach biography
             VStack(alignment: .leading) {
@@ -304,6 +346,8 @@ struct ProfileView: View {
                 name = client.name
                 selectedGoals = Set(client.goals)
                 selectedClientAvailability = Set(client.preferredAvailability)
+                selectedClientMeetingPreference = client.meetingPreference ?? "No preference"
+                selectedClientSkillLevel = client.skillLevel ?? "No Preference"
             } else {
                 isEditMode = false
             }
@@ -315,6 +359,7 @@ struct ProfileView: View {
                 experienceYears = coach.experienceYears
                 coachAvailabilitySelection = coach.availability
                 bioText = coach.bio ?? ""
+                selectedCoachMeetingPreference = coach.meetingPreference ?? "No preference"
             } else {
                 isEditMode = false
             }
@@ -328,6 +373,8 @@ struct ProfileView: View {
             name = client.name
             selectedGoals = Set(client.goals)
             selectedClientAvailability = Set(client.preferredAvailability)
+            selectedClientMeetingPreference = client.meetingPreference ?? "No preference"
+            selectedClientSkillLevel = client.skillLevel ?? "No Preference"
         } else if let coach = firestore.currentCoach {
              role = .coach
              name = coach.name
@@ -335,6 +382,7 @@ struct ProfileView: View {
              experienceYears = coach.experienceYears
              coachAvailabilitySelection = coach.availability
              bioText = coach.bio ?? ""
+             selectedCoachMeetingPreference = coach.meetingPreference ?? "No preference"
         }
     }
 
@@ -355,7 +403,15 @@ struct ProfileView: View {
                 let preferred = Array(selectedClientAvailability)
                 // save preferredAvailability as array for multi-select support
                 // call existing API which accepts array after update
-                fm.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: goals, preferredAvailability: preferred, photoURL: photoURL) { err in
+                let meetingPrefToSave = (selectedClientMeetingPreference == "No preference") ? nil : selectedClientMeetingPreference
+                let skillLevelToSave = (selectedClientSkillLevel == "No Preference") ? nil : selectedClientSkillLevel
+                fm.saveClient(id: uid,
+                              name: name.isEmpty ? "Unnamed" : name,
+                              goals: goals,
+                              preferredAvailability: preferred,
+                              meetingPreference: meetingPrefToSave,
+                              skillLevel: skillLevelToSave,
+                              photoURL: photoURL) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
@@ -379,7 +435,19 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                fm.saveCoachWithSchema(id: uid, firstName: firstName, lastName: lastName, specialties: specialties, availability: coachAvailabilitySelection, experienceYears: experience, hourlyRate: hourlyRate, photoURL: photoURL, bio: bioText, active: true, overwrite: true) { err in
+                let meetingPrefToSave = (selectedCoachMeetingPreference == "No preference") ? nil : selectedCoachMeetingPreference
+                fm.saveCoachWithSchema(id: uid,
+                                       firstName: firstName,
+                                       lastName: lastName,
+                                       specialties: specialties,
+                                       availability: coachAvailabilitySelection,
+                                       experienceYears: experience,
+                                       hourlyRate: hourlyRate,
+                                       meetingPreference: meetingPrefToSave,
+                                       photoURL: photoURL,
+                                       bio: bioText,
+                                       active: true,
+                                       overwrite: true) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
                         if let err = err {
