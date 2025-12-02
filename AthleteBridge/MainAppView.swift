@@ -22,13 +22,14 @@ struct MainAppView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ProfileView()
-                .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
-                .tag(0)
+            // Locations tab moved to the first position
+            RequiresProfile(content: { LocationsView() }, selectedTab: $selectedTab)
+                .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
+                .tag(4)
 
-            // Wrap other tabs so they become inaccessible until a profile is created
+            // Home
             RequiresProfile(content: { homeTab }, selectedTab: $selectedTab)
-            .tabItem { Image(systemName: "house"); Text("Home") }
+                .tabItem { Image(systemName: "house"); Text("Home") }
                 .tag(1)
 
             RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
@@ -39,9 +40,10 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "calendar"); Text("Bookings") }
                 .tag(3)
 
-            RequiresProfile(content: { LocationsView() }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
-                .tag(4)
+            // Profile tab moved to the last position but keeps tag 0 so existing code referencing tag 0 still selects Profile
+            ProfileView()
+                .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
+                .tag(0)
         }
         // Track manual tab selection so we don't override the user's explicit choice.
         .onChange(of: selectedTab) { old, new in
