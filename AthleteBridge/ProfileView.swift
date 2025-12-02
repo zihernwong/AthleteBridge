@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import CoreLocation
 
 struct ProfileView: View {
     enum Role: String, CaseIterable, Identifiable {
@@ -40,6 +41,12 @@ struct ProfileView: View {
     // New: coach meeting preference (no "No preference" option - must choose In-Person or Virtual)
     @State private var selectedCoachMeetingPreference: String = "In-Person"
 
+    // Location fields (zip -> city auto-populated)
+    @State private var clientZipCode: String = ""
+    @State private var clientCity: String = ""
+    @State private var coachZipCode: String = ""
+    @State private var coachCity: String = ""
+
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
     @State private var showingPhotoPicker = false
@@ -75,10 +82,9 @@ struct ProfileView: View {
                 .navigationTitle(isEditMode ? "Edit Profile" : "Create Profile")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(isEditMode ? "Logout" : "Cancel") {
-                            if isEditMode {
-                                auth.logout()
-                            }
+                        Button("Logout") {
+                            // Always sign the user out from this screen (both Create and Edit flows)
+                            auth.logout()
                             presentationMode.wrappedValue.dismiss()
                         }
                     }
@@ -245,6 +251,28 @@ struct ProfileView: View {
             }
             .pickerStyle(SegmentedPickerStyle())
             .padding(.vertical, 8)
+
+            // Location: Zip code input and auto-filled city
+            VStack(alignment: .leading) {
+                Text("Zip Code")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                TextField("e.g. 55401", text: $clientZipCode)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.top, 4)
+                    .onChange(of: clientZipCode) { _, newZip in
+                        // Lookup city as user types; debounce trivial here
+                        lookupCity(forZip: newZip) { city in
+                            if let city = city { self.clientCity = city }
+                        }
+                    }
+
+                Text("City: \(clientCity.isEmpty ? "" : clientCity)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 6)
+            }
         }
     }
 
@@ -302,6 +330,27 @@ struct ProfileView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding(.top, 4)
+            }
+
+            // Location: Zip code input and auto-filled city for coach
+            VStack(alignment: .leading) {
+                Text("Zip Code")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                TextField("e.g. 55401", text: $coachZipCode)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.top, 4)
+                    .onChange(of: coachZipCode) { _, newZip in
+                        lookupCity(forZip: newZip) { city in
+                            if let city = city { self.coachCity = city }
+                        }
+                    }
+
+                Text("City: \(coachCity.isEmpty ? "" : coachCity)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 6)
             }
 
             // Bio: multiline text editor for coach biography
@@ -408,6 +457,8 @@ struct ProfileView: View {
                 // If stored meetingPreference exists, use it; otherwise default to first client option
                 selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
                 selectedClientSkillLevel = client.skillLevel ?? "Beginner"
+                clientZipCode = client.zipCode ?? ""
+                clientCity = client.city ?? ""
             } else {
                 isEditMode = false
             }
@@ -419,6 +470,8 @@ struct ProfileView: View {
                 experienceYears = coach.experienceYears
                 coachAvailabilitySelection = coach.availability
                 bioText = coach.bio ?? ""
+                coachZipCode = coach.zipCode ?? ""
+                coachCity = coach.city ?? ""
                 // Default to first available meeting option if none stored
                 selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
                 // Populate hourly rate text if available
@@ -438,6 +491,8 @@ struct ProfileView: View {
             selectedClientAvailability = Set(client.preferredAvailability)
             selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
             selectedClientSkillLevel = client.skillLevel ?? "Beginner"
+            clientZipCode = client.zipCode ?? ""
+            clientCity = client.city ?? ""
         } else if let coach = firestore.currentCoach {
              role = .coach
              name = coach.name
@@ -449,6 +504,8 @@ struct ProfileView: View {
              selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
              // Populate hourly rate if present
              if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
+             coachZipCode = coach.zipCode ?? ""
+             coachCity = coach.city ?? ""
          } else {
              isEditMode = false
          }
@@ -478,7 +535,10 @@ struct ProfileView: View {
                               goals: goals,
                               preferredAvailability: preferred,
                               meetingPreference: meetingPrefToSave,
+                              meetingPreferenceClear: false,
                               skillLevel: skillLevelToSave,
+                              zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
+                              city: clientCity.isEmpty ? nil : clientCity,
                               photoURL: photoURL) { err in
                     DispatchQueue.main.async {
                         self.isSaving = false
@@ -515,6 +575,8 @@ struct ProfileView: View {
                                        meetingPreference: meetingPrefToSave,
                                        photoURL: photoURL,
                                        bio: bioText,
+                                       zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
+                                       city: coachCity.isEmpty ? nil : coachCity,
                                        active: true,
                                        overwrite: true) { err in
                     DispatchQueue.main.async {
@@ -559,6 +621,22 @@ struct ProfileView: View {
             }
         } else {
             finalizeSave(withPhotoURL: nil)
+        }
+    }
+
+    // MARK: - Location helpers
+    private func lookupCity(forZip zip: String, completion: ((String?) -> Void)? = nil) {
+        let trimmed = zip.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { completion?(nil); return }
+        // Use CLGeocoder to attempt to resolve ZIP to a locality
+        let geocoder = CLGeocoder()
+        geocoder.geocodeAddressString(trimmed) { placemarks, error in
+            if let _ = error {
+                DispatchQueue.main.async { completion?(nil) }
+                return
+            }
+            let city = placemarks?.first?.locality ?? placemarks?.first?.subLocality ?? placemarks?.first?.administrativeArea
+            DispatchQueue.main.async { completion?(city) }
         }
     }
 }
