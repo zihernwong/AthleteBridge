@@ -5,6 +5,12 @@ struct MainAppView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @State private var navigateToClientForm = false
     @State private var selectedTab: Int = 0
+    // Prevent repeated automatic switching to the coach Home tab once the user has actively
+    // chosen a tab (for example, Profile). We auto-switch at most once to avoid stomping
+    // the user's explicit tab selection.
+    @State private var didAutoSelectCoachHome: Bool = false
+    // Flag set when the user manually selects a tab so we don't override their choice
+    @State private var userDidSelectTab: Bool = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -29,6 +35,13 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
                 .tag(4)
         }
+        // Track manual tab selection so we don't override the user's explicit choice.
+        .onChange(of: selectedTab) { old, new in
+            // If the change wasn't caused by our auto-switch logic, mark it as a user selection
+            if !didAutoSelectCoachHome {
+                userDidSelectTab = true
+            }
+        }
         .onAppear {
             if let uid = auth.user?.uid {
                 firestore.fetchCurrentProfiles(for: uid)
@@ -47,27 +60,40 @@ struct MainAppView: View {
         .onChange(of: firestore.currentUserType) { oldType, newType in
             print("[MainAppView] currentUserType changed -> \(newType ?? "nil") (old=\(oldType ?? "nil"))")
             if let t = newType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" {
-                // ensure Home tab is visible and content updates
-                selectedTab = 1
+                // Only auto-switch to Home for coaches if the user hasn't explicitly
+                // selected the Profile tab and we haven't already auto-switched.
+                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
+                    selectedTab = 1
+                    didAutoSelectCoachHome = true
+                }
             }
         }
         // If the userType document finished loading and indicates COACH, make sure Home is set to the coach view.
         .onChange(of: firestore.userTypeLoaded) { oldLoaded, newLoaded in
             guard newLoaded else { return }
             if (firestore.currentUserType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH" {
-                selectedTab = 1
+                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
+                    selectedTab = 1
+                    didAutoSelectCoachHome = true
+                }
             }
         }
         // If a coach profile is detected for the signed-in user, switch to the Home coach view immediately.
         .onChange(of: firestore.currentCoach?.id) { oldId, newId in
             if let uid = auth.user?.uid, newId == uid {
-                selectedTab = 1
+                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
+                    selectedTab = 1
+                    didAutoSelectCoachHome = true
+                }
             }
         }
         // When the coaches list finishes loading, check whether the signed-in user is among them and, if so, switch to the coach Home view.
         .onChange(of: firestore.coaches.count) { oldCount, newCount in
             if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) {
-                selectedTab = 1
+                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
+                    selectedTab = 1
+                    didAutoSelectCoachHome = true
+                }
             }
         }
     }
