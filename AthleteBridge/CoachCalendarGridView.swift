@@ -201,6 +201,7 @@ import SwiftUI
                                  Spacer()
                                  Text(r.rating ?? "-")
                                      .font(.subheadline)
+                                     .foregroundColor(.secondary)
                              }
                              if let msg = r.ratingMessage { Text(msg).font(.body) }
                              if let date = r.createdAt { Text(DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)).font(.caption).foregroundColor(.secondary) }
@@ -259,17 +260,133 @@ import SwiftUI
      var showOnlyAvailable: Bool = false
      var onSlotSelected: ((FirestoreManager.BookingItem) -> Void)?
 
-     var body: some View {
-         // Stub: replace with full implementation later
-         Text("Calendar grid for \(coachID) on \(date, formatter: dateFormatter)")
-             .font(.caption)
-             .foregroundColor(.secondary)
+     @EnvironmentObject var firestore: FirestoreManager
+     @State private var bookings: [FirestoreManager.BookingItem] = []
+     @State private var loading: Bool = true
+
+     // Configuration: generate slots between these hours
+     private let startHour = 6
+     private let endHour = 22
+     private let slotMinutes = 30
+
+     // Strongly-typed slot model to help the compiler
+     private struct Slot: Identifiable {
+         let id: UUID = UUID()
+         let start: Date
+         let end: Date
+         let label: String
      }
 
-     private var dateFormatter: DateFormatter {
-         let fmt = DateFormatter()
-         fmt.dateStyle = .short
-         fmt.timeStyle = .none
-         return fmt
+     var body: some View {
+         ScrollView {
+             VStack(alignment: .leading, spacing: 8) {
+                 if loading {
+                     HStack { Spacer(); ProgressView(); Spacer() }
+                         .padding(.vertical, 8)
+                 } else {
+                     let slots = generateSlots(for: date)
+                     LazyVStack(spacing: 6) {
+                         ForEach(slots) { slot in
+                             // find any booking that overlaps this slot
+                             let overlapping = bookings.first { b in
+                                 guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
+                                 return (bStart < slot.end) && (bEnd > slot.start)
+                             }
+
+                             HStack(spacing: 12) {
+                                 Text(slot.label)
+                                     .font(.caption2)
+                                     .frame(width: 60, alignment: .leading)
+                                     .foregroundColor(.secondary)
+
+                                 ZStack(alignment: .leading) {
+                                     RoundedRectangle(cornerRadius: 8)
+                                         .fill(overlapping != nil ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
+                                         .frame(height: 44)
+
+                                     HStack {
+                                         if let b = overlapping {
+                                             // Only display booking time range and status (no client name)
+                                             Text(timeRangeString(for: b))
+                                                 .font(.subheadline)
+                                                 .foregroundColor(.white)
+                                                 .padding(.leading, 10)
+                                             Spacer()
+                                             if let status = b.status {
+                                                 Text(status.capitalized)
+                                                     .font(.caption2)
+                                                     .foregroundColor(.white.opacity(0.9))
+                                                     .padding(.trailing, 10)
+                                             }
+                                         } else {
+                                             Text("Available")
+                                                 .font(.subheadline)
+                                                 .foregroundColor(.primary)
+                                                 .padding(.leading, 10)
+                                             Spacer()
+                                         }
+                                     }
+                                 }
+                                 .onTapGesture {
+                                     if let b = overlapping {
+                                         onSlotSelected?(b)
+                                     } else {
+                                         // available slot tapped — no-op for now; could present booking flow
+                                     }
+                                 }
+                             }
+                             .padding(.horizontal, 6)
+                         }
+                     }
+                     .padding(.vertical, 6)
+                 }
+             }
+         }
+         .onAppear { fetchForSelectedDate() }
+         .onChange(of: date) { _, _ in fetchForSelectedDate() }
      }
+
+     private func fetchForSelectedDate() {
+         loading = true
+         let cal = Calendar.current
+         let dayStart = cal.startOfDay(for: date)
+         let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+         firestore.fetchBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+             DispatchQueue.main.async {
+                 self.bookings = items.sorted { (a,b) in
+                     (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                 }
+                 self.loading = false
+             }
+         }
+     }
+
+     private func generateSlots(for date: Date) -> [Slot] {
+         var slots: [Slot] = []
+         let cal = Calendar.current
+         for hour in startHour..<endHour {
+             for minute in stride(from: 0, to: 60, by: slotMinutes) {
+                 var comps = cal.dateComponents([.year, .month, .day], from: date)
+                 comps.hour = hour
+                 comps.minute = minute
+                 comps.second = 0
+                 if let start = cal.date(from: comps) {
+                     let end = cal.date(byAdding: .minute, value: slotMinutes, to: start) ?? start
+                     let label = DateFormatter.localizedString(from: start, dateStyle: .none, timeStyle: .short)
+                     slots.append(Slot(start: start, end: end, label: label))
+                 }
+             }
+         }
+         return slots
+     }
+
+     private func timeRangeString(for booking: FirestoreManager.BookingItem) -> String {
+         if let s = booking.startAt, let e = booking.endAt {
+             let sstr = DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)
+             let estr = DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short)
+             return "\(sstr) - \(estr)"
+         }
+         return ""
+     }
+
  }
