@@ -22,12 +22,13 @@ struct ProfileView: View {
     // client preferred availability now supports multiple selections
     @State private var selectedClientAvailability: Set<String> = []
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
-    // Client skill level selection
-    private let skillLevels: [String] = ["No Preference", "Beginner", "Intermediate", "Advanced"]
-    @State private var selectedClientSkillLevel: String = "No Preference"
-    // New: meeting preference options
-    private let meetingOptions: [String] = ["No preference", "In-Person", "Virtual"]
-    @State private var selectedClientMeetingPreference: String = "No preference"
+    // Client skill level selection — removed 'No Preference' option per request
+    private let skillLevels: [String] = ["Beginner", "Intermediate", "Advanced"]
+    @State private var selectedClientSkillLevel: String = "Beginner"
+    // Meeting preference options: client does not get a 'No preference' choice
+    private let meetingOptionsClient: [String] = ["In-Person", "Virtual"]
+    private let meetingOptionsCoach: [String] = ["No preference", "In-Person", "Virtual"]
+    @State private var selectedClientMeetingPreference: String = "In-Person"
 
     // Coach fields: fixed multi-select specialties
     @State private var selectedSpecialties: Set<String> = []
@@ -56,6 +57,9 @@ struct ProfileView: View {
         ZStack {
             NavigationView {
                 Form {
+                    if isEditMode {
+                        emailSection
+                    }
                     // Role selection removed: the app determines role from Firestore (userType) or existing profiles.
                     // The form will automatically show either clientSection or coachSection based on the user's role.
                     
@@ -156,6 +160,50 @@ struct ProfileView: View {
     }
 
     // MARK: - View pieces
+    private var emailSection: some View {
+        Group {
+            if let email = auth.user?.email {
+                HStack(spacing: 12) {
+                    // Fixed-size circular icon to keep vertical centering stable
+                    Image(systemName: "envelope.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundColor(.white)
+                        .frame(width: 20, height: 20)
+                        .padding(10)
+                        .background(Circle().fill(Color.accentColor))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signed in as")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(email)
+                            .font(.body).bold()
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        UIPasteboard.general.string = email
+                    }) {
+                        Image(systemName: "doc.on.doc")
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(14)
+                // Give the container a stable height so content is vertically centered
+                .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color(UIColor.secondarySystemBackground)))
+                // Use default form insets instead of negative padding for alignment
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            }
+        }
+        .padding(.bottom, 8)
+    }
+
     private var nameSection: some View {
         Section(header: Text("Full Name")) {
             TextField("Full Name", text: $name)
@@ -180,7 +228,7 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Picker("Meeting Preference", selection: $selectedClientMeetingPreference) {
-                ForEach(meetingOptions, id: \.self) { opt in
+                ForEach(meetingOptionsClient, id: \.self) { opt in
                     Text(opt).tag(opt)
                 }
             }
@@ -238,7 +286,7 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Picker("Meeting Preference", selection: $selectedCoachMeetingPreference) {
-                ForEach(meetingOptions, id: \.self) { opt in
+                ForEach(meetingOptionsCoach, id: \.self) { opt in
                     Text(opt).tag(opt)
                 }
             }
@@ -346,8 +394,9 @@ struct ProfileView: View {
                 name = client.name
                 selectedGoals = Set(client.goals)
                 selectedClientAvailability = Set(client.preferredAvailability)
-                selectedClientMeetingPreference = client.meetingPreference ?? "No preference"
-                selectedClientSkillLevel = client.skillLevel ?? "No Preference"
+                // If stored meetingPreference exists, use it; otherwise default to first client option
+                selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
+                selectedClientSkillLevel = client.skillLevel ?? "Beginner"
             } else {
                 isEditMode = false
             }
@@ -373,8 +422,8 @@ struct ProfileView: View {
             name = client.name
             selectedGoals = Set(client.goals)
             selectedClientAvailability = Set(client.preferredAvailability)
-            selectedClientMeetingPreference = client.meetingPreference ?? "No preference"
-            selectedClientSkillLevel = client.skillLevel ?? "No Preference"
+            selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
+            selectedClientSkillLevel = client.skillLevel ?? "Beginner"
         } else if let coach = firestore.currentCoach {
              role = .coach
              name = coach.name
@@ -403,8 +452,8 @@ struct ProfileView: View {
                 let preferred = Array(selectedClientAvailability)
                 // save preferredAvailability as array for multi-select support
                 // call existing API which accepts array after update
-                let meetingPrefToSave = (selectedClientMeetingPreference == "No preference") ? nil : selectedClientMeetingPreference
-                let skillLevelToSave = (selectedClientSkillLevel == "No Preference") ? nil : selectedClientSkillLevel
+                let meetingPrefToSave = selectedClientMeetingPreference
+                let skillLevelToSave = selectedClientSkillLevel
                 fm.saveClient(id: uid,
                               name: name.isEmpty ? "Unnamed" : name,
                               goals: goals,
