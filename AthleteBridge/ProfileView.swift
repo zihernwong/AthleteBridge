@@ -27,7 +27,7 @@ struct ProfileView: View {
     @State private var selectedClientSkillLevel: String = "Beginner"
     // Meeting preference options: client does not get a 'No preference' choice
     private let meetingOptionsClient: [String] = ["In-Person", "Virtual"]
-    private let meetingOptionsCoach: [String] = ["No preference", "In-Person", "Virtual"]
+    private let meetingOptionsCoach: [String] = ["In-Person", "Virtual"]
     @State private var selectedClientMeetingPreference: String = "In-Person"
 
     // Coach fields: fixed multi-select specialties
@@ -37,8 +37,8 @@ struct ProfileView: View {
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
     @State private var bioText: String = ""
-    // New: coach meeting preference
-    @State private var selectedCoachMeetingPreference: String = "No preference"
+    // New: coach meeting preference (no "No preference" option - must choose In-Person or Virtual)
+    @State private var selectedCoachMeetingPreference: String = "In-Person"
 
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
@@ -293,6 +293,17 @@ struct ProfileView: View {
             .pickerStyle(SegmentedPickerStyle())
             .padding(.vertical, 8)
 
+            // Hourly rate input for coaches
+            VStack(alignment: .leading) {
+                Text("Hourly Rate (USD)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                TextField("e.g. 50.00", text: $hourlyRateText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.top, 4)
+            }
+
             // Bio: multiline text editor for coach biography
             VStack(alignment: .leading) {
                 Text("Biography")
@@ -408,7 +419,10 @@ struct ProfileView: View {
                 experienceYears = coach.experienceYears
                 coachAvailabilitySelection = coach.availability
                 bioText = coach.bio ?? ""
-                selectedCoachMeetingPreference = coach.meetingPreference ?? "No preference"
+                // Default to first available meeting option if none stored
+                selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
+                // Populate hourly rate text if available
+                if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
             } else {
                 isEditMode = false
             }
@@ -431,9 +445,14 @@ struct ProfileView: View {
              experienceYears = coach.experienceYears
              coachAvailabilitySelection = coach.availability
              bioText = coach.bio ?? ""
-             selectedCoachMeetingPreference = coach.meetingPreference ?? "No preference"
-        }
-    }
+             // Default to first available meeting option if none stored
+             selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
+             // Populate hourly rate if present
+             if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
+         } else {
+             isEditMode = false
+         }
+     }
 
     private func saveProfile() {
         guard let uid = auth.user?.uid else { saveMessage = "No authenticated user"; return }
@@ -484,7 +503,8 @@ struct ProfileView: View {
                 let parts = name.split(separator: " ").map { String($0) }
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
-                let meetingPrefToSave = (selectedCoachMeetingPreference == "No preference") ? nil : selectedCoachMeetingPreference
+                // No "No preference" option for coaches anymore; always save the selected preference
+                let meetingPrefToSave = selectedCoachMeetingPreference
                 fm.saveCoachWithSchema(id: uid,
                                        firstName: firstName,
                                        lastName: lastName,
