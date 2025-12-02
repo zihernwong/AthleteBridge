@@ -63,7 +63,11 @@ struct ProfileView: View {
                 .navigationTitle(isEditMode ? "Edit Profile" : "Create Profile")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                        Button("Logout") {
+                            // Sign the user out and dismiss the profile screen
+                            auth.logout()
+                            presentationMode.wrappedValue.dismiss()
+                        }
                     }
                 }
                 .onAppear {
