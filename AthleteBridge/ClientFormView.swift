@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ClientFormView: View {
     @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var auth: AuthViewModel
     @State private var goals = ""
     // Support multi-select availability
     @State private var selectedAvailability: Set<String> = []
@@ -79,8 +80,20 @@ struct ClientFormView: View {
                         let client = Client(name: "You",
                                             goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
                                             preferredAvailability: prefs)
-                        
-                        MatchResultsView(client: client, searchQuery: searchText)
+
+                        // Determine whether the signed-in user should be treated as a coach.
+                        let isCoachUser: Bool = {
+                            if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
+                            if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
+                            if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
+                            return false
+                        }()
+
+                        if isCoachUser {
+                            CoachLogoView()
+                        } else {
+                            MatchResultsView(client: client, searchQuery: searchText)
+                        }
                     }
                 }
                 .navigationTitle("Find a Coach")
@@ -94,3 +107,27 @@ struct ClientFormView: View {
          }
      }
  }
+
+// Simple logo page shown to coach users in place of the matching UI
+struct CoachLogoView: View {
+    var body: some View {
+        VStack {
+            Spacer()
+            if let img = appLogoImageSwiftUI() {
+                img.resizable().scaledToFit().frame(maxWidth: 300).padding()
+            } else {
+                Image("AthleteBridgeLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 300)
+                    .padding()
+            }
+            Text("AthleteBridge")
+                .font(.title)
+                .bold()
+                .padding(.bottom, 40)
+            Spacer()
+        }
+        .navigationTitle("AthleteBridge")
+    }
+}
