@@ -868,6 +868,84 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    // Fetch reviews written by a specific client (by client document id). Handles ClientID stored as DocumentReference or String.
+    func fetchReviewsByClient(clientId: String, completion: @escaping ([ReviewItem]) -> Void) {
+        let reviewsColl = self.db.collection("reviews")
+        reviewsColl.getDocuments { snapshot, error in
+            if let error = error {
+                print("fetchReviewsByClient error: \(error)")
+                completion([])
+                return
+            }
+
+            let docs = snapshot?.documents ?? []
+            let matching = docs.filter { doc -> Bool in
+                let data = doc.data()
+                if let ref = data["ClientID"] as? DocumentReference {
+                    return ref.documentID == clientId
+                }
+                if let s = data["ClientID"] as? String {
+                    let last = s.split(separator: "/").last.map(String.init) ?? s
+                    return last == clientId || s == "clients/\(clientId)" || s == "/clients/\(clientId)"
+                }
+                return false
+            }
+
+            var results: [ReviewItem] = []
+            let group = DispatchGroup()
+
+            for doc in matching {
+                group.enter()
+                let data = doc.data()
+                var coachID: String = ""
+                var coachName: String? = nil
+                let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
+
+                // rating may be stored as number or string
+                var ratingStr: String? = nil
+                if let r = data["Rating"] as? String { ratingStr = r }
+                else if let r = data["Rating"] as? Int { ratingStr = String(r) }
+                else if let r = data["Rating"] as? Double { ratingStr = String(Int(r)) }
+
+                let ratingMessage = data["RatingMessage"] as? String
+
+                if let coachRef = data["CoachID"] as? DocumentReference {
+                    coachID = coachRef.documentID
+                    coachRef.getDocument { sSnap, _ in
+                        if let sdata = sSnap?.data() {
+                            coachName = ([sdata["FirstName"] as? String, sdata["LastName"] as? String].compactMap { $0 }.joined(separator: " ")).trimmingCharacters(in: .whitespaces)
+                        }
+                        let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
+                        results.append(item)
+                        group.leave()
+                    }
+                } else if let s = data["CoachID"] as? String {
+                    coachID = s.split(separator: "/").last.map(String.init) ?? s
+                    // attempt to fetch coach doc to resolve name
+                    self.db.collection("coaches").document(coachID).getDocument { sSnap, _ in
+                        if let sdata = sSnap?.data() {
+                            coachName = ([sdata["FirstName"] as? String, sdata["LastName"] as? String].compactMap { $0 }.joined(separator: " ")).trimmingCharacters(in: .whitespaces)
+                        }
+                        let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
+                        results.append(item)
+                        group.leave()
+                    }
+                } else {
+                    let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
+                    results.append(item)
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                let sorted = results.sorted { (a,b) in
+                    (a.createdAt ?? Date.distantPast) > (b.createdAt ?? Date.distantPast)
+                }
+                completion(sorted)
+            }
+        }
+    }
+
     /// Fetch all documents from the `locations` collection and populate `locations`.
     func fetchLocations() {
         DispatchQueue.main.async { self.locationsDebug = "Starting fetchLocations..." }
