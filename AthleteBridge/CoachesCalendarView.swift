@@ -8,21 +8,49 @@ struct CoachesCalendarView: View {
     var body: some View {
         List(coaches) { coach in
             NavigationLink(destination: CoachAvailabilityView(coach: coach).environmentObject(firestore)) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(coach.name).font(.headline)
+                HStack(alignment: .top, spacing: 12) {
+                    // Pass coach-specific photo URL when resolved; fall back to default AvatarView behavior
+                    let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                    AvatarView(url: coachURL ?? nil, size: 56)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(coach.name).font(.headline)
+                            Spacer()
+                            if let rate = coach.hourlyRate {
+                                Text(String(format: "$%.0f", rate))
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
                         if !coach.specialties.isEmpty {
                             Text(coach.specialties.joined(separator: ", "))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
+
+                        if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(bio)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                        }
+
+                        if !coach.availability.isEmpty {
+                            Text(coach.availability.joined(separator: ", "))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
+
                     Spacer()
+
                     Text("View calendar")
                         .font(.caption)
                         .foregroundColor(.blue)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
             }
         }
         .navigationTitle("Coaches Calendar")
