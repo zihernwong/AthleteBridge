@@ -513,9 +513,14 @@ struct ProfileView: View {
 
     private func saveProfile() {
         guard let uid = auth.user?.uid else { saveMessage = "No authenticated user"; return }
+        
+        // Dismiss keyboard immediately when saving profile
+        DispatchQueue.main.async {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
 
-        isSaving = true
-        saveMessage = nil
+         isSaving = true
+         saveMessage = nil
 
         // Capture the environment object into a local strong reference to avoid
         // property-wrapper dynamic-member lookup issues when used inside nested
@@ -727,5 +732,12 @@ struct ChipMultiSelect: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// Convenience helper to dismiss keyboard from SwiftUI
+extension UIApplication {
+    func dismissKeyboard() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
