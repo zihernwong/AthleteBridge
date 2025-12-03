@@ -15,6 +15,7 @@ class FirestoreManager: ObservableObject {
     private var authStateListenerHandle: AuthStateDidChangeListenerHandle?
 
     @Published var coaches: [Coach] = []
+    @Published var coachPhotoURLs: [String: URL?] = [:]
     @Published var currentClient: Client? = nil
     @Published var currentClientPhotoURL: URL? = nil
     @Published var currentCoach: Coach? = nil
@@ -129,7 +130,8 @@ class FirestoreManager: ObservableObject {
                 return
             }
             guard let docs = snapshot?.documents else { return }
-            let mapped: [Coach] = docs.compactMap { d in
+            var mapped: [Coach] = []
+            for d in docs {
                 let data = d.data()
                 let id = d.documentID
                 let first = data["FirstName"] as? String ?? ""
@@ -139,8 +141,25 @@ class FirestoreManager: ObservableObject {
                 let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
                 let availability = data["Availability"] as? [String] ?? []
                 let bio = data["Bio"] as? String
-                return Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio)
+                let hourlyRate = data["HourlyRate"] as? Double
+
+                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate))
+
+                // resolve coach photo if provided and cache into coachPhotoURLs
+                let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
+                if let p = photoStr, !p.isEmpty {
+                    self.resolvePhotoURL(p) { resolved in
+                        DispatchQueue.main.async {
+                            self.coachPhotoURLs[id] = resolved
+                        }
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.coachPhotoURLs[id] = nil
+                    }
+                }
             }
+
             DispatchQueue.main.async {
                 self.coaches = mapped
             }

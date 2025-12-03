@@ -6,24 +6,27 @@ import UIKit
 struct AvatarView: View {
     @EnvironmentObject var firestore: FirestoreManager
 
+    // Optional explicit URL to show (when listing many coaches we pass their URL)
+    private let explicitURL: URL?
     @State private var fallbackImage: UIImage? = nil
     @State private var isDownloadingFallback: Bool = false
     @State private var lastURLString: String? = nil
 
     private let size: CGFloat
 
-    init(size: CGFloat = 44) {
+    init(url: URL? = nil, size: CGFloat = 44) {
+        self.explicitURL = url
         self.size = size
     }
 
     var body: some View {
         Group {
-            if let clientURL = firestore.currentClientPhotoURL {
-                imageFor(url: clientURL)
-                    .onAppear { prepare(url: clientURL) }
+            if let url = explicitURL {
+                imageFor(url: url).onAppear { prepare(url: url) }
+            } else if let clientURL = firestore.currentClientPhotoURL {
+                imageFor(url: clientURL).onAppear { prepare(url: clientURL) }
             } else if let coachURL = firestore.currentCoachPhotoURL {
-                imageFor(url: coachURL)
-                    .onAppear { prepare(url: coachURL) }
+                imageFor(url: coachURL).onAppear { prepare(url: coachURL) }
             } else {
                 placeholder
             }
