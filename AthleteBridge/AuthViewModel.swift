@@ -94,7 +94,7 @@ class AuthViewModel: ObservableObject {
             case .emailAlreadyInUse:
                 return "This email is already in use."
             case .weakPassword:
-                return "The password is too weak. Try a longer password."
+                return "Password is too weak. Try again."
             case .wrongPassword:
                 return "Invalid password. Please try again."
             case .userNotFound:
@@ -102,7 +102,7 @@ class AuthViewModel: ObservableObject {
             case .userDisabled:
                 return "This user account has been disabled."
             case .networkError:
-                return "Network error. Check your internet connection and try again."
+                return "Network error. Please try again."
             case .internalError:
                 // internalError is generic — include underlying description or give friendly guidance
                 if let deserialized = nsError.userInfo["FIRAuthErrorUserInfoDeserializedResponseKey"] as? [String: Any],
