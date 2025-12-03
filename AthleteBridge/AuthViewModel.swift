@@ -118,14 +118,14 @@ class AuthViewModel: ObservableObject {
                     return "An internal error occurred during authentication. Please try again or check Firebase configuration."
                 }
             case .invalidCredential:
-                return "Invalid or expired credential. Please try signing in again."
+                return "Invalid credentials. Please try again."
             case .invalidVerificationCode, .invalidVerificationID:
-                return "Invalid verification code. Please retry the verification step."
+                return "Invalid verification code."
             case .userTokenExpired, .requiresRecentLogin:
                 return "Session expired — please sign in again."
             default:
                 // For any other known auth codes, return a concise, user-friendly fallback
-                return "Authentication failed. Please check your email and password and try again. (\(authCode))"
+                return "Authentication failed. Please try again. (\(authCode))"
             }
         }
 

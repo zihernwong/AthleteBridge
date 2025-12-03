@@ -15,12 +15,13 @@ struct AuthScreen: View {
                     logo
                         .resizable()
                         .scaledToFit()
-                        .frame(width: min(560, UIScreen.main.bounds.width * 0.85), height: min(560, UIScreen.main.bounds.width * 0.85))
-                        .padding(.bottom, 14)
+                        // smaller logo so content doesn't get pushed too far down on smaller devices
+                        .frame(width: min(360, UIScreen.main.bounds.width * 0.75), height: min(260, UIScreen.main.bounds.width * 0.75))
+                        .padding(.bottom, 8)
                 } else {
                     Text("AthletesBridge")
-                        .font(.system(size: 84, weight: .bold, design: .default))
-                        .padding(.bottom, 10)
+                        .font(.system(size: 64, weight: .bold, design: .default))
+                        .padding(.bottom, 8)
                 }
 
                 Text(isLogin ? "Login" : "Create An Account")
@@ -99,7 +100,11 @@ struct AuthScreen: View {
                 }
                 .padding(.top)
             }
-            .padding()
+            // Move content up: pin VStack to top and add modest top + horizontal padding
+            .frame(maxHeight: .infinity, alignment: .top)
+            // reduced top padding so content sits higher on screen
+            .padding(.top, 12)
+            .padding(.horizontal)
 
             // Full-screen dim and centered spinner while authenticating
             if auth.isLoading {
