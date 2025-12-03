@@ -19,7 +19,12 @@ import SwiftUI
     private var coachSuggestionsLocal: [Coach] {
         let typed = localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard typed.count >= 1 else { return [] }
-        return firestore.coaches.filter { $0.name.lowercased().contains(typed) }
+        return firestore.coaches.filter { coach in
+            if coach.name.lowercased().contains(typed) { return true }
+            let specs = coach.specialties.map { $0.lowercased() }
+            if specs.contains(where: { $0.contains(typed) }) { return true }
+            return false
+        }
     }
 
      init(client: Client, searchQuery: String? = nil) {
@@ -32,7 +37,28 @@ import SwiftUI
          // If the caller provided a searchQuery, prefer that. Otherwise use localSearchText.
          let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
          guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return all }
-         return all.filter { $0.name.localizedCaseInsensitiveContains(q) }
+
+         // Tokenize query by commas and whitespace so multi-term searches work: "tennis, confidence" or "tennis confidence"
+         let separators = CharacterSet(charactersIn: ",").union(.whitespacesAndNewlines)
+         let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
+
+         return all.filter { coach in
+             let nameLower = coach.name.lowercased()
+             // Match if any token appears in the coach name
+             if tokens.contains(where: { nameLower.contains($0) }) { return true }
+
+             // Match if any token appears in any specialty
+             let specialtiesLower = coach.specialties.map { $0.lowercased() }
+             if tokens.contains(where: { token in specialtiesLower.contains(where: { $0.contains(token) }) }) {
+                 return true
+             }
+
+             // Also match against combined specialties string (helps multi-word specialties)
+             let combinedSpecs = specialtiesLower.joined(separator: " ")
+             if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
+
+             return false
+         }
      }
 
      var body: some View {
@@ -43,7 +69,7 @@ import SwiftUI
          Group {
              if searchQuery == nil {
                  VStack(spacing: 0) {
-                     SearchBar(text: $localSearchText, placeholder: "Search coaches")
+                     SearchBar(text: $localSearchText, placeholder: "Search coach by name")
                          .padding([.horizontal, .top])
 
                      // Suggestion chips (match Reviews UI)
@@ -392,7 +418,7 @@ import SwiftUI
              }
          }
          .onAppear { fetchForSelectedDate() }
-         .onChange(of: date) { _, _ in fetchForSelectedDate() }
+         .onChange(of: date) { _ in fetchForSelectedDate() }
          // Present booking form when user taps available slot
          .sheet(isPresented: $showBookingSheet) {
              NewBookingFormView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)

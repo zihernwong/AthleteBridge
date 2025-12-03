@@ -27,8 +27,11 @@ struct SearchBar: View {
             }
         }
         .padding(10)
-        .background(Color(UIColor.secondarySystemBackground))
-        .cornerRadius(12)
+        // Draw a rounded grey background explicitly so the SearchBar appears the same inside Forms
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(UIColor.systemGray6))
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color(UIColor.separator).opacity(0.08), lineWidth: 1)
