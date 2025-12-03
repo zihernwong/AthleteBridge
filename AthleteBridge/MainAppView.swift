@@ -12,6 +12,9 @@ struct MainAppView: View {
     // Flag set when the user manually selects a tab so we don't override their choice
     @State private var userDidSelectTab: Bool = false
 
+    // Local search text used for the Find a Coach section in the Home tab
+    @State private var findCoachSearchText: String = ""
+
     // Computed flag: true when the signed-in user should be treated as a coach
     private var isCoachUserComputed: Bool {
         if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
@@ -22,7 +25,7 @@ struct MainAppView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Locations tab moved to the first position
+            // Locations tab
             RequiresProfile(content: { LocationsView() }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
                 .tag(4)
@@ -40,14 +43,13 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "calendar"); Text("Bookings") }
                 .tag(3)
 
-            // Profile tab moved to the last position but keeps tag 0 so existing code referencing tag 0 still selects Profile
+            // Profile tab
             ProfileView()
                 .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
                 .tag(0)
         }
         // Track manual tab selection so we don't override the user's explicit choice.
-        .onChange(of: selectedTab) { old, new in
-            // If the change wasn't caused by our auto-switch logic, mark it as a user selection
+        .onChange(of: selectedTab) { _old, _new in
             if !didAutoSelectCoachHome {
                 userDidSelectTab = true
             }
@@ -57,33 +59,25 @@ struct MainAppView: View {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            // Only navigate to ClientForm for non-coach users
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
-        .onChange(of: auth.user?.uid) { oldValue, newValue in
-            if let uid = newValue {
+        .onChange(of: auth.user?.uid) { _old, _new in
+            if let uid = _new {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            // Only navigate to ClientForm for non-coach users
-            navigateToClientForm = (newValue != nil) && !isCoachUserComputed
+            navigateToClientForm = (_new != nil) && !isCoachUserComputed
         }
-        // React to role changes so the UI switches to the coach logout view as soon as we know the user is a coach
-        .onChange(of: firestore.currentUserType) { oldType, newType in
-            print("[MainAppView] currentUserType changed -> \(newType ?? "nil") (old=\(oldType ?? "nil"))")
+        .onChange(of: firestore.currentUserType) { _old, newType in
             if let t = newType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" {
-                // Only auto-switch to Home for coaches if the user hasn't explicitly
-                // selected the Profile tab and we haven't already auto-switched.
                 if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
                     selectedTab = 1
                     didAutoSelectCoachHome = true
                 }
             }
-            // Recompute whether we should navigate to ClientForm (only for non-coach users)
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
-        // If the userType document finished loading and indicates COACH, make sure Home is set to the coach view.
-        .onChange(of: firestore.userTypeLoaded) { oldLoaded, newLoaded in
+        .onChange(of: firestore.userTypeLoaded) { _old, newLoaded in
             guard newLoaded else { return }
             if (firestore.currentUserType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH" {
                 if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
@@ -91,34 +85,25 @@ struct MainAppView: View {
                     didAutoSelectCoachHome = true
                 }
             }
+            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
-        // If a coach profile is detected for the signed-in user, switch to the Home coach view immediately.
-        .onChange(of: firestore.currentCoach?.id) { oldId, newId in
+        .onChange(of: firestore.currentCoach?.id) { _old, newId in
             if let uid = auth.user?.uid, newId == uid {
                 if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
                     selectedTab = 1
                     didAutoSelectCoachHome = true
                 }
             }
-            // Recompute navigateToClientForm when currentCoach changes
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
-        // When the coaches list finishes loading, check whether the signed-in user is among them and, if so, switch to the coach Home view.
-        .onChange(of: firestore.coaches.count) { oldCount, newCount in
+        .onChange(of: firestore.coaches.count) { _old, _new in
             if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) {
                 if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
                     selectedTab = 1
                     didAutoSelectCoachHome = true
                 }
             }
-            // Recompute navigateToClientForm when coaches list updates
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
-        }
-        // Also re-evaluate when userTypeLoaded flips (role info became available)
-        .onChange(of: firestore.userTypeLoaded) { oldLoaded, newLoaded in
-            if newLoaded {
-                navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
-            }
         }
     }
 
@@ -129,25 +114,15 @@ struct MainAppView: View {
                     bg.resizable().scaledToFit().opacity(0.08).frame(maxWidth: 400).allowsHitTesting(false)
                 }
 
-                // Decide whether current user should be treated as a coach. We consider the user a coach if any of:
-                // - the userType doc indicates COACH
-                // - the cached currentCoach matches the auth uid
-                // - the coaches list contains a coach with the auth uid (helps when currentCoach wasn't loaded yet)
                 let isCoachUser: Bool = {
                     var res = false
-                    if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" {
-                        res = true
-                    } else if let coach = firestore.currentCoach, coach.id == auth.user?.uid {
-                        res = true
-                    } else if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) {
-                        res = true
-                    }
-                    print("[MainAppView.homeTab] isCoachUser=\(res) currentUserType=\(firestore.currentUserType ?? "nil") userTypeLoaded=\(firestore.userTypeLoaded) currentCoachExists=\(firestore.currentCoach != nil) coachesCount=\(firestore.coaches.count)")
+                    if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { res = true }
+                    else if let coach = firestore.currentCoach, coach.id == auth.user?.uid { res = true }
+                    else if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { res = true }
                     return res
                 }()
 
-                // If user is a coach, show only the AthleteBridge logo (no other functionality)
-                if isCoachUserComputed {
+                if isCoachUser {
                     VStack {
                         Spacer()
                         if let img = appLogoImageSwiftUI() {
@@ -165,7 +140,6 @@ struct MainAppView: View {
                             VStack(alignment: .leading) {
                                 Text("Welcome, \(auth.user?.email ?? "User")!")
                                     .font(.title3)
-                                // Debug: show resolved photo URL if available
                                 if let clientURL = firestore.currentClientPhotoURL {
                                     Text("Client photo: \(clientURL.absoluteString)")
                                         .font(.caption)
@@ -188,6 +162,29 @@ struct MainAppView: View {
                         }
                         .padding(.top, 12)
 
+                        // Find a Coach search bar and quick navigation
+                        SearchBar(text: $findCoachSearchText, placeholder: "Search coach by name")
+                            .padding(10)
+                            .background(Color(UIColor.systemGray6))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(UIColor.separator).opacity(0.08), lineWidth: 1)
+                            )
+                            .padding(.horizontal)
+
+                        NavigationLink(destination: MatchResultsView(client: firestore.currentClient ?? Client(id: auth.user?.uid ?? UUID().uuidString, name: auth.user?.email ?? "You", goals: [], preferredAvailability: []), searchQuery: findCoachSearchText).environmentObject(firestore)) {
+                            HStack {
+                                Text("Find Coaches")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }
+                            .padding()
+                            .background(Color(UIColor.systemBackground))
+                            .cornerRadius(8)
+                        }
+                        .padding(.horizontal)
+
                         Spacer()
                     }
                 }
@@ -199,7 +196,6 @@ struct MainAppView: View {
 
     private var avatarView: some View {
         Group {
-            // Match ProfileView: prefer client photo, then coach photo, and use the same AsyncImage phase handling
             if let clientURL = firestore.currentClientPhotoURL {
                 AsyncImage(url: clientURL) { phase in
                     switch phase {
@@ -232,12 +228,8 @@ struct MainAppView: View {
         }
     }
 
-    // A lightweight wrapper view that disables/obscures its content when the
-    // signed-in user has no client or coach profile. The visual overlay includes
-    // a call-to-action which switches to the Profile tab to create a profile.
     @ViewBuilder
     private func RequiresProfile<Content: View>(content: @escaping () -> Content, selectedTab: Binding<Int>) -> some View {
-        // Determine coach user similarly to `homeTab` so both places use the same rule.
         let isCoachUser = {
             if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
             if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
@@ -245,62 +237,37 @@ struct MainAppView: View {
             return false
         }()
 
-        // Require profile only when we know the user's type and they are not a coach and they have no profile docs.
-        // If userType is not yet loaded, be conservative and wait for it to avoid briefly showing the wrong UI.
         let needsProfile: Bool = {
             guard auth.user != nil else { return false }
-            // If userType hasn't finished loading, we avoid forcing the 'create profile' flow here so
-            // the home tab decision (above) can rely on coach profile detection if available.
             if !firestore.userTypeLoaded {
-                // If a coach profile already exists, don't require a profile; otherwise, keep tabs enabled
                 return !(firestore.currentCoach != nil)
             }
             return !isCoachUser && (firestore.currentClient == nil && firestore.currentCoach == nil)
         }()
+
         ZStack {
             content()
                 .disabled(needsProfile)
                 .blur(radius: needsProfile ? 4 : 0)
 
             if needsProfile {
-                // Semi-opaque overlay with button
                 Color(.systemBackground).opacity(0.4).ignoresSafeArea()
                 VStack(spacing: 16) {
-                    Text("Create your profile to continue")
-                        .font(.headline)
+                    Text("Create your profile to continue").font(.headline)
                     Text("Please create a client or coach profile (including a photo) before using the app")
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-
-                    Button(action: {
-                        // Switch to Profile tab where the user can create their profile
-                        selectedTab.wrappedValue = 0
-                    }) {
-                        Text("Create Profile")
-                            .frame(minWidth: 180)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
+                        .font(.subheadline).multilineTextAlignment(.center).foregroundColor(.secondary).padding(.horizontal)
+                    Button(action: { selectedTab.wrappedValue = 0 }) {
+                        Text("Create Profile").frame(minWidth:180).padding().background(Color.accentColor).foregroundColor(.white).cornerRadius(10)
                     }
                 }
-                .padding()
-                .background(.thinMaterial)
-                .cornerRadius(12)
-                .shadow(radius: 8)
-                .padding(40)
+                .padding().background(.thinMaterial).cornerRadius(12).shadow(radius:8).padding(40)
             }
         }
     }
 }
 
-// MARK: - Preview
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
-        MainAppView()
-            .environmentObject(AuthViewModel())
-            .environmentObject(FirestoreManager())
+        MainAppView().environmentObject(AuthViewModel()).environmentObject(FirestoreManager())
     }
 }
