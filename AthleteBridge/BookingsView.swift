@@ -224,21 +224,27 @@ struct NewBookingForm: View {
                 }
 
                 Section(header: Text("When")) {
-                    DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: startAt) { _, newStart in
-                            // If start is at/after end, bump end to start + 30min
-                            if newStart >= endAt {
-                                endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Start")
+                        MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
+                            .frame(height: 150)
+                            .onChange(of: startAt) { _, newStart in
+                                // If start is at/after end, bump end to start + 30min
+                                if newStart >= endAt {
+                                    endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                                }
                             }
-                        }
 
-                    DatePicker("End", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: endAt) { _, newEnd in
-                            // If end is at/earlier than start, move start to end - 30min
-                            if newEnd <= startAt {
-                                startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                        Text("End")
+                        MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
+                            .frame(height: 150)
+                            .onChange(of: endAt) { _, newEnd in
+                                // If end is at/earlier than start, move start to end - 30min
+                                if newEnd <= startAt {
+                                    startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                                }
                             }
-                        }
+                    }
                 }
 
                 Section(header: Text("Details")) {
