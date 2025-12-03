@@ -22,6 +22,11 @@ struct ReviewsView: View {
     @State private var showAlert = false
     @State private var alertMessage = ""
 
+    // State for client-driven "Load My Reviews" flow
+    @State private var myReviews: [FirestoreManager.ReviewItem] = []
+    @State private var loadingMyReviews: Bool = false
+    @State private var myReviewsLoaded: Bool = false
+
     // Computed lists to split reviews for the current user
     private var reviewsAboutUser: [FirestoreManager.ReviewItem] {
         guard let uid = auth.user?.uid else { return [] }
@@ -80,36 +85,65 @@ struct ReviewsView: View {
                         }
                     }
                 } else if userType == "CLIENT" {
-                    // If the user is a client, show only reviews they've written
+                    // If the user is a client, provide a button to load reviews they've written
                     Section(header: Text("Your Reviews")) {
-                        if reviewsByUser.isEmpty {
-                            Text("You haven't written any reviews yet").foregroundColor(.secondary)
-                        } else {
-                            ForEach(reviewsByUser) { item in
-                                HStack(alignment: .top, spacing: 12) {
-                                    Circle()
-                                        .fill(Color.accentColor.opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                        .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
+                        if !myReviewsLoaded {
+                            VStack(spacing: 8) {
+                                Text("Your reviews are not loaded yet.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
 
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(item.coachName ?? "Coach").font(.headline)
-                                            Spacer()
-                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                        }
-
-                                        HStack(spacing: 4) {
-                                            let stars = Int(item.rating ?? "0") ?? 0
-                                            ForEach(1...5, id: \.self) { i in
-                                                Image(systemName: i <= stars ? "star.fill" : "star")
-                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                                if loadingMyReviews {
+                                    ProgressView()
+                                } else {
+                                    Button(action: {
+                                        guard let uid = auth.user?.uid else { return }
+                                        loadingMyReviews = true
+                                        firestore.fetchReviewsByClient(clientId: uid) { items in
+                                            DispatchQueue.main.async {
+                                                self.myReviews = items
+                                                self.loadingMyReviews = false
+                                                self.myReviewsLoaded = true
                                             }
                                         }
-                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }) {
+                                        Text("Load My Reviews")
+                                            .frame(maxWidth: .infinity)
                                     }
                                 }
-                                .padding(.vertical, 6)
+                            }
+                        } else {
+                            if loadingMyReviews {
+                                HStack { Spacer(); ProgressView(); Spacer() }
+                            } else if myReviews.isEmpty {
+                                Text("You haven't written any reviews yet").foregroundColor(.secondary)
+                            } else {
+                                ForEach(myReviews) { item in
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Circle()
+                                            .fill(Color.accentColor.opacity(0.15))
+                                            .frame(width: 44, height: 44)
+                                            .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
+
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                Text(item.coachName ?? "Coach").font(.headline)
+                                                Spacer()
+                                                Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                            }
+
+                                            HStack(spacing: 4) {
+                                                let stars = Int(item.rating ?? "0") ?? 0
+                                                ForEach(1...5, id: \.self) { i in
+                                                    Image(systemName: i <= stars ? "star.fill" : "star")
+                                                        .foregroundColor(i <= stars ? .yellow : .secondary)
+                                                }
+                                            }
+                                            Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                        }
+                                    }
+                                    .padding(.vertical, 6)
+                                }
                             }
                         }
                     }
@@ -150,36 +184,64 @@ struct ReviewsView: View {
                         }
                     }
 
-                    // Reviews written by the current user
+                    // Reviews written by the current user (fallback view) - same button-driven flow as above
                     Section(header: Text("Your Reviews")) {
-                        if reviewsByUser.isEmpty {
-                            Text("You haven't written any reviews yet").foregroundColor(.secondary)
-                        } else {
-                            ForEach(reviewsByUser) { item in
-                                HStack(alignment: .top, spacing: 12) {
-                                    Circle()
-                                        .fill(Color.accentColor.opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                        .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(item.coachName ?? "Coach").font(.headline)
-                                            Spacer()
-                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                        }
-
-                                        HStack(spacing: 4) {
-                                            let stars = Int(item.rating ?? "0") ?? 0
-                                            ForEach(1...5, id: \.self) { i in
-                                                Image(systemName: i <= stars ? "star.fill" : "star")
-                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                        if !myReviewsLoaded {
+                            VStack(spacing: 8) {
+                                Text("Your reviews are not loaded yet.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                if loadingMyReviews {
+                                    ProgressView()
+                                } else {
+                                    Button(action: {
+                                        guard let uid = auth.user?.uid else { return }
+                                        loadingMyReviews = true
+                                        firestore.fetchReviewsByClient(clientId: uid) { items in
+                                            DispatchQueue.main.async {
+                                                self.myReviews = items
+                                                self.loadingMyReviews = false
+                                                self.myReviewsLoaded = true
                                             }
                                         }
-                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                    }) {
+                                        Text("Load My Reviews")
+                                            .frame(maxWidth: .infinity)
                                     }
                                 }
-                                .padding(.vertical, 6)
+                            }
+                        } else {
+                            if loadingMyReviews {
+                                HStack { Spacer(); ProgressView(); Spacer() }
+                            } else if myReviews.isEmpty {
+                                Text("You haven't written any reviews yet").foregroundColor(.secondary)
+                            } else {
+                                ForEach(myReviews) { item in
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Circle()
+                                            .fill(Color.accentColor.opacity(0.15))
+                                            .frame(width: 44, height: 44)
+                                            .overlay(Text(String((item.coachName ?? "").prefix(1))).font(.headline))
+
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                Text(item.coachName ?? "Coach").font(.headline)
+                                                Spacer()
+                                                Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                                            }
+
+                                            HStack(spacing: 4) {
+                                                let stars = Int(item.rating ?? "0") ?? 0
+                                                ForEach(1...5, id: \.self) { i in
+                                                    Image(systemName: i <= stars ? "star.fill" : "star")
+                                                        .foregroundColor(i <= stars ? .yellow : .secondary)
+                                                }
+                                            }
+                                            Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+                                        }
+                                    }
+                                    .padding(.vertical, 6)
+                                }
                             }
                         }
                     }
@@ -266,7 +328,11 @@ struct ReviewsView: View {
             }
             .onAppear {
                 firestore.fetchCoaches()
-                firestore.fetchAllReviews()
+                // Do not auto-fetch all reviews for clients; let them load via the button.
+                // Keep fetchAllReviews for coach scenarios where reviews-about-you are shown.
+                if firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH" {
+                    firestore.fetchAllReviews()
+                }
             }
             .onChange(of: firestore.coaches) { _, newCoaches in
                 // If previously selected coach no longer exists, clear selection

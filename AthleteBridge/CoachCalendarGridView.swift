@@ -15,6 +15,13 @@ import SwiftUI
     // Local search text for inline Find a Coach search bar (used when searchQuery is nil)
     @State private var localSearchText: String = ""
 
+    // Inline suggestions for the Find-a-Coach search (contains match)
+    private var coachSuggestionsLocal: [Coach] {
+        let typed = localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard typed.count >= 1 else { return [] }
+        return firestore.coaches.filter { $0.name.lowercased().contains(typed) }
+    }
+
      init(client: Client, searchQuery: String? = nil) {
          self.client = client
          self.searchQuery = searchQuery
@@ -38,6 +45,30 @@ import SwiftUI
                  VStack(spacing: 0) {
                      SearchBar(text: $localSearchText, placeholder: "Search coaches")
                          .padding([.horizontal, .top])
+
+                     // Suggestion chips (match Reviews UI)
+                     if !coachSuggestionsLocal.isEmpty {
+                         ScrollView(.horizontal, showsIndicators: false) {
+                             HStack(spacing: 8) {
+                                 ForEach(coachSuggestionsLocal.prefix(8), id: \.id) { coach in
+                                     Button(action: {
+                                         localSearchText = coach.name
+                                         // dismiss keyboard
+                                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                     }) {
+                                         Text(coach.name)
+                                             .padding(.horizontal, 12)
+                                             .padding(.vertical, 8)
+                                             .background(Color(UIColor.secondarySystemBackground))
+                                             .cornerRadius(16)
+                                     }
+                                     .buttonStyle(PlainButtonStyle())
+                                 }
+                             }
+                             .padding(.vertical, 4)
+                             .padding(.horizontal)
+                         }
+                     }
 
                      List(items) { coach in
                          coachRow(for: coach)
