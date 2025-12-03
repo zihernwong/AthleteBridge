@@ -55,6 +55,7 @@ struct ProfileView: View {
     @State private var uploadError: String? = nil
     @State private var saveMessage: String? = nil
     @State private var showSavedConfirmation: Bool = false
+    @State private var showCopiedConfirmation: Bool = false
     // Tracks whether we are editing an existing profile (true) or creating a new one (false)
     @State private var isEditMode: Bool = false
 
@@ -159,6 +160,36 @@ struct ProfileView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeInOut, value: showSavedConfirmation)
             }
+
+            // Improved global copied confirmation toast (centered rounded card with icon + blur)
+            if showCopiedConfirmation {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.white)
+                            Text("Email copied to clipboard")
+                                .foregroundColor(.white)
+                                .font(.subheadline)
+                                .bold()
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.ultraThinMaterial)
+                        .background(Color.black.opacity(0.65))
+                        .cornerRadius(12)
+                        .shadow(radius: 8, y: 2)
+                        .onTapGesture { withAnimation { showCopiedConfirmation = false } }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 60)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.easeInOut, value: showCopiedConfirmation)
+            }
         }
         .sheet(isPresented: $showingPhotoPicker) {
             PhotoPicker(selectedImage: $selectedImage)
@@ -193,6 +224,15 @@ struct ProfileView: View {
 
                     Button(action: {
                         UIPasteboard.general.string = email
+                        // Haptic feedback
+                        let gen = UIImpactFeedbackGenerator(style: .light)
+                        gen.impactOccurred()
+                        // Accessibility announcement
+                        UIAccessibility.post(notification: .announcement, argument: "Email copied to clipboard")
+                        withAnimation { showCopiedConfirmation = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                            withAnimation { showCopiedConfirmation = false }
+                        }
                     }) {
                         Image(systemName: "doc.on.doc")
                             .foregroundColor(.blue)
