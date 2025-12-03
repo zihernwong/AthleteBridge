@@ -224,14 +224,23 @@ struct NewBookingForm: View {
                 }
 
                 Section(header: Text("When")) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 20) {
                         Text("Start")
                         MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
                             .frame(height: 150)
+                            .padding(.bottom, 12)
                             .onChange(of: startAt) { _, newStart in
+                                // Snap start to nearest 30-minute increment (guard against minute-by-minute behavior)
+                                let intervalSeconds = 30 * 60
+                                let t = newStart.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 {
+                                    startAt = snappedDate
+                                }
                                 // If start is at/after end, bump end to start + 30min
-                                if newStart >= endAt {
-                                    endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                                if startAt >= endAt {
+                                    endAt = Calendar.current.date(byAdding: .minute, value: 30, to: startAt) ?? startAt.addingTimeInterval(60*30)
                                 }
                             }
 
@@ -239,9 +248,17 @@ struct NewBookingForm: View {
                         MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
                             .frame(height: 150)
                             .onChange(of: endAt) { _, newEnd in
+                                // Snap end to nearest 30-minute increment
+                                let intervalSeconds = 30 * 60
+                                let t = newEnd.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 {
+                                    endAt = snappedDate
+                                }
                                 // If end is at/earlier than start, move start to end - 30min
-                                if newEnd <= startAt {
-                                    startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                                if endAt <= startAt {
+                                    startAt = Calendar.current.date(byAdding: .minute, value: -30, to: endAt) ?? endAt.addingTimeInterval(-60*30)
                                 }
                             }
                     }
@@ -310,6 +327,18 @@ struct NewBookingForm: View {
             showAlert = true
             return
         }
+
+        // Snap times to nearest 30-minute boundary before validation/save
+        func snapTo30(_ date: Date) -> Date {
+            let interval = 30 * 60
+            let t = date.timeIntervalSinceReferenceDate
+            let snapped = TimeInterval(Int((t + Double(interval)/2.0) / Double(interval))) * Double(interval)
+            return Date(timeIntervalSinceReferenceDate: snapped)
+        }
+        let snappedStart = snapTo30(startAt)
+        let snappedEnd = snapTo30(endAt)
+        startAt = snappedStart
+        endAt = snappedEnd
 
         // Validate times before saving
         if !(startAt < endAt) {

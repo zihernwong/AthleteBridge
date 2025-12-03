@@ -96,21 +96,44 @@ struct NewBookingFormView: View {
                 }
 
                 Section(header: Text("When")) {
-                    DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: startAt) { _, newStart in
-                            // If the user picks a start that is at/after the current end, bump the end to start + 30m
-                            if newStart >= endAt {
-                                endAt = Calendar.current.date(byAdding: .minute, value: 30, to: newStart) ?? newStart.addingTimeInterval(60*30)
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Start")
+                        MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
+                            .frame(height: 150)
+                            .padding(.bottom, 12)
+                            .onChange(of: startAt) { _, newStart in
+                                // Snap start to nearest 30-minute increment (guard against minute-by-minute behavior)
+                                let intervalSeconds = 30 * 60
+                                let t = newStart.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 {
+                                    startAt = snappedDate
+                                }
+                                // If start is at/after end, bump end to start + 30min
+                                if startAt >= endAt {
+                                    endAt = Calendar.current.date(byAdding: .minute, value: 30, to: startAt) ?? startAt.addingTimeInterval(60*30)
+                                }
                             }
-                        }
 
-                    DatePicker("End", selection: $endAt, displayedComponents: [.date, .hourAndMinute])
-                        .onChange(of: endAt) { _, newEnd in
-                            // If the user picks an end that is at/earlier than the current start, move the start to end - 30m
-                            if newEnd <= startAt {
-                                startAt = Calendar.current.date(byAdding: .minute, value: -30, to: newEnd) ?? newEnd.addingTimeInterval(-60*30)
+                        Text("End")
+                        MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
+                            .frame(height: 150)
+                            .onChange(of: endAt) { _, newEnd in
+                                // Snap end to nearest 30-minute increment
+                                let intervalSeconds = 30 * 60
+                                let t = newEnd.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 {
+                                    endAt = snappedDate
+                                }
+                                // If end is at/earlier than start, move start to end - 30min
+                                if endAt <= startAt {
+                                    startAt = Calendar.current.date(byAdding: .minute, value: -30, to: endAt) ?? endAt.addingTimeInterval(-60*30)
+                                }
                             }
-                        }
+                    }
                 }
 
                 Section(header: Text("Details")) {
@@ -166,6 +189,16 @@ struct NewBookingFormView: View {
                     // ensure current user's saved locations are loaded for the location picker
                     firestore.fetchLocationsForCurrentUser()
                 }
+
+                // Snap initial start/end to nearest 30-minute increment so wheels align on load
+                let snap: (Date) -> Date = { date in
+                    let interval = 30 * 60
+                    let t = date.timeIntervalSinceReferenceDate
+                    let snapped = TimeInterval(Int((t + Double(interval)/2.0) / Double(interval))) * Double(interval)
+                    return Date(timeIntervalSinceReferenceDate: snapped)
+                }
+                startAt = snap(startAt)
+                endAt = snap(endAt)
             }
         }
     }
@@ -183,7 +216,17 @@ struct NewBookingFormView: View {
             return
         }
 
-        // Validate times before attempting to save
+        // Snap times to nearest 30-minute boundary before validation/save
+        func snapTo30(_ date: Date) -> Date {
+            let interval = 30 * 60
+            let t = date.timeIntervalSinceReferenceDate
+            let snapped = TimeInterval(Int((t + Double(interval)/2.0) / Double(interval))) * Double(interval)
+            return Date(timeIntervalSinceReferenceDate: snapped)
+        }
+        startAt = snapTo30(startAt)
+        endAt = snapTo30(endAt)
+
+        // Validate times before saving
         if !(startAt < endAt) {
             alertMessage = "Start time must be before end time"
             showAlert = true
