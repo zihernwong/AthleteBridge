@@ -25,9 +25,9 @@ struct MainAppView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Locations tab
-            RequiresProfile(content: { LocationsView() }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "mappin.and.ellipse"); Text("Locations") }
+            // Messages tab (placeholder) — moved Locations into Bookings
+            RequiresProfile(content: { messagesTab }, selectedTab: $selectedTab)
+                .tabItem { Image(systemName: "message"); Text("Messages") }
                 .tag(4)
 
             // Home
@@ -39,7 +39,8 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "star.bubble"); Text("Reviews") }
                 .tag(2)
 
-            RequiresProfile(content: { BookingsView() }, selectedTab: $selectedTab)
+            // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
+            RequiresProfile(content: { bookingsTab }, selectedTab: $selectedTab)
                 .tabItem { Image(systemName: "calendar"); Text("Bookings") }
                 .tag(3)
 
@@ -262,6 +263,38 @@ struct MainAppView: View {
                 }
                 .padding().background(.thinMaterial).cornerRadius(12).shadow(radius:8).padding(40)
             }
+        }
+    }
+
+    // Placeholder messages tab content
+    private var messagesTab: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                Text("Messages").font(.title2).bold()
+                Text("Coming soon — messaging will be implemented here.")
+                    .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding()
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Messages")
+        }
+    }
+
+    // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
+    private var bookingsTab: some View {
+        NavigationStack {
+            BookingsView()
+                .navigationTitle("Bookings")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        NavigationLink(destination: LocationsView()) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "mappin.and.ellipse")
+                                Text("Locations")
+                            }
+                        }
+                    }
+                }
         }
     }
 }
