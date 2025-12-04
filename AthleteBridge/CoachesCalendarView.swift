@@ -11,7 +11,7 @@ struct CoachesCalendarView: View {
                 HStack(alignment: .top, spacing: 12) {
                     // Pass coach-specific photo URL when resolved; fall back to default AvatarView behavior
                     let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
-                    AvatarView(url: coachURL ?? nil, size: 56)
+                    AvatarView(url: coachURL ?? nil, size: 56, useCurrentUser: false)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {

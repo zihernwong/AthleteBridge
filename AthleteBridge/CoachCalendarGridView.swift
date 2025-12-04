@@ -122,7 +122,7 @@ import SwiftUI
                 HStack(alignment: .top, spacing: 12) {
                     // show coach-specific avatar when resolved; fallback behavior in AvatarView remains
                     let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
-                    AvatarView(url: coachURL ?? nil, size: 56)
+                    AvatarView(url: coachURL ?? nil, size: 56, useCurrentUser: false)
 
                     VStack(alignment: .leading) {
                         Text(coach.name).font(.headline)

@@ -1,31 +1,35 @@
 import SwiftUI
 import UIKit
 
-/// AvatarView: shows the current user's client or coach photo (prefers client),
-/// uses AsyncImage and falls back to a manual URLSession download for signed URLs.
+/// AvatarView: shows a profile image using an explicit URL, or optionally falls back to
+/// the currently-signed-in client/coach photo stored in FirestoreManager.
 struct AvatarView: View {
     @EnvironmentObject var firestore: FirestoreManager
 
     // Optional explicit URL to show (when listing many coaches we pass their URL)
     private let explicitURL: URL?
+    // Whether to fall back to the currently-signed-in user's client/coach photo when explicitURL is nil
+    private let useCurrentUser: Bool
+
     @State private var fallbackImage: UIImage? = nil
     @State private var isDownloadingFallback: Bool = false
     @State private var lastURLString: String? = nil
 
     private let size: CGFloat
 
-    init(url: URL? = nil, size: CGFloat = 44) {
+    init(url: URL? = nil, size: CGFloat = 44, useCurrentUser: Bool = true) {
         self.explicitURL = url
         self.size = size
+        self.useCurrentUser = useCurrentUser
     }
 
     var body: some View {
         Group {
             if let url = explicitURL {
                 imageFor(url: url).onAppear { prepare(url: url) }
-            } else if let clientURL = firestore.currentClientPhotoURL {
+            } else if useCurrentUser, let clientURL = firestore.currentClientPhotoURL {
                 imageFor(url: clientURL).onAppear { prepare(url: clientURL) }
-            } else if let coachURL = firestore.currentCoachPhotoURL {
+            } else if useCurrentUser, let coachURL = firestore.currentCoachPhotoURL {
                 imageFor(url: coachURL).onAppear { prepare(url: coachURL) }
             } else {
                 placeholder
