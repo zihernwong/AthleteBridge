@@ -29,6 +29,8 @@ struct MultiSelectPicker: View {
                                     .foregroundColor(.accentColor)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(PlainButtonStyle())
                 }

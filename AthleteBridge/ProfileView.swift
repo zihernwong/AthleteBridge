@@ -166,9 +166,8 @@ struct ProfileView: View {
     @State private var showCopiedConfirmation: Bool = false
     // Tracks whether we are editing an existing profile (true) or creating a new one (false)
     @State private var isEditMode: Bool = false
-    // Sheet flags for searchable multi-select pickers
-    @State private var showingClientGoalsPicker: Bool = false
-    @State private var showingCoachSpecialtiesPicker: Bool = false
+    @State private var searchText: String = ""
+    @State private var showingGoalsPicker: Bool = false
 
     @Environment(\.presentationMode) private var presentationMode
 
@@ -373,13 +372,13 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // Compact selector that opens a searchable, scrollable list
+            // Compact selector that opens the searchable, scrollable MultiSelectPicker sheet
             HStack {
                 Text(selectedGoals.isEmpty ? "No goals selected" : "\(selectedGoals.count) goals selected")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Spacer()
-                Button(action: { showingClientGoalsPicker = true }) {
+                Button(action: { showingGoalsPicker = true }) {
                     Text("Edit Goals")
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
@@ -387,7 +386,7 @@ struct ProfileView: View {
                         .cornerRadius(10)
                 }
             }
-            .sheet(isPresented: $showingClientGoalsPicker) {
+            .sheet(isPresented: $showingGoalsPicker) {
                 MultiSelectPicker(title: "Select Goals", items: availableGoals, selection: $selectedGoals)
             }
 
@@ -448,23 +447,7 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // Compact selector for specialties (searchable list)
-            HStack {
-                Text(selectedSpecialties.isEmpty ? "No specialties selected" : "\(selectedSpecialties.count) specialties selected")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button(action: { showingCoachSpecialtiesPicker = true }) {
-                    Text("Edit Specialties")
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-                        .background(Color(UIColor.secondarySystemBackground))
-                        .cornerRadius(10)
-                }
-            }
-            .sheet(isPresented: $showingCoachSpecialtiesPicker) {
-                MultiSelectPicker(title: "Select Specialties", items: availableSpecialties, selection: $selectedSpecialties)
-            }
+            ChipMultiSelect(items: availableSpecialties, selection: $selectedSpecialties)
 
             // Experience as a wheel picker (scrollable)
             VStack(alignment: .leading) {
@@ -837,89 +820,5 @@ struct ProfileView_Previews: PreviewProvider {
     }
 }
 
-// Simple SwiftUI wrapper for PHPicker to pick a single image
-struct PhotoPicker: UIViewControllerRepresentable {
-    @Binding var selectedImage: UIImage?
-
-    class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        var parent: PhotoPicker
-        init(_ parent: PhotoPicker) { self.parent = parent }
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            picker.dismiss(animated: true)
-            guard let item = results.first else { return }
-            if item.itemProvider.canLoadObject(ofClass: UIImage.self) {
-                item.itemProvider.loadObject(ofClass: UIImage.self) { (obj, _) in
-                    if let image = obj as? UIImage {
-                        DispatchQueue.main.async { self.parent.selectedImage = image }
-                    }
-                }
-            }
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration(photoLibrary: .shared())
-        config.filter = .images
-        config.selectionLimit = 1
-        let vc = PHPickerViewController(configuration: config)
-        vc.delegate = context.coordinator
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
-}
-
-// Local UIImage resizing helper accessible within the module
-extension UIImage {
-    func resized(to maxDimension: CGFloat) -> UIImage? {
-        let aspect = size.width / size.height
-        var newSize: CGSize
-        if size.width > size.height {
-            newSize = CGSize(width: maxDimension, height: maxDimension / aspect)
-        } else {
-            newSize = CGSize(width: maxDimension * aspect, height: maxDimension)
-        }
-        UIGraphicsBeginImageContextWithOptions(newSize, false, 0)
-        draw(in: CGRect(origin: .zero, size: newSize))
-        let resized = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return resized
-    }
-}
-
-// Chip-style multi-select component
-struct ChipMultiSelect: View {
-    let items: [String]
-    @Binding var selection: Set<String>
-
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
-
-    var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-            ForEach(items, id: \.self) { item in
-                Button(action: {
-                    if selection.contains(item) { selection.remove(item) } else { selection.insert(item) }
-                }) {
-                    Text(item)
-                        .font(.subheadline)
-                        .foregroundColor(selection.contains(item) ? .white : .primary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(selection.contains(item) ? Color.accentColor : Color(UIColor.secondarySystemBackground))
-                        .cornerRadius(20)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// Convenience helper to dismiss keyboard from SwiftUI
-extension UIApplication {
-    func dismissKeyboard() {
-        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-}
+// Note: helper types (PhotoPicker, ChipMultiSelect, UIImage extension, UIApplication.dismissKeyboard)
+// have been moved to `UIHelpers.swift` to avoid duplication and centralize UI helper utilities.
