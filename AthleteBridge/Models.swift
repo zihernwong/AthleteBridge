@@ -9,13 +9,14 @@ struct Coach: Identifiable, Hashable {
     let availability: [String] // e.g., "Morning", "Evening"
     let bio: String? // optional biography text
     let hourlyRate: Double? // optional hourly rate in USD
+    let photoURLString: String? // optional raw photo path/URL from Firestore
     // Optional meeting preference for coach (e.g., "In-Person" / "Virtual")
     let meetingPreference: String?
     // Optional location info
     let zipCode: String?
     let city: String?
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil) {
         self.id = id
         self.name = name
         self.specialties = specialties
@@ -23,6 +24,7 @@ struct Coach: Identifiable, Hashable {
         self.availability = availability
         self.bio = bio
         self.hourlyRate = hourlyRate
+        self.photoURLString = photoURLString
         self.meetingPreference = meetingPreference
         self.zipCode = zipCode
         self.city = city
