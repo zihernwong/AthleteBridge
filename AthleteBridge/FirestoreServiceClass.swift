@@ -1696,4 +1696,49 @@ class FirestoreManager: ObservableObject {
             completion(items)
         }
     }
+
+    /// Create or return an existing one-to-one chat document between the current user and the provided coach id.
+    /// Chat document id is deterministic: sorted uids joined by '_' so there is one chat per pair.
+    func createOrGetChat(withCoachId coachId: String, completion: @escaping (String?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("createOrGetChat: no authenticated user")
+            DispatchQueue.main.async { completion(nil) }
+            return
+        }
+        let pair = [uid, coachId].sorted()
+        let chatId = pair.joined(separator: "_")
+        let chatRef = db.collection("chats").document(chatId)
+
+        print("createOrGetChat: called for uid=\(uid) coachId=\(coachId) chatId=\(chatId) path=\(chatRef.path)")
+
+        chatRef.getDocument { snap, err in
+            if let err = err {
+                print("createOrGetChat: getDocument error: \(err)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            if let snap = snap, snap.exists {
+                print("createOrGetChat: chat exists at \(chatRef.path)")
+                DispatchQueue.main.async { completion(chatId) }
+                return
+            }
+
+            // Create new chat document with participants and timestamps
+            let data: [String: Any] = [
+                "participants": pair,
+                "createdAt": FieldValue.serverTimestamp(),
+                "lastMessageAt": FieldValue.serverTimestamp(),
+                "lastMessageText": ""
+            ]
+            chatRef.setData(data) { err in
+                if let err = err {
+                    print("createOrGetChat: failed to create chat: \(err)")
+                    DispatchQueue.main.async { completion(nil) }
+                } else {
+                    print("createOrGetChat: created chat at \(chatRef.path)")
+                    DispatchQueue.main.async { completion(chatId) }
+                }
+            }
+        }
+    }
 }
