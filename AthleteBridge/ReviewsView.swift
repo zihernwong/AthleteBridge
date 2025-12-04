@@ -170,11 +170,16 @@ struct ReviewsView: View {
                                                     coachSearchText = coach.name
                                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                                 }) {
-                                                    Text(coach.name)
-                                                        .padding(.horizontal, 12)
-                                                        .padding(.vertical, 8)
-                                                        .background(Color(UIColor.secondarySystemBackground))
-                                                        .cornerRadius(16)
+                                                    HStack(spacing: 8) {
+                                                        let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                                                        AvatarView(url: coachURL ?? nil, size: 32, useCurrentUser: false)
+                                                        Text(coach.name)
+                                                            .foregroundColor(.primary)
+                                                    }
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(Color(UIColor.secondarySystemBackground))
+                                                    .cornerRadius(16)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
                                             }
@@ -184,8 +189,12 @@ struct ReviewsView: View {
                                 }
 
                                 if !selectedCoachName.isEmpty {
-                                    Text("Selected: \(selectedCoachName)")
-                                        .font(.subheadline)
+                                    HStack(spacing: 8) {
+                                        let selURL = firestore.coachPhotoURLs[selectedCoachId] ?? nil
+                                        AvatarView(url: selURL ?? nil, size: 36, useCurrentUser: false)
+                                        Text("Selected: \(selectedCoachName)")
+                                            .font(.subheadline)
+                                    }
                                 }
                             }
                         }
