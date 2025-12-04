@@ -1,6 +1,5 @@
-// MatchResultsView.swift
-
 import SwiftUI
+import FirebaseAuth
 
 /// `MatchResultsView` shows coaches matched to a client. Optionally accepts `searchQuery`
 /// so an external screen (e.g. Find a Coach) can pre-filter by coach name.
@@ -112,50 +111,96 @@ import SwiftUI
          }
          .navigationTitle("Your Matches")
          .onAppear { firestore.fetchCoaches() }
+         // Modal fallback when programmatic NavigationLink doesn't trigger inside List rows
+         .sheet(item: $presentedChat) { sheet in
+             ChatView(chatId: sheet.id)
+                 .environmentObject(firestore)
+         }
      }
 
     // Small helper to render a coach row
+    // Modal fallback when programmatic navigation doesn't trigger; small Identifiable wrapper
+    struct ChatSheetId: Identifiable { let id: String }
+    @State private var presentedChat: ChatSheetId? = nil
+
     @ViewBuilder
     private func coachRow(for coach: Coach) -> some View {
-        NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 12) {
-                    // show coach-specific avatar when resolved; fallback behavior in AvatarView remains
-                    let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
-                    AvatarView(url: coachURL ?? nil, size: 56, useCurrentUser: false)
+        // Build the left tappable area (navigates to CoachDetail) and keep the Message button as a separate sibling
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                // Left area: navigation link to coach detail
+                NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
+                    HStack(alignment: .top, spacing: 12) {
+                        let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                        AvatarView(url: coachURL ?? nil, size: 56, useCurrentUser: false)
 
-                    VStack(alignment: .leading) {
-                        Text(coach.name).font(.headline)
-                        if !coach.specialties.isEmpty {
-                            Text(coach.specialties.joined(separator: ", ")).font(.subheadline).foregroundColor(.secondary)
+                        VStack(alignment: .leading) {
+                            Text(coach.name).font(.headline)
+                            if !coach.specialties.isEmpty {
+                                Text(coach.specialties.joined(separator: ", ")).font(.subheadline).foregroundColor(.secondary)
+                            }
+                            Text("Experience: \(coach.experienceYears) years").font(.caption).foregroundColor(.secondary)
+                            if let rate = coach.hourlyRate {
+                                Text(String(format: "$%.0f / hr", rate)).font(.caption).foregroundColor(.primary)
+                            } else {
+                                Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
+                            }
                         }
-                        Text("Experience: \(coach.experienceYears) years").font(.caption).foregroundColor(.secondary)
-                        if let rate = coach.hourlyRate {
-                            Text(String(format: "$%.0f / hr", rate)).font(.caption).foregroundColor(.primary)
-                        } else {
-                            Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
-                        }
-                    }
-
-                    Spacer()
-
-                    if let reviews = coachReviews[coach.id], !reviews.isEmpty {
-                        let avg = averageRating(from: reviews)
-                        VStack {
-                            Text(String(format: "%.1f", avg)).font(.headline)
-                            Text("(\(reviews.count))").font(.caption).foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("No reviews").font(.caption).foregroundColor(.secondary)
                     }
                 }
 
-                HStack {
-                    Text("Bookings:").font(.caption).foregroundColor(.secondary)
-                    if let count = coachBookingCounts[coach.id] { Text("\(count)").font(.caption).bold() }
-                    else { Text("—").font(.caption).foregroundColor(.secondary) }
-                    Spacer()
+                Spacer()
+
+                // Right area: reviews and Message button (outside the NavigationLink so taps register)
+                if let reviews = coachReviews[coach.id], !reviews.isEmpty {
+                    let avg = averageRating(from: reviews)
+                    VStack {
+                        Text(String(format: "%.1f", avg)).font(.headline)
+                        Text("(\(reviews.count))").font(.caption).foregroundColor(.secondary)
+                    }
+                } else {
+                    Text("No reviews").font(.caption).foregroundColor(.secondary)
                 }
+
+                // Message button: compute deterministic chatId for this pair and present ChatView modally
+                let expectedChatId = ([Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_"))
+
+                Button(action: {
+                    print("[MatchResultsView] Message button tapped for coach.id=\(coach.id)")
+                    guard Auth.auth().currentUser?.uid != nil else {
+                        firestore.showToast("Please sign in to message coaches")
+                        return
+                    }
+                    // Optimistically present the chat UI immediately using deterministic id
+                    let optimisticId = expectedChatId
+                    print("[MatchResultsView] presenting chat sheet for optimisticId=\(optimisticId)")
+                    self.presentedChat = ChatSheetId(id: optimisticId)
+
+                    // Ensure chat doc exists on server in the background; if server returns a different id, update the sheet
+                    firestore.createOrGetChat(withCoachId: coach.id) { chatId in
+                        DispatchQueue.main.async {
+                            let target = chatId ?? optimisticId
+                            print("[MatchResultsView] createOrGetChat returned chatId=\(chatId ?? "nil"), ensuring sheet id=\(target)")
+                            if target != optimisticId {
+                                self.presentedChat = ChatSheetId(id: target)
+                            }
+                        }
+                    }
+                }) {
+                    Image(systemName: "message.fill")
+                        .font(.body)
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+            HStack {
+                Text("Bookings:").font(.caption).foregroundColor(.secondary)
+                if let count = coachBookingCounts[coach.id] { Text("\(count)").font(.caption).bold() }
+                else { Text("—").font(.caption).foregroundColor(.secondary) }
+                Spacer()
             }
         }
     }
