@@ -19,9 +19,117 @@ struct ProfileView: View {
 
     // Client fields: fixed multi-select goals
     @State private var selectedGoals: Set<String> = []
-    private let availableGoals: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    // Use a shared comprehensive list of goals/specialties for both clients and coaches
+    private static let sharedGoalsAndSpecialties: [String] = [
+        "Life coaching",
+        "Confidence building",
+        "Public speaking",
+        "Time management",
+        "Productivity optimization",
+        "Goal setting",
+        "Communication skills",
+        "Emotional intelligence",
+        "Mindfulness",
+        "Stress management",
+        "Decision-making skills",
+        "Leadership skills",
+        "Social skills & relationship building",
+        "Career change coaching",
+        "Executive functioning skills",
+        "Habit formation",
+        "Work–life balance",
+        "Conflict resolution",
+        "Personal finance basics",
+        "Organization & decluttering (minimalism)",
+        "Career, Business & Professional Coaching",
+        "Interview coaching",
+        "Résumé/CV coaching",
+        "Salary negotiation",
+        "Executive coaching",
+        "Entrepreneurship coaching",
+        "Small business coaching",
+        "Marketing strategy",
+        "Sales coaching",
+        "Brand building",
+        "Social-media strategy",
+        "Productivity systems (e.g., GTD)",
+        "Project management",
+        "Freelancing & gig-work coaching",
+        "Real estate investing coaching",
+        "Job search strategy",
+        "Presentation & pitch coaching",
+        "Corporate leadership development",
+        "Networking mastery",
+        "Customer-success coaching",
+        "Creative career coaching (artists, writers, etc.)",
+        "Health, Fitness, & Wellness",
+        "Weight loss coaching",
+        "Strength training",
+        "General fitness coaching",
+        "Nutrition coaching",
+        "Yoga instruction",
+        "Meditation coaching",
+        "Running coaching",
+        "Cycling coaching",
+        "CrossFit coaching",
+        "Pilates instruction",
+        "Mobility & flexibility coaching",
+        "Marathon/triathlon training",
+        "Sleep improvement",
+        "Hormone/biofeedback coaching (general wellness)",
+        "Pre/post-natal fitness",
+        "Physical rehab support (non-medical coaching)",
+        "Healthy lifestyle habit coaching",
+        "Longevity-focused coaching",
+        "Breathwork coaching",
+        "Hiking/backpacking skills",
+        "Sports & Physical Skills",
+        "Golf coaching",
+        "Tennis coaching",
+        "Pickleball coaching",
+        "Basketball coaching",
+        "Soccer coaching",
+        "Swimming coaching",
+        "Baseball/softball coaching",
+        "Boxing/MMA coaching",
+        "Dance coaching",
+        "Gymnastics coaching",
+        "Cheer coaching",
+        "Skiing/snowboarding instruction",
+        "Rock climbing coaching",
+        "Volleyball coaching",
+        "Track & field coaching",
+        "Creative, Arts & Performance",
+        "Music lessons (guitar, piano, voice, etc.)",
+        "Acting coaching",
+        "Art coaching (drawing, painting)",
+        "Photography coaching",
+        "Filmmaking coaching",
+        "Creative writing coaching",
+        "Screenwriting coaching",
+        "Graphic design coaching",
+        "Fashion styling consulting",
+        "Crafting & DIY project coaching",
+        "Makeup artistry coaching",
+        "Interior design coaching",
+        "Digital content creation coaching (YouTube/TikTok)",
+        "Academic & Skills Learning",
+        "Math tutoring",
+        "Reading & writing tutoring",
+        "ESL/English language coaching",
+        "Foreign-language coaching (Spanish, French, etc.)",
+        "Study skills coaching",
+        "Test prep (SAT/ACT/LSAT/GMAT/etc.)",
+        "Coding & programming coaching",
+        "STEM hobby coaching (robotics, electronics)",
+        "Financial literacy education",
+        "College admissions coaching",
+        "Speed reading & memory skills",
+        "Public policy or civics education coaching (non-political skill-based)"
+    ]
     // client preferred availability now supports multiple selections
     @State private var selectedClientAvailability: Set<String> = []
+    private let availableGoals: [String] = ProfileView.sharedGoalsAndSpecialties
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
     // Client skill level selection — removed 'No Preference' option per request
     private let skillLevels: [String] = ["Beginner", "Intermediate", "Advanced"]
@@ -33,7 +141,7 @@ struct ProfileView: View {
 
     // Coach fields: fixed multi-select specialties
     @State private var selectedSpecialties: Set<String> = []
-    private let availableSpecialties: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    private let availableSpecialties: [String] = ProfileView.sharedGoalsAndSpecialties
     @State private var experienceYears: Int = 0
     @State private var coachAvailabilitySelection: [String] = ["Morning"]
     @State private var hourlyRateText: String = ""
@@ -58,6 +166,9 @@ struct ProfileView: View {
     @State private var showCopiedConfirmation: Bool = false
     // Tracks whether we are editing an existing profile (true) or creating a new one (false)
     @State private var isEditMode: Bool = false
+    // Sheet flags for searchable multi-select pickers
+    @State private var showingClientGoalsPicker: Bool = false
+    @State private var showingCoachSpecialtiesPicker: Bool = false
 
     @Environment(\.presentationMode) private var presentationMode
 
@@ -262,8 +373,23 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // chip-style multi-select list
-            ChipMultiSelect(items: availableGoals, selection: $selectedGoals)
+            // Compact selector that opens a searchable, scrollable list
+            HStack {
+                Text(selectedGoals.isEmpty ? "No goals selected" : "\(selectedGoals.count) goals selected")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: { showingClientGoalsPicker = true }) {
+                    Text("Edit Goals")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(10)
+                }
+            }
+            .sheet(isPresented: $showingClientGoalsPicker) {
+                MultiSelectPicker(title: "Select Goals", items: availableGoals, selection: $selectedGoals)
+            }
 
             Text("Preferred Availability")
                 .font(.subheadline)
@@ -322,7 +448,23 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            ChipMultiSelect(items: availableSpecialties, selection: $selectedSpecialties)
+            // Compact selector for specialties (searchable list)
+            HStack {
+                Text(selectedSpecialties.isEmpty ? "No specialties selected" : "\(selectedSpecialties.count) specialties selected")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: { showingCoachSpecialtiesPicker = true }) {
+                    Text("Edit Specialties")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(10)
+                }
+            }
+            .sheet(isPresented: $showingCoachSpecialtiesPicker) {
+                MultiSelectPicker(title: "Select Specialties", items: availableSpecialties, selection: $selectedSpecialties)
+            }
 
             // Experience as a wheel picker (scrollable)
             VStack(alignment: .leading) {
