@@ -201,7 +201,27 @@ import SwiftUI
      var body: some View {
          List {
              Section {
-                 // content
+                 // Show avatar and bio at the top
+                 HStack(alignment: .top, spacing: 12) {
+                     // Use the resolved coach-specific photo URL when available; don't fall back to current user
+                     let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                     AvatarView(url: coachURL ?? nil, size: 88, useCurrentUser: false)
+
+                     VStack(alignment: .leading, spacing: 8) {
+                         if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                             Text(bio)
+                                 .font(.body)
+                                 .foregroundColor(.primary)
+                         } else {
+                             Text("No bio provided")
+                                 .font(.subheadline)
+                                 .foregroundColor(.secondary)
+                         }
+                         Spacer()
+                     }
+                 }
+
+                 // Coach attributes below the avatar/bio
                  if !coach.specialties.isEmpty {
                      Text("Specialties: \(coach.specialties.joined(separator: ", "))")
                  }
