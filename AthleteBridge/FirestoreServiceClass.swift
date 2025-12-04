@@ -83,6 +83,125 @@ class FirestoreManager: ObservableObject {
     @Published var coachBookings: [BookingItem] = []
     @Published var coachBookingsDebug: String = ""
 
+    // MARK: - Chat / Messaging
+    struct ChatMessage: Identifiable {
+        let id: String
+        let senderId: String
+        let text: String
+        let createdAt: Date?
+    }
+
+    struct ChatItem: Identifiable {
+        let id: String
+        let participants: [String]
+        let lastMessageText: String?
+        let lastMessageAt: Date?
+    }
+
+    @Published var chats: [ChatItem] = []
+    @Published var chatsDebug: String = ""
+
+    // messagesByChat stores messages per chat id
+    @Published var messagesByChat: [String: [ChatMessage]] = [:]
+
+    // Firestore listener handles
+    private var chatsListener: ListenerRegistration? = nil
+    private var messageListeners: [String: ListenerRegistration] = [:]
+
+    /// Start listening for all chat documents where the current user is a participant.
+    /// Updates `chats` published property whenever chats are created/updated.
+    func listenForChatsForCurrentUser() {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("listenForChatsForCurrentUser: no authenticated user")
+            DispatchQueue.main.async { self.chats = []; self.chatsDebug = "No user" }
+            return
+        }
+
+        // Stop previous listener if any
+        chatsListener?.remove()
+        chatsListener = nil
+
+        print("listenForChatsForCurrentUser: registering listener for uid=\(uid)")
+        let coll = db.collection("chats")
+        let query = coll.whereField("participants", arrayContains: uid).order(by: "lastMessageAt", descending: true)
+
+        chatsListener = query.addSnapshotListener { snap, err in
+            if let err = err {
+                print("listenForChatsForCurrentUser: snapshot error: \(err)")
+                DispatchQueue.main.async { self.chatsDebug = "error: \(err.localizedDescription)" }
+                return
+            }
+
+            let docs = snap?.documents ?? []
+            var mapped: [ChatItem] = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                let participants = (data["participants"] as? [String]) ?? []
+                let lastText = data["lastMessageText"] as? String
+                let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+                mapped.append(ChatItem(id: id, participants: participants, lastMessageText: lastText, lastMessageAt: lastAt))
+            }
+
+            DispatchQueue.main.async {
+                self.chats = mapped
+                self.chatsDebug = "Loaded \(mapped.count) chats"
+            }
+        }
+    }
+
+    /// Stop listening for chats for current user
+    func stopListeningForChats() {
+        if let l = chatsListener { l.remove(); chatsListener = nil }
+        DispatchQueue.main.async { self.chats = []; self.chatsDebug = "stopped" }
+    }
+
+    /// Start listening for messages in the given chatId. Updates `messagesByChat[chatId]` as messages arrive.
+    func listenForMessages(chatId: String) {
+        // remove existing listener for this chat if present
+        if let existing = messageListeners[chatId] {
+            existing.remove()
+            messageListeners.removeValue(forKey: chatId)
+        }
+
+        let coll = db.collection("chats").document(chatId).collection("messages")
+        let q = coll.order(by: "createdAt", descending: false)
+        print("listenForMessages: adding listener for chatId=\(chatId)")
+        let listener = q.addSnapshotListener { snap, err in
+            if let err = err {
+                print("listenForMessages(\(chatId)) error: \(err)")
+                return
+            }
+            let docs = snap?.documents ?? []
+            var msgs: [ChatMessage] = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                let sender = data["senderId"] as? String ?? (data["sender"] as? String ?? "")
+                let text = data["text"] as? String ?? ""
+                let date = (data["createdAt"] as? Timestamp)?.dateValue()
+                msgs.append(ChatMessage(id: id, senderId: sender, text: text, createdAt: date))
+            }
+            DispatchQueue.main.async {
+                self.messagesByChat[chatId] = msgs
+            }
+        }
+
+        messageListeners[chatId] = listener
+    }
+
+    func stopListeningForMessages(chatId: String) {
+        if let l = messageListeners[chatId] { l.remove(); messageListeners.removeValue(forKey: chatId) }
+        DispatchQueue.main.async { self.messagesByChat[chatId] = [] }
+    }
+
+    func stopAllChatListeners() {
+        if let l = chatsListener { l.remove(); chatsListener = nil }
+        for (_, l) in messageListeners { l.remove() }
+        messageListeners.removeAll()
+        DispatchQueue.main.async { self.chats = []; self.messagesByChat = [:]; self.chatsDebug = "stopped" }
+    }
+
     init() {
         // Ensure Firebase is configured before using Firestore
         if FirebaseApp.app() == nil {
@@ -99,17 +218,21 @@ class FirestoreManager: ObservableObject {
                  self.fetchCurrentProfiles(for: uid)
                  // Also load the userType document for quick role checks
                  self.fetchUserType(for: uid)
-             } else {
-                 // user signed out - clear cached profiles and photo URLs
-                 DispatchQueue.main.async {
-                     self.currentClient = nil
-                     self.currentClientPhotoURL = nil
-                     self.currentUserTabImage = nil
-                     self.currentCoach = nil
-                     self.currentCoachPhotoURL = nil
-                     self.currentUserType = nil
-                 }
-             }
+                 // Start listening for user's chats
+                 self.listenForChatsForCurrentUser()
+              } else {
+                  // user signed out - clear cached profiles and photo URLs
+                  DispatchQueue.main.async {
+                      self.currentClient = nil
+                      self.currentClientPhotoURL = nil
+                      self.currentUserTabImage = nil
+                      self.currentCoach = nil
+                      self.currentCoachPhotoURL = nil
+                      self.currentUserType = nil
+                     // stop and clear chat listeners/state
+                     self.stopAllChatListeners()
+                  }
+              }
          }
 
         // Optionally start listening to coaches collection
@@ -1697,46 +1820,78 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    /// Create or return an existing one-to-one chat document between the current user and the provided coach id.
-    /// Chat document id is deterministic: sorted uids joined by '_' so there is one chat per pair.
-    func createOrGetChat(withCoachId coachId: String, completion: @escaping (String?) -> Void) {
+    /// Send a text message into chats/{chatId}/messages and update the parent chat document's lastMessage fields.
+    func sendMessage(chatId: String, text: String, completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
-            print("createOrGetChat: no authenticated user")
-            DispatchQueue.main.async { completion(nil) }
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
         }
-        let pair = [uid, coachId].sorted()
-        let chatId = pair.joined(separator: "_")
+
         let chatRef = db.collection("chats").document(chatId)
+        let messagesColl = chatRef.collection("messages")
+        let newMsgRef = messagesColl.document()
 
-        print("createOrGetChat: called for uid=\(uid) coachId=\(coachId) chatId=\(chatId) path=\(chatRef.path)")
+        let data: [String: Any] = [
+            "senderId": uid,
+            "text": text,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
 
+        // Use a batch to write the message and update the parent chat metadata atomically
+        let batch = db.batch()
+        batch.setData(data, forDocument: newMsgRef)
+        batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatRef, merge: true)
+
+        batch.commit { err in
+            if let err = err {
+                print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
+                completion?(err)
+            } else {
+                completion?(nil)
+            }
+        }
+    }
+
+    // MARK: - Private helpers
+
+    // MARK: - Firestore data resolvers
+
+    // MARK: - Firestore data writers
+
+    // MARK: - Firestore fetchers
+
+    // MARK: - Firestore listeners
+
+    // MARK: - Misc helpers
+
+    /// Ensure a chat exists for the current user and the coachId. Uses deterministic id composed of sorted uids joined with '_' so UI can optimistically navigate.
+    /// Calls completion with the chatId or nil on failure.
+    func createOrGetChat(withCoachId coachId: String, completion: @escaping (String?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else { completion(nil); return }
+        let chatId = ([uid, coachId].sorted().joined(separator: "_"))
+        let chatRef = db.collection("chats").document(chatId)
         chatRef.getDocument { snap, err in
             if let err = err {
-                print("createOrGetChat: getDocument error: \(err)")
-                DispatchQueue.main.async { completion(nil) }
-                return
+                print("createOrGetChat: getDocument failed: \(err)")
+                // Try to create anyway
             }
             if let snap = snap, snap.exists {
-                print("createOrGetChat: chat exists at \(chatRef.path)")
-                DispatchQueue.main.async { completion(chatId) }
+                completion(chatId)
                 return
             }
-
-            // Create new chat document with participants and timestamps
+            // create chat document atomically if missing
             let data: [String: Any] = [
-                "participants": pair,
+                "participants": [uid, coachId],
                 "createdAt": FieldValue.serverTimestamp(),
-                "lastMessageAt": FieldValue.serverTimestamp(),
-                "lastMessageText": ""
+                "lastMessageText": NSNull(),
+                "lastMessageAt": FieldValue.serverTimestamp()
             ]
-            chatRef.setData(data) { err in
+            chatRef.setData(data, merge: true) { err in
                 if let err = err {
                     print("createOrGetChat: failed to create chat: \(err)")
-                    DispatchQueue.main.async { completion(nil) }
+                    completion(nil)
                 } else {
-                    print("createOrGetChat: created chat at \(chatRef.path)")
-                    DispatchQueue.main.async { completion(chatId) }
+                    completion(chatId)
                 }
             }
         }

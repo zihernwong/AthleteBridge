@@ -268,16 +268,9 @@ struct MainAppView: View {
 
     // Placeholder messages tab content
     private var messagesTab: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                Text("Messages").font(.title2).bold()
-                Text("Coming soon — messaging will be implemented here.")
-                    .font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding()
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Messages")
-        }
+        MessagesView()
+            .environmentObject(firestore)
+            .environmentObject(auth)
     }
 
     // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
