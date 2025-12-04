@@ -488,7 +488,7 @@ import FirebaseAuth
              }
          }
          .onAppear { fetchForSelectedDate() }
-         .onChange(of: date) { _ in fetchForSelectedDate() }
+         .onChange(of: date) { _old, _new in fetchForSelectedDate() }
          // Present booking form when user taps available slot
          .sheet(isPresented: $showBookingSheet) {
              NewBookingFormView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
@@ -496,7 +496,7 @@ import FirebaseAuth
                  .environmentObject(auth)
          }
          // When the booking sheet is dismissed, refresh bookings for the selected date
-         .onChange(of: showBookingSheet) { newVal in
+         .onChange(of: showBookingSheet) { _old, newVal in
              if newVal == false {
                  fetchForSelectedDate()
              }
