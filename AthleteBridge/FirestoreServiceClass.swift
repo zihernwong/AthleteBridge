@@ -18,6 +18,8 @@ class FirestoreManager: ObservableObject {
     @Published var coachPhotoURLs: [String: URL?] = [:]
     @Published var currentClient: Client? = nil
     @Published var currentClientPhotoURL: URL? = nil
+    // Small cached UIImage for the tab bar/avatar usage (keeps MainAppView simple and avoids re-downloading)
+    @Published var currentUserTabImage: UIImage? = nil
     @Published var currentCoach: Coach? = nil
     @Published var currentCoachPhotoURL: URL? = nil
     // Published user type from `userType/{uid}` (e.g. "COACH" or "CLIENT")
@@ -91,23 +93,24 @@ class FirestoreManager: ObservableObject {
 
         // Listen for auth state changes and fetch profiles when a user signs in
         self.authStateListenerHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            guard let self = self else { return }
-            if let uid = user?.uid {
-                print("[FirestoreManager] auth state changed - user signed in: \(uid). Fetching profiles.")
-                self.fetchCurrentProfiles(for: uid)
-                // Also load the userType document for quick role checks
-                self.fetchUserType(for: uid)
-            } else {
-                // user signed out - clear cached profiles and photo URLs
-                DispatchQueue.main.async {
-                    self.currentClient = nil
-                    self.currentClientPhotoURL = nil
-                    self.currentCoach = nil
-                    self.currentCoachPhotoURL = nil
-                    self.currentUserType = nil
-                }
-            }
-        }
+             guard let self = self else { return }
+             if let uid = user?.uid {
+                 print("[FirestoreManager] auth state changed - user signed in: \(uid). Fetching profiles.")
+                 self.fetchCurrentProfiles(for: uid)
+                 // Also load the userType document for quick role checks
+                 self.fetchUserType(for: uid)
+             } else {
+                 // user signed out - clear cached profiles and photo URLs
+                 DispatchQueue.main.async {
+                     self.currentClient = nil
+                     self.currentClientPhotoURL = nil
+                     self.currentUserTabImage = nil
+                     self.currentCoach = nil
+                     self.currentCoachPhotoURL = nil
+                     self.currentUserType = nil
+                 }
+             }
+         }
 
         // Optionally start listening to coaches collection
         fetchCoaches()
@@ -203,7 +206,13 @@ class FirestoreManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city)
                     self.currentClientPhotoURL = resolved
-                    if resolved == nil { print("fetchCurrentProfiles: no client photo for \(id)") }
+                    if let r = resolved {
+                        print("fetchCurrentProfiles: client photo resolved for \(id): \(r.absoluteString)")
+                        self.fetchAndCacheTabImage(from: r)
+                    } else {
+                        print("fetchCurrentProfiles: no client photo for \(id)")
+                        self.currentUserTabImage = nil
+                    }
                 }
             }
         }
@@ -239,7 +248,13 @@ class FirestoreManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, meetingPreference: meetingPref)
                     self.currentCoachPhotoURL = resolved
-                    if resolved == nil { print("fetchCurrentProfiles: no coach photo for \(id)") }
+                    if let r = resolved {
+                        print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
+                        self.fetchAndCacheTabImage(from: r)
+                    } else {
+                        print("fetchCurrentProfiles: no coach photo for \(id)")
+                        self.currentUserTabImage = nil
+                    }
                 }
             }
         }
@@ -280,6 +295,32 @@ class FirestoreManager: ObservableObject {
                 return
             }
             completion(url)
+        }
+    }
+
+    // Download a small cached UIImage for the tab bar from a resolved URL and store it in `currentUserTabImage`.
+    // Runs asynchronously and resizes the image to roughly 44x44 points (screen scale aware).
+    func fetchAndCacheTabImage(from url: URL) {
+        Task.detached { @MainActor in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let image = UIImage(data: data) {
+                    // Resize to 44x44 points at device scale to keep memory low and match UI
+                    let targetPoints: CGFloat = 44.0
+                    let scale = UIScreen.main.scale
+                    let targetPx = CGSize(width: targetPoints * scale, height: targetPoints * scale)
+                    let renderer = UIGraphicsImageRenderer(size: targetPx)
+                    let resized = renderer.image { _ in
+                        image.draw(in: CGRect(origin: .zero, size: targetPx))
+                    }
+                    self.currentUserTabImage = resized
+                } else {
+                    self.currentUserTabImage = nil
+                }
+            } catch {
+                print("fetchAndCacheTabImage: failed to download image for tab: \(error) - url=\(url.absoluteString)")
+                self.currentUserTabImage = nil
+            }
         }
     }
 
@@ -508,7 +549,7 @@ class FirestoreManager: ObservableObject {
                             }
                         } else {
                             // coach might be string
-                            if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachStr }
+                            if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachID }
                             let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
                             let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
                             let location = data["Location"] as? String
