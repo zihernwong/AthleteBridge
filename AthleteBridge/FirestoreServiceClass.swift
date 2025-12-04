@@ -1257,8 +1257,7 @@ class FirestoreManager: ObservableObject {
         // Warning: storing unbounded arrays on documents can grow large; consider
         // migrating to subcollections only if calendar arrays become too large.
 
-        batch.commit { [weak self] err in
-            guard let self = self else { completion(err); return }
+        batch.commit { err in
             if let err = err {
                 print("[FirestoreManager] saveBookingAndMirror commit error: \(err)")
                 completion(err)

@@ -119,7 +119,11 @@ import SwiftUI
     private func coachRow(for coach: Coach) -> some View {
         NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top) {
+                HStack(alignment: .top, spacing: 12) {
+                    // show coach-specific avatar when resolved; fallback behavior in AvatarView remains
+                    let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                    AvatarView(url: coachURL ?? nil, size: 56)
+
                     VStack(alignment: .leading) {
                         Text(coach.name).font(.headline)
                         if !coach.specialties.isEmpty {
@@ -132,7 +136,9 @@ import SwiftUI
                             Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
                         }
                     }
+
                     Spacer()
+
                     if let reviews = coachReviews[coach.id], !reviews.isEmpty {
                         let avg = averageRating(from: reviews)
                         VStack {
@@ -151,7 +157,6 @@ import SwiftUI
                     Spacer()
                 }
             }
-            .padding(.vertical, 6)
         }
     }
 
