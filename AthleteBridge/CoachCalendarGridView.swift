@@ -40,18 +40,6 @@ import FirebaseAuth
               let coachAvails = coach.availability.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
                 return availPrefs.contains { pref in coachAvails.contains { avail in avail.contains(pref) } }
            }
-         }
-
-        // Next: apply client's desired improvement areas (goals) against coach specialties.
-        // The client.goals is an array of strings provided by the caller; match case-insensitive
-        // and as substring so "confidence" matches "confidence coaching" or "mental confidence".
-        let clientGoals = client.goals.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
-        if !clientGoals.isEmpty {
-            candidates = candidates.filter { coach in
-                let specialtiesLower = coach.specialties.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                // Match if any client goal is a substring of any specialty
-                return clientGoals.contains { goal in specialtiesLower.contains { spec in spec.contains(goal) } }
-            }
         }
 
         // Then apply search tokens (if any). If no search token, return availability-filtered candidates.
@@ -510,7 +498,8 @@ import FirebaseAuth
          .onChange(of: date) { _old, _new in fetchForSelectedDate() }
          // Present booking form when user taps available slot
          .sheet(isPresented: $showBookingSheet) {
-             NewBookingFormView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
+             BookingEditorView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
+                 .id(selectedSlotStart)
                  .environmentObject(firestore)
                  .environmentObject(auth)
          }
