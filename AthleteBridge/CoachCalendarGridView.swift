@@ -32,32 +32,51 @@ import FirebaseAuth
      }
 
      private func filteredCoaches() -> [Coach] {
-         let all = firestore.coaches
-         // If the caller provided a searchQuery, prefer that. Otherwise use localSearchText.
-         let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
-         guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return all }
-
-         // Tokenize query by commas and whitespace so multi-term searches work: "tennis, confidence" or "tennis confidence"
-         let separators = CharacterSet(charactersIn: ",").union(.whitespacesAndNewlines)
-         let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
-
-         return all.filter { coach in
-             let nameLower = coach.name.lowercased()
-             // Match if any token appears in the coach name
-             if tokens.contains(where: { nameLower.contains($0) }) { return true }
-
-             // Match if any token appears in any specialty
-             let specialtiesLower = coach.specialties.map { $0.lowercased() }
-             if tokens.contains(where: { token in specialtiesLower.contains(where: { $0.contains(token) }) }) {
-                 return true
-             }
-
-             // Also match against combined specialties string (helps multi-word specialties)
-             let combinedSpecs = specialtiesLower.joined(separator: " ")
-             if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
-
-             return false
+         // Start with all coaches
+         var candidates = firestore.coaches
+        let availPrefs = client.preferredAvailability.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        if !availPrefs.isEmpty {
+           candidates = candidates.filter { coach in
+              let coachAvails = coach.availability.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                return availPrefs.contains { pref in coachAvails.contains { avail in avail.contains(pref) } }
+           }
          }
+
+        // Next: apply client's desired improvement areas (goals) against coach specialties.
+        // The client.goals is an array of strings provided by the caller; match case-insensitive
+        // and as substring so "confidence" matches "confidence coaching" or "mental confidence".
+        let clientGoals = client.goals.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        if !clientGoals.isEmpty {
+            candidates = candidates.filter { coach in
+                let specialtiesLower = coach.specialties.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                // Match if any client goal is a substring of any specialty
+                return clientGoals.contains { goal in specialtiesLower.contains { spec in spec.contains(goal) } }
+            }
+        }
+
+        // Then apply search tokens (if any). If no search token, return availability-filtered candidates.
+        let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
+        guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return candidates }
+
+        // Tokenize query by commas and whitespace so multi-term searches work: "tennis, confidence" or "tennis confidence"
+        let separators = CharacterSet(charactersIn: ",").union(.whitespacesAndNewlines)
+       let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
+
+        return candidates.filter { coach in
+            let nameLower = coach.name.lowercased()
+            // Match if any token appears in the coach name
+           if tokens.contains(where: { nameLower.contains($0) }) { return true }
+
+            // Match if any token appears in any specialty
+            let specialtiesLower = coach.specialties.map { $0.lowercased() }
+            if tokens.contains(where: { token in specialtiesLower.contains(where: { $0.contains(token) }) }) { return true }
+
+           // Also match against combined specialties string (helps multi-word specialties)
+           let combinedSpecs = specialtiesLower.joined(separator: " ")
+           if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
+
+            return false
+       }
      }
 
      var body: some View {
