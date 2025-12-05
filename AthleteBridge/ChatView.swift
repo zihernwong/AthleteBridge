@@ -100,7 +100,13 @@ struct ChatView: View {
                 let text = data["text"] as? String ?? ""
                 var createdAt: Date? = nil
                 if let ts = data["createdAt"] as? Timestamp { createdAt = ts.dateValue() }
-                mapped.append(Message(id: id, senderId: sender, text: text, createdAt: createdAt))
+                var readByMap: [String: Date]? = nil
+                if let rb = data["readBy"] as? [String: Timestamp] {
+                    var tmp: [String: Date] = [:]
+                    for (k,v) in rb { tmp[k] = v.dateValue() }
+                    readByMap = tmp
+                }
+                mapped.append(Message(id: id, senderId: sender, text: text, createdAt: createdAt, readBy: readByMap))
             }
             // sort by createdAt (nil -> older)
             mapped.sort { (a,b) in
@@ -126,10 +132,12 @@ struct ChatView: View {
 
         let newDoc = messagesColl.document()
         let nowField: FieldValue = FieldValue.serverTimestamp()
+        // include initial readBy for the sender so sent messages show as read by the sender
         let payload: [String: Any] = [
             "senderId": uid,
             "text": trimmed,
-            "createdAt": nowField
+            "createdAt": nowField,
+            "readBy": [uid: nowField]
         ]
 
         // Use batch to write message and update parent chat's last message metadata
@@ -159,6 +167,7 @@ fileprivate struct Message: Identifiable, Equatable {
     let senderId: String
     let text: String
     let createdAt: Date?
+    let readBy: [String: Date]?
 }
 
 fileprivate struct MessageRow: View {
@@ -178,6 +187,15 @@ fileprivate struct MessageRow: View {
                     Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                }
+                // Show read receipt info for messages sent by me: display count of other users who have read
+                if isMe, let rb = message.readBy {
+                    let otherReaders = rb.keys.filter { $0 != Auth.auth().currentUser?.uid }
+                    if !otherReaders.isEmpty {
+                        Text("Read by: \(otherReaders.count)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             if !isMe { Spacer() }
