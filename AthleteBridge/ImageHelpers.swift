@@ -24,3 +24,4 @@ func appLogoImageSwiftUI() -> Image? {
     if let ui = appLogoUIImage() { return Image(uiImage: ui) }
     return nil
 }
+
