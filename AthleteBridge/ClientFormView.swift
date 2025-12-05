@@ -75,26 +75,28 @@ struct ClientFormView: View {
                     }
                     
                     NavigationLink("Find Coaches") {
-                        // Fallback to Morning if user didn't select any availability
-                        let prefs = selectedAvailability.isEmpty ? ["Morning"] : Array(selectedAvailability)
-                        let client = Client(name: "You",
-                                            goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
-                                            preferredAvailability: prefs)
+                        LazyView {
+                            // Fallback to Morning if user didn't select any availability
+                            let prefs = selectedAvailability.isEmpty ? ["Morning"] : Array(selectedAvailability)
+                            let client = Client(name: "You",
+                                                goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
+                                                preferredAvailability: prefs)
 
-                        // Determine whether the signed-in user should be treated as a coach.
-                        let isCoachUser: Bool = {
-                            if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
-                            if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
-                            if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
-                            return false
-                        }()
+                            // Determine whether the signed-in user should be treated as a coach.
+                            let isCoachUser: Bool = {
+                                if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
+                                if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
+                                if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
+                                return false
+                            }()
 
-                        if isCoachUser {
-                            CoachLogoView()
-                        } else {
-                            MatchResultsView(client: client, searchQuery: searchText)
+                            if isCoachUser {
+                                CoachLogoView()
+                            } else {
+                                MatchResultsView(client: client, searchQuery: searchText)
+                            }
                         }
-                    }
+                     }
                 }
                 .navigationTitle("Find a Coach")
                  .onAppear {
