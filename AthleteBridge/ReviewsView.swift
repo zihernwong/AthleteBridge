@@ -92,12 +92,8 @@ struct ReviewsView: View {
                     // If the user is a client, provide a navigation link to a dedicated screen
                     Section(header: Text("Your Reviews")) {
                         NavigationLink(destination: ReviewsByUserView().environmentObject(firestore).environmentObject(auth)) {
-                            HStack {
-                                Text("View My Reviews")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }
-                            .padding(.vertical, 8)
+                            Text("View My Reviews")
+                                .padding(.vertical, 8)
                         }
                     }
                 } else {
@@ -140,12 +136,8 @@ struct ReviewsView: View {
                     // Reviews written by the current user (fallback view) - link to dedicated screen
                     Section(header: Text("Your Reviews")) {
                         NavigationLink(destination: ReviewsByUserView().environmentObject(firestore).environmentObject(auth)) {
-                            HStack {
-                                Text("View My Reviews")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }
-                            .padding(.vertical, 8)
+                            Text("View My Reviews")
+                                .padding(.vertical, 8)
                         }
                     }
                 }
