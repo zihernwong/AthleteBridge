@@ -1831,10 +1831,12 @@ class FirestoreManager: ObservableObject {
         let messagesColl = chatRef.collection("messages")
         let newMsgRef = messagesColl.document()
 
+        // include initial readBy for the sender so their outgoing message is immediately marked as read by them
         let data: [String: Any] = [
             "senderId": uid,
             "text": text,
-            "createdAt": FieldValue.serverTimestamp()
+            "createdAt": FieldValue.serverTimestamp(),
+            "readBy": [uid: FieldValue.serverTimestamp()]
         ]
 
         // Use a batch to write the message and update the parent chat metadata atomically
