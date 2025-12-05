@@ -1,7 +1,7 @@
 import SwiftUI
 
-// New booking form that posts a booking to Firestore
-struct NewBookingFormView: View {
+// Unified booking editor used by BookingsView and other places.
+struct BookingEditorView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
     @Binding var showSheet: Bool
@@ -12,7 +12,7 @@ struct NewBookingFormView: View {
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
     // selectedLocationId references a document id in clients/{uid}/locations (firestore.locations)
     @State private var selectedLocationId: String = ""
-    @State private var notes: String = "notes"
+    @State private var notes: String = ""
 
     @State private var isSaving = false
     @State private var alertMessage: String = ""
@@ -26,11 +26,13 @@ struct NewBookingFormView: View {
     }
 
     // Custom initializer to allow pre-filling coach/start/end when created from a calendar slot
-    init(showSheet: Binding<Bool>, initialCoachId: String? = nil, initialStart: Date? = nil, initialEnd: Date? = nil) {
+    init(showSheet: Binding<Bool>, initialCoachId: String? = nil, initialStart: Date? = nil, initialEnd: Date? = nil, initialLocationId: String? = nil, initialNotes: String? = nil) {
         self._showSheet = showSheet
         self._selectedCoachId = State(initialValue: initialCoachId ?? "")
         self._startAt = State(initialValue: initialStart ?? Date())
         self._endAt = State(initialValue: initialEnd ?? (initialStart ?? Date()).addingTimeInterval(60*30))
+        self._selectedLocationId = State(initialValue: initialLocationId ?? "")
+        self._notes = State(initialValue: initialNotes ?? "")
     }
 
     var body: some View {
@@ -254,9 +256,9 @@ struct NewBookingFormView: View {
     }
 }
 
-struct NewBookingFormView_Previews: PreviewProvider {
+struct BookingEditorView_Previews: PreviewProvider {
     static var previews: some View {
-        NewBookingFormView(showSheet: .constant(true), initialCoachId: "", initialStart: Date(), initialEnd: Date().addingTimeInterval(1800))
+        BookingEditorView(showSheet: .constant(true), initialCoachId: "", initialStart: Date(), initialEnd: Date().addingTimeInterval(1800))
             .environmentObject(FirestoreManager())
             .environmentObject(AuthViewModel())
     }
