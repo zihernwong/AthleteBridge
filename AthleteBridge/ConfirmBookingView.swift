@@ -134,7 +134,7 @@ struct ConfirmBookingView: View {
         isProcessing = true
         errorMessage = nil
 
-        // Simply set status back to 'requested' or 'declined' depending on desired flow. We'll set 'declined_by_client'.
+
         let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
         let coachId = booking.coachID
         let clientId = booking.clientID
