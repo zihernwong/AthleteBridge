@@ -46,6 +46,9 @@ struct GoalsSelectionView: View {
                                 }
                             }
                             .padding(.vertical, 8)
+                            // make the hit area span the full row width
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                             .listRowBackground(Color.clear)
                         }
                         .buttonStyle(PlainButtonStyle())
