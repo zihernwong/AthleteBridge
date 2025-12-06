@@ -130,9 +130,9 @@ struct ProfileView: View {
                 TextField("e.g. 55401", text: $clientZipCode)
                     .keyboardType(.numberPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onChange(of: clientZipCode) { newVal in
-                        // small debounce not necessary here; perform a lookup when user finishes typing
-                        lookupCity(forZip: newVal) { city in
+                    .onChange(of: clientZipCode) {
+                        // iOS 17+ recommended onChange signature: use the state directly
+                        lookupCity(forZip: clientZipCode) { city in
                             if let city = city { self.clientCity = city }
                         }
                     }
@@ -141,6 +141,17 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.top, 6)
+            }
+
+            // Subscription management placeholder for clients
+            Section(header: Text("Subscription")) {
+                NavigationLink(destination: ManageSubscriptionView()) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                }
             }
         }
     }
@@ -171,6 +182,17 @@ struct ProfileView: View {
             VStack(alignment: .leading) {
                 Text("Biography").font(.subheadline).foregroundColor(.secondary)
                 TextEditor(text: $bioText).frame(minHeight: 120)
+            }
+
+            // Subscription management placeholder for coaches
+            Section(header: Text("Subscription")) {
+                NavigationLink(destination: ManageSubscriptionView()) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                }
             }
         }
     }
@@ -239,7 +261,7 @@ struct ProfileView: View {
             firestore.saveClient(id: uid, name: name.isEmpty ? "Unnamed" : name, goals: Array(selectedGoals), preferredAvailability: Array(selectedClientAvailability), meetingPreference: selectedClientMeetingPreference, meetingPreferenceClear: false, skillLevel: selectedClientSkillLevel, zipCode: clientZipCode.isEmpty ? nil : clientZipCode, city: clientCity.isEmpty ? nil : clientCity, photoURL: nil) { err in
                 DispatchQueue.main.async {
                     isSaving = false
-                    if let err = err { saveMessage = "Error: \(err.localizedDescription)" } else { saveMessage = "Saved"; firestore.fetchCurrentProfiles(for: uid) }
+                    if let err = err { saveMessage = "Error: \(err.localizedDescription)" } else { saveMessage = "Saved"; firestore.fetchCurrentProfiles(for: uid); DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { saveMessage = nil } }
                 }
             }
         } else {
@@ -249,7 +271,7 @@ struct ProfileView: View {
             firestore.saveCoachWithSchema(id: uid, firstName: first.isEmpty ? name : first, lastName: last, specialties: Array(selectedSpecialties), availability: Array(selectedClientAvailability), experienceYears: experienceYears, hourlyRate: Double(hourlyRateText), meetingPreference: nil, photoURL: nil, bio: bioText, zipCode: coachZipCode.isEmpty ? nil : coachZipCode, city: coachCity.isEmpty ? nil : coachCity, active: true, overwrite: true) { err in
                 DispatchQueue.main.async {
                     isSaving = false
-                    if let err = err { saveMessage = "Error: \(err.localizedDescription)" } else { saveMessage = "Saved"; firestore.fetchCurrentProfiles(for: uid) }
+                    if let err = err { saveMessage = "Error: \(err.localizedDescription)" } else { saveMessage = "Saved"; firestore.fetchCurrentProfiles(for: uid); DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { saveMessage = nil } }
                 }
             }
         }
