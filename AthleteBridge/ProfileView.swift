@@ -19,7 +19,9 @@ struct ProfileView: View {
 
     // Client fields: fixed multi-select goals
     @State private var selectedGoals: Set<String> = []
-    private let availableGoals: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    // Subjects (dynamic) are loaded from Firestore.collection("subjects") via FirestoreManager.subjects
+    // We still keep a local fallback to show while loading; FirestoreManager will seed defaults on first run.
+    private var availableGoalsFallback: [String] { ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"] }
     // client preferred availability now supports multiple selections
     @State private var selectedClientAvailability: Set<String> = []
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
@@ -97,6 +99,14 @@ struct ProfileView: View {
                         // Ensure we have userType (may already be loaded elsewhere)
                         firestore.fetchUserType(for: uid)
                     }
+
+                    // Seed subjects collection with sensible defaults if empty, then fetch subjects
+                    firestore.seedSubjectsIfEmpty(defaults: availableGoalsFallback) { _ in
+                        firestore.fetchSubjects()
+                    }
+                    
+                    // Ensure we fetch subjects each time profile appears so dynamic options are up-to-date
+                    firestore.fetchSubjects()
 
                     // If userType is already known, set role accordingly; otherwise fall back to any loaded profile
                     if let t = firestore.currentUserType?.uppercased() {
@@ -262,8 +272,8 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // chip-style multi-select list
-            ChipMultiSelect(items: availableGoals, selection: $selectedGoals)
+            // chip-style multi-select list populated from Firestore subjects (fallback while loading)
+            ChipMultiSelect(items: firestore.subjects.isEmpty ? availableGoalsFallback : firestore.subjects, selection: $selectedGoals)
 
             Text("Preferred Availability")
                 .font(.subheadline)
