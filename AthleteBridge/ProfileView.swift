@@ -313,6 +313,19 @@ struct ProfileView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 6)
             }
+
+            // Subscription management placeholder for clients
+            Section(header: Text("Subscription")) {
+                NavigationLink(destination: ManageSubscriptionView()) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
         }
     }
 
@@ -391,6 +404,19 @@ struct ProfileView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.top, 6)
+            }
+
+            // Subscription management placeholder for coaches
+            Section(header: Text("Subscription")) {
+                NavigationLink(destination: ManageSubscriptionView()) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 8)
+                }
             }
 
             // Bio: multiline text editor for coach biography
