@@ -26,6 +26,76 @@ class FirestoreManager: ObservableObject {
     @Published var currentUserType: String? = nil
     @Published var userTypeLoaded: Bool = false
 
+    // MARK: - Subjects (dynamic goals)
+    @Published var subjects: [String] = []
+    @Published var subjectsDebug: String = ""
+
+    /// Fetch subject items from the `subjects` collection and publish as strings (ordered by `order` if present).
+    func fetchSubjects() {
+        DispatchQueue.main.async { self.subjectsDebug = "Starting fetchSubjects..." }
+        let coll = self.db.collection("subjects")
+        // Order by 'order' if exists, otherwise by title
+        coll.order(by: "order", descending: false).getDocuments { snapshot, error in
+            if let error = error {
+                let msg = "fetchSubjects error: \(error.localizedDescription)"
+                print(msg)
+                DispatchQueue.main.async { self.subjectsDebug += "\n\(msg)" }
+                return
+            }
+            let docs = snapshot?.documents ?? []
+            var items: [String] = []
+            for d in docs {
+                let data = d.data()
+                if let title = (data["title"] as? String) ?? (data["name"] as? String) {
+                    items.append(title)
+                }
+            }
+            DispatchQueue.main.async {
+                self.subjects = items
+                self.subjectsDebug += "\nLoaded \(items.count) subjects"
+            }
+        }
+    }
+
+    /// Seed the `subjects` collection with sane defaults if the collection is currently empty.
+    /// This is safe to call on app startup; it will do nothing if subjects already exist.
+    func seedSubjectsIfEmpty(defaults: [String], completion: @escaping (Error?) -> Void = { _ in }) {
+        let coll = self.db.collection("subjects")
+        coll.getDocuments { snapshot, error in
+            if let error = error {
+                print("seedSubjectsIfEmpty: failed to list subjects: \(error)")
+                completion(error)
+                return
+            }
+            let docs = snapshot?.documents ?? []
+            if !docs.isEmpty {
+                print("seedSubjectsIfEmpty: subjects collection already has \(docs.count) documents; skipping seeding")
+                completion(nil)
+                return
+            }
+
+            // Seed defaults
+            let batch = self.db.batch()
+            for (idx, title) in defaults.enumerated() {
+                let docRef = coll.document()
+                let data: [String: Any] = [
+                    "title": title,
+                    "order": idx,
+                    "active": true,
+                    "createdAt": FieldValue.serverTimestamp()
+                ]
+                batch.setData(data, forDocument: docRef)
+            }
+            batch.commit { err in
+                if let err = err { print("seedSubjectsIfEmpty: commit error: \(err)"); completion(err); return }
+                print("seedSubjectsIfEmpty: seeded \(defaults.count) subjects")
+                // refresh local cache
+                self.fetchSubjects()
+                completion(nil)
+            }
+        }
+    }
+
     // MARK: - Bookings
     struct BookingItem: Identifiable {
         let id: String
