@@ -31,7 +31,7 @@ struct GoalsSelectionView: View {
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
                 .padding(.horizontal)
-                .padding(.top, 4)
+                .padding(.top, 8)
 
                 List {
                     ForEach(filtered, id: \.self) { item in
@@ -52,6 +52,8 @@ struct GoalsSelectionView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                // add a larger top padding so the insetGrouped rounded background starts lower
+                .padding(.top, 22)
 
                 VStack(spacing: 12) {
                     Button(action: { showingSuggestSheet = true }) {
