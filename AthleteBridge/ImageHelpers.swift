@@ -25,3 +25,25 @@ func appLogoImageSwiftUI() -> Image? {
     return nil
 }
 
+
+// Add UIImage resizing helper used by MainAppView's avatar loader
+#if canImport(UIKit)
+import UIKit
+extension UIImage {
+    /// Resize the image to fit within targetSize while preserving aspect ratio.
+    /// Returns a new UIImage scaled to fit within the target size.
+    func resizeMaintainingAspectRatio(targetSize: CGSize) -> UIImage {
+        guard targetSize.width > 0 && targetSize.height > 0 else { return self }
+        let widthRatio = targetSize.width / self.size.width
+        let heightRatio = targetSize.height / self.size.height
+        let scale = min(widthRatio, heightRatio)
+        let newSize = CGSize(width: self.size.width * scale, height: self.size.height * scale)
+        // Use UIGraphicsImageRenderer for better fidelity
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let rendered = renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+        return rendered
+    }
+}
+#endif

@@ -96,7 +96,15 @@ struct ChatView: View {
             for d in docs {
                 let data = d.data()
                 let id = d.documentID
-                let sender = data["senderId"] as? String ?? ""
+                // Prefer DocumentReference senderRef, fall back to legacy senderId/string
+                var sender = ""
+                if let sRef = data["senderRef"] as? DocumentReference {
+                    sender = sRef.documentID
+                } else if let s = data["senderId"] as? String {
+                    sender = s
+                } else if let s = data["sender"] as? String {
+                    sender = s
+                }
                 let text = data["text"] as? String ?? ""
                 var createdAt: Date? = nil
                 if let ts = data["createdAt"] as? Timestamp { createdAt = ts.dateValue() }
@@ -133,8 +141,13 @@ struct ChatView: View {
         let newDoc = messagesColl.document()
         let nowField: FieldValue = FieldValue.serverTimestamp()
         // include initial readBy for the sender so sent messages show as read by the sender
+        // Build a senderRef DocumentReference based on current user type (coach/client)
+        let userTypeUpper = (firestore.currentUserType ?? "").uppercased()
+        let userColl = (userTypeUpper == "COACH") ? Firestore.firestore().collection("coaches") : Firestore.firestore().collection("clients")
+        let senderRef = userColl.document(uid)
         let payload: [String: Any] = [
-            "senderId": uid,
+            "senderRef": senderRef,
+            "senderId": uid, // keep legacy field for compatibility
             "text": trimmed,
             "createdAt": nowField,
             "readBy": [uid: nowField]

@@ -239,8 +239,13 @@ class FirestoreManager: ObservableObject {
         chatsListener = nil
 
         print("listenForChatsForCurrentUser: registering listener for uid=\(uid)")
-        let coll = db.collection("chats")
-        let query = coll.whereField("participants", arrayContains: uid).order(by: "lastMessageAt", descending: true)
+
+        // Prefer per-user pointer docs under coaches/{id}/chats or clients/{id}/chats for efficient listing.
+        let userTypeUpper = (self.currentUserType ?? "").uppercased()
+        let userCollName = (userTypeUpper == "COACH") ? "coaches" : "clients"
+        let userChatColl = db.collection(userCollName).document(uid).collection("chats")
+
+        let query = userChatColl.order(by: "lastMessageAt", descending: true)
 
         chatsListener = query.addSnapshotListener { snap, err in
             if let err = err {
@@ -254,10 +259,15 @@ class FirestoreManager: ObservableObject {
             for d in docs {
                 let data = d.data()
                 let id = d.documentID
-                let participants = (data["participants"] as? [String]) ?? []
+                var participantsArr: [String] = []
+                if let refs = data["participantRefs"] as? [DocumentReference] {
+                    participantsArr = refs.map { $0.documentID }
+                } else if let strArr = data["participants"] as? [String] {
+                    participantsArr = strArr
+                }
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
-                mapped.append(ChatItem(id: id, participants: participants, lastMessageText: lastText, lastMessageAt: lastAt))
+                mapped.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
             }
 
             DispatchQueue.main.async {
@@ -294,7 +304,14 @@ class FirestoreManager: ObservableObject {
             for d in docs {
                 let data = d.data()
                 let id = d.documentID
-                let sender = data["senderId"] as? String ?? (data["sender"] as? String ?? "")
+                var sender = ""
+                if let sRef = data["senderRef"] as? DocumentReference {
+                    sender = sRef.documentID
+                } else if let s = data["senderId"] as? String {
+                    sender = s
+                } else if let s = data["sender"] as? String {
+                    sender = s
+                }
                 let text = data["text"] as? String ?? ""
                 let date = (data["createdAt"] as? Timestamp)?.dateValue()
                 msgs.append(ChatMessage(id: id, senderId: sender, text: text, createdAt: date))
@@ -357,6 +374,14 @@ class FirestoreManager: ObservableObject {
         // Optionally fetch current user's profile if already signed in
         if let uid = Auth.auth().currentUser?.uid {
             fetchCurrentProfiles(for: uid)
+        }
+
+        // Attempt a safe, idempotent migration of legacy chat docs to the newer participantRefs schema.
+        // Runs in background and is limited to a small batch to avoid heavy work on startup.
+        // Call directly here (we are already MainActor) so the migration helper runs without actor-isolation warnings.
+        self.migrateChatsToParticipantRefs(limit: 200) { err in
+            if let err = err { print("migrateChatsToParticipantRefs completed with error: \(err)") }
+            else { print("migrateChatsToParticipantRefs completed") }
         }
     }
 
@@ -1938,6 +1963,7 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Send a text message into chats/{chatId}/messages and update the parent chat document's lastMessage fields.
+    /// Writes a senderRef DocumentReference and also preserves legacy senderId for compatibility.
     func sendMessage(chatId: String, text: String, completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
@@ -1945,46 +1971,65 @@ class FirestoreManager: ObservableObject {
         }
 
         let chatRef = db.collection("chats").document(chatId)
-        let messagesColl = chatRef.collection("messages")
-        let newMsgRef = messagesColl.document()
 
-        // include initial readBy for the sender so their outgoing message is immediately marked as read by them
-        let data: [String: Any] = [
-            "senderId": uid,
-            "text": text,
-            "createdAt": FieldValue.serverTimestamp(),
-            "readBy": [uid: FieldValue.serverTimestamp()]
-        ]
-
-        // Use a batch to write the message and update the parent chat metadata atomically
-        let batch = db.batch()
-        batch.setData(data, forDocument: newMsgRef)
-        batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatRef, merge: true)
-
-        batch.commit { err in
+        // Read chat participants so we can update per-user pointer docs as well
+        chatRef.getDocument { snap, err in
             if let err = err {
-                print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
-                completion?(err)
-            } else {
-                completion?(nil)
+                print("sendMessage: failed to read chat for participants: \(err)")
+                // continue anyway and write message to chat
+            }
+
+            // Determine current user collection for senderRef
+            let userTypeUpper = (self.currentUserType ?? "").uppercased()
+            let userCollName = (userTypeUpper == "COACH") ? "coaches" : "clients"
+            let senderRef = self.db.collection(userCollName).document(uid)
+
+            let messagesColl = chatRef.collection("messages")
+            let newMsgRef = messagesColl.document()
+
+            // include initial readBy for the sender so their outgoing message is immediately marked as read by them
+            var data: [String: Any] = [
+                "text": text,
+                "createdAt": FieldValue.serverTimestamp(),
+                "readBy": [uid: FieldValue.serverTimestamp()],
+                // write both reference and id for backward compatibility
+                "senderRef": senderRef,
+                "senderId": uid
+            ]
+
+            // Use a batch to write the message and update the parent chat metadata atomically
+            let batch = self.db.batch()
+            batch.setData(data, forDocument: newMsgRef)
+            batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatRef, merge: true)
+
+            // If participants are known on the chat document, update per-user pointer docs under each participant
+            if let pData = snap?.data(), let partRefs = pData["participantRefs"] as? [DocumentReference] {
+                for pref in partRefs {
+                    let userChatDoc = pref.collection("chats").document(chatId)
+                    var pointerData: [String: Any] = [
+                        "chatRef": chatRef,
+                        "lastMessageText": text,
+                        "lastMessageAt": FieldValue.serverTimestamp()
+                    ]
+                    // store participantRefs as an array of DocumentReference for listing
+                    pointerData["participantRefs"] = partRefs
+                    batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                }
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
+                    completion?(err)
+                } else {
+                    completion?(nil)
+                }
             }
         }
     }
 
-    // MARK: - Private helpers
-
-    // MARK: - Firestore data resolvers
-
-    // MARK: - Firestore data writers
-
-    // MARK: - Firestore fetchers
-
-    // MARK: - Firestore listeners
-
-    // MARK: - Misc helpers
-
     /// Ensure a chat exists for the current user and the coachId. Uses deterministic id composed of sorted uids joined with '_' so UI can optimistically navigate.
-    /// Calls completion with the chatId or nil on failure.
+    /// Calls completion with the chatId or nil on failure. Writes participantRefs as DocumentReferences and creates per-user pointer docs.
     func createOrGetChat(withCoachId coachId: String, completion: @escaping (String?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else { completion(nil); return }
         let chatId = ([uid, coachId].sorted().joined(separator: "_"))
@@ -1998,21 +2043,314 @@ class FirestoreManager: ObservableObject {
                 completion(chatId)
                 return
             }
-            // create chat document atomically if missing
-            let data: [String: Any] = [
-                "participants": [uid, coachId],
-                "createdAt": FieldValue.serverTimestamp(),
-                "lastMessageText": NSNull(),
-                "lastMessageAt": FieldValue.serverTimestamp()
-            ]
-            chatRef.setData(data, merge: true) { err in
-                if let err = err {
-                    print("createOrGetChat: failed to create chat: \(err)")
-                    completion(nil)
+
+            // Resolve roles (userType) for both participants so we can create DocumentReferences with ordering
+            let uids = [uid, coachId]
+            var types: [String: String] = [:]
+            let group = DispatchGroup()
+            for id in uids {
+                group.enter()
+                let doc = self.db.collection("userType").document(id)
+                doc.getDocument { usnap, _ in
+                    if let t = usnap?.data()?["type"] as? String {
+                        types[id] = t.uppercased()
+                        group.leave()
+                        return
+                    }
+                    // fallback: check existence under coaches -> if exists treat as COACH, else CLIENT
+                    self.db.collection("coaches").document(id).getDocument { csnap, _ in
+                        if let cs = csnap, cs.exists { types[id] = "COACH" }
+                        else { types[id] = "CLIENT" }
+                        group.leave()
+                    }
+                }
+            }
+
+            group.notify(queue: .main) {
+                // Build DocumentReferences for participants and ensure coach is first index
+                var coachRef: DocumentReference? = nil
+                var clientRef: DocumentReference? = nil
+
+                for id in uids {
+                    let t = types[id] ?? "CLIENT"
+                    if t == "COACH" {
+                        coachRef = self.db.collection("coaches").document(id)
+                    } else {
+                        // treat as client
+                        if clientRef == nil { clientRef = self.db.collection("clients").document(id) }
+                    }
+                }
+
+                // If we couldn't detect a coach (both clients), fall back to deterministic ordering by uid
+                var participantRefs: [DocumentReference] = []
+                if let cRef = coachRef, let clRef = clientRef {
+                    participantRefs = [cRef, clRef]
+                } else if let cRef = coachRef {
+                    // only one coach detected
+                    let otherId = (cRef.documentID == uid) ? coachId : uid
+                    let otherType = types[otherId] ?? "CLIENT"
+                    let otherRef = (otherType == "COACH") ? self.db.collection("coaches").document(otherId) : self.db.collection("clients").document(otherId)
+                    if types[otherId] == "COACH" {
+                        // both are coaches -> order by uid to be deterministic
+                        let pair = [cRef, otherRef].sorted { $0.documentID < $1.documentID }
+                        participantRefs = pair
+                    } else {
+                        // coach + client
+                        participantRefs = [cRef, otherRef]
+                    }
                 } else {
-                    completion(chatId)
+                    // no coach detected -> treat both as clients; order deterministically by uid ascending
+                    let refs = uids.sorted().map { self.db.collection("clients").document($0) }
+                    participantRefs = refs
+                }
+
+                // Only write participantRefs now; do not write the legacy participants string array.
+                let data: [String: Any] = [
+                    "participantRefs": participantRefs,
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "lastMessageText": NSNull(),
+                    "lastMessageAt": FieldValue.serverTimestamp()
+                ]
+
+                chatRef.setData(data, merge: true) { err in
+                    if let err = err {
+                        print("createOrGetChat: failed to create chat: \(err)")
+                        completion(nil)
+                    } else {
+                        // also create pointer docs under each participant for fast per-user listing
+                        let batch = self.db.batch()
+                        for pref in participantRefs {
+                            let comps = pref.path.split(separator: "/").map(String.init)
+                            if comps.count >= 2 {
+                                let collName = comps[0]
+                                let userId = comps[1]
+                                let userChatDoc = self.db.collection(collName).document(userId).collection("chats").document(chatId)
+                                let pointerData: [String: Any] = [
+                                    "chatRef": chatRef,
+                                    "participantRefs": participantRefs,
+                                    "lastMessageText": NSNull(),
+                                    "lastMessageAt": FieldValue.serverTimestamp()
+                                ]
+                                batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                            }
+                        }
+                        batch.commit { berr in
+                            if let berr = berr { print("createOrGetChat: failed to create pointer docs: \(berr)") }
+                            completion(chatId)
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// Migrate legacy chat documents that store `participants` as [String] into using `participantRefs` ([DocumentReference]).
+    /// This also creates/updates per-user pointer docs under coaches/{id}/chats and clients/{id}/chats.
+    /// Safe to run once during a rollout; idempotent for already-migrated chats.
+    func migrateChatsToParticipantRefs(limit: Int = 500, completion: @escaping (Error?) -> Void = { _ in }) {
+        let coll = self.db.collection("chats")
+        coll.limit(to: limit).getDocuments { snap, err in
+            if let err = err { print("migrateChatsToParticipantRefs: failed to list chats: \(err)"); completion(err); return }
+            let docs = snap?.documents ?? []
+            if docs.isEmpty { print("migrateChatsToParticipantRefs: no chats found to migrate"); completion(nil); return }
+
+            let group = DispatchGroup()
+            var firstError: Error? = nil
+
+            for doc in docs {
+                let data = doc.data()
+                // skip if already migrated
+                if data["participantRefs"] != nil { continue }
+                guard let partArr = data["participants"] as? [String], !partArr.isEmpty else { continue }
+
+                group.enter()
+                // Resolve each participant string to a DocumentReference.
+                var resolvedRefs: [DocumentReference] = []
+                let inner = DispatchGroup()
+
+                for raw in partArr {
+                    inner.enter()
+                    // normalize to uid (take last path component)
+                    let uid = raw.split(separator: "/").last.map(String.init) ?? raw
+
+                    // prefer reading userType collection if present
+                    let userTypeDoc = self.db.collection("userType").document(uid)
+                    userTypeDoc.getDocument { utsnap, _ in
+                        if let t = utsnap?.data()?["type"] as? String {
+                            let upper = t.uppercased()
+                            if upper == "COACH" {
+                                resolvedRefs.append(self.db.collection("coaches").document(uid))
+                                inner.leave()
+                                return
+                            } else {
+                                resolvedRefs.append(self.db.collection("clients").document(uid))
+                                inner.leave()
+                                return
+                            }
+                        }
+                        // fallback: check coaches/{uid} existence
+                        self.db.collection("coaches").document(uid).getDocument { csnap, _ in
+                            if let cs = csnap, cs.exists {
+                                resolvedRefs.append(self.db.collection("coaches").document(uid))
+                            } else {
+                                resolvedRefs.append(self.db.collection("clients").document(uid))
+                            }
+                            inner.leave()
+                        }
+                    }
+                }
+
+                inner.notify(queue: .main) {
+                    // write participantRefs into the chat doc and create pointer docs under each participant
+                    let chatRef = self.db.collection("chats").document(doc.documentID)
+                    var update: [String: Any] = ["participantRefs": resolvedRefs]
+                    // keep legacy participants as well for compatibility
+                    update["participants"] = partArr
+                    chatRef.setData(update, merge: true) { err in
+                        if let err = err {
+                            print("migrateChatsToParticipantRefs: failed to update chat \(doc.documentID): \(err)")
+                            if firstError == nil { firstError = err }
+                            group.leave()
+                            return
+                        }
+
+                        // create/update pointer docs under each participant's chats subcollection
+                        let batch = self.db.batch()
+                        for pref in resolvedRefs {
+                            let comps = pref.path.split(separator: "/").map(String.init)
+                            if comps.count >= 2 {
+                                let collName = comps[0]
+                                let userId = comps[1]
+                                let userChatDoc = self.db.collection(collName).document(userId).collection("chats").document(doc.documentID)
+                                let pointerData: [String: Any] = [
+                                    "chatRef": chatRef,
+                                    "participantRefs": resolvedRefs,
+                                    "participants": partArr,
+                                    "lastMessageText": data["lastMessageText"] ?? NSNull(),
+                                    "lastMessageAt": data["lastMessageAt"] ?? FieldValue.serverTimestamp()
+                                ]
+                                batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                            }
+                        }
+                        batch.commit { berr in
+                            if let berr = berr {
+                                print("migrateChatsToParticipantRefs: failed to write pointer docs for chat \(doc.documentID): \(berr)")
+                                if firstError == nil { firstError = berr }
+                            } else {
+                                print("migrateChatsToParticipantRefs: migrated chat \(doc.documentID)")
+                            }
+                            group.leave()
+                        }
+                    }
+                }
+            }
+
+            group.notify(queue: .main) {
+                completion(firstError)
+            }
+        }
+    }
+
+    /// Migrate all chats in the `chats` collection by paging through documents in batches and converting legacy `participants` string arrays into `participantRefs` (DocumentReference[]).
+    /// This function uses `migrateChatsToParticipantRefs(limit:completion:)` internally on each page and is idempotent.
+    func migrateAllChatsInBatches(pageSize: Int = 200, completion: @escaping (Error?) -> Void = { _ in }) {
+        let coll = self.db.collection("chats")
+        var lastDoc: DocumentSnapshot? = nil
+        var firstError: Error? = nil
+
+        func fetchPage() {
+            var q: Query = coll.order(by: FieldPath.documentID()).limit(to: pageSize)
+            if let last = lastDoc { q = q.start(afterDocument: last) }
+            q.getDocuments { snap, err in
+                if let err = err { completion(err); return }
+                let docs = snap?.documents ?? []
+                if docs.isEmpty { completion(firstError); return }
+
+                // Build a lightweight array of documentIDs to pass to a batch migration helper
+                let docIDs = docs.map { $0.documentID }
+                // Use the existing single-batch migration helper with a tailored limit: we'll directly process these docs.
+                self.migrateSpecificChats(docIDs: docIDs) { err in
+                    if let err = err {
+                        if firstError == nil { firstError = err }
+                    }
+                    // advance to next page
+                    lastDoc = docs.last
+                    // small delay to avoid hammering backend
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { fetchPage() }
+                }
+            }
+        }
+
+        fetchPage()
+    }
+
+    /// Helper to migrate a specific list of chat document IDs into participantRefs, used by the paged migrator.
+    private func migrateSpecificChats(docIDs: [String], completion: @escaping (Error?) -> Void) {
+        guard !docIDs.isEmpty else { completion(nil); return }
+        let group = DispatchGroup()
+        var firstError: Error? = nil
+
+        for id in docIDs {
+            group.enter()
+            let chatRef = self.db.collection("chats").document(id)
+            chatRef.getDocument { snap, err in
+                if let err = err { print("migrateSpecificChats: failed to read chat \(id): \(err)"); if firstError == nil { firstError = err }; group.leave(); return }
+                guard let data = snap?.data() else { group.leave(); return }
+                if data["participantRefs"] != nil { group.leave(); return }
+                guard let partArr = data["participants"] as? [String], !partArr.isEmpty else { group.leave(); return }
+
+                // Resolve participants into refs
+                var resolvedRefs: [DocumentReference] = []
+                let inner = DispatchGroup()
+                for raw in partArr {
+                    inner.enter()
+                    let uid = raw.split(separator: "/").last.map(String.init) ?? raw
+                    let userTypeDoc = self.db.collection("userType").document(uid)
+                    userTypeDoc.getDocument { utsnap, _ in
+                        if let t = utsnap?.data()?["type"] as? String {
+                            let upper = t.uppercased()
+                            if upper == "COACH" { resolvedRefs.append(self.db.collection("coaches").document(uid)); inner.leave(); return }
+                            else { resolvedRefs.append(self.db.collection("clients").document(uid)); inner.leave(); return }
+                        }
+                        self.db.collection("coaches").document(uid).getDocument { csnap, _ in
+                            if let cs = csnap, cs.exists { resolvedRefs.append(self.db.collection("coaches").document(uid)) }
+                            else { resolvedRefs.append(self.db.collection("clients").document(uid)) }
+                            inner.leave()
+                        }
+                    }
+                }
+
+                inner.notify(queue: .main) {
+                    let update: [String: Any] = ["participantRefs": resolvedRefs, "participants": partArr]
+                    chatRef.setData(update, merge: true) { err in
+                        if let err = err { print("migrateSpecificChats: failed to setData for \(id): \(err)"); if firstError == nil { firstError = err }; group.leave(); return }
+                        // update pointer docs
+                        let batch = self.db.batch()
+                        for pref in resolvedRefs {
+                            let comps = pref.path.split(separator: "/").map(String.init)
+                            if comps.count >= 2 {
+                                let collName = comps[0]
+                                let userId = comps[1]
+                                let userChatDoc = self.db.collection(collName).document(userId).collection("chats").document(id)
+                                let pointerData: [String: Any] = [
+                                    "chatRef": chatRef,
+                                    "participantRefs": resolvedRefs,
+                                    "participants": partArr,
+                                    "lastMessageText": data["lastMessageText"] ?? NSNull(),
+                                    "lastMessageAt": data["lastMessageAt"] ?? FieldValue.serverTimestamp()
+                                ]
+                                batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                            }
+                        }
+                        batch.commit { berr in
+                            if let berr = berr { print("migrateSpecificChats: failed to commit pointers for \(id): \(berr)"); if firstError == nil { firstError = berr } }
+                            group.leave()
+                        }
+                    }
+                }
+            }
+        }
+
+        group.notify(queue: .main) { completion(firstError) }
     }
 }
