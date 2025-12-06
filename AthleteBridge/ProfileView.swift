@@ -19,9 +19,9 @@ struct ProfileView: View {
 
     // Client fields: fixed multi-select goals
     @State private var selectedGoals: Set<String> = []
-    // Subjects (dynamic) are loaded from Firestore.collection("subjects") via FirestoreManager.subjects
-    // We still keep a local fallback to show while loading; FirestoreManager will seed defaults on first run.
-    private var availableGoalsFallback: [String] { ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"] }
+    private let availableGoals: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    // Backward-compatible alias used by the dropdown call site while Firestore subjects load
+    private var availableGoalsFallback: [String] { availableGoals }
     // client preferred availability now supports multiple selections
     @State private var selectedClientAvailability: Set<String> = []
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
@@ -58,6 +58,9 @@ struct ProfileView: View {
     @State private var saveMessage: String? = nil
     @State private var showSavedConfirmation: Bool = false
     @State private var showCopiedConfirmation: Bool = false
+    // Suggest new subject UI
+    @State private var showingSuggestSubjectSheet: Bool = false
+    @State private var suggestedSubjectText: String = ""
     // Tracks whether we are editing an existing profile (true) or creating a new one (false)
     @State private var isEditMode: Bool = false
 
@@ -99,14 +102,6 @@ struct ProfileView: View {
                         // Ensure we have userType (may already be loaded elsewhere)
                         firestore.fetchUserType(for: uid)
                     }
-
-                    // Seed subjects collection with sensible defaults if empty, then fetch subjects
-                    firestore.seedSubjectsIfEmpty(defaults: availableGoalsFallback) { _ in
-                        firestore.fetchSubjects()
-                    }
-                    
-                    // Ensure we fetch subjects each time profile appears so dynamic options are up-to-date
-                    firestore.fetchSubjects()
 
                     // If userType is already known, set role accordingly; otherwise fall back to any loaded profile
                     if let t = firestore.currentUserType?.uppercased() {
@@ -272,8 +267,47 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            // chip-style multi-select list populated from Firestore subjects (fallback while loading)
-            ChipMultiSelect(items: firestore.subjects.isEmpty ? availableGoalsFallback : firestore.subjects, selection: $selectedGoals)
+            // multi-select dropdown populated from Firestore subjects (fallback while loading)
+            MultiSelectDropdown(title: "Goals", items: firestore.subjects.isEmpty ? availableGoalsFallback : firestore.subjects.map { $0.title }, selection: $selectedGoals)
+
+            // Suggest a new goal button
+            Button(action: { showingSuggestSubjectSheet = true }) {
+                HStack {
+                    Image(systemName: "lightbulb")
+                    Text("Suggest a new goal")
+                    Spacer()
+                }
+            }
+            .buttonStyle(.bordered)
+            .sheet(isPresented: $showingSuggestSubjectSheet) {
+                NavigationStack {
+                    Form {
+                        Section(header: Text("Suggest a new goal")) {
+                            TextField("Enter a new goal", text: $suggestedSubjectText)
+                        }
+                        Section {
+                            Button("Submit") {
+                                let toAdd = suggestedSubjectText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !toAdd.isEmpty else { firestore.showToast("Enter a goal before submitting"); return }
+                                firestore.addSubject(title: toAdd) { err in
+                                    DispatchQueue.main.async {
+                                        if let err = err {
+                                            firestore.showToast("Failed to suggest: \(err.localizedDescription)")
+                                        } else {
+                                            firestore.showToast("Suggestion submitted")
+                                            // clear and dismiss
+                                            suggestedSubjectText = ""
+                                            showingSuggestSubjectSheet = false
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .navigationTitle("Suggest Goal")
+                    .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Close") { showingSuggestSubjectSheet = false } } }
+                }
+            }
 
             Text("Preferred Availability")
                 .font(.subheadline)
@@ -345,7 +379,7 @@ struct ProfileView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            ChipMultiSelect(items: availableSpecialties, selection: $selectedSpecialties)
+            MultiSelectDropdown(title: "Specialties", items: availableSpecialties, selection: $selectedSpecialties)
 
             // Experience as a wheel picker (scrollable)
             VStack(alignment: .leading) {

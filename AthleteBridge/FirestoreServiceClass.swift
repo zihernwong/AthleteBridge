@@ -26,16 +26,22 @@ class FirestoreManager: ObservableObject {
     @Published var currentUserType: String? = nil
     @Published var userTypeLoaded: Bool = false
 
-    // MARK: - Subjects (dynamic goals)
-    @Published var subjects: [String] = []
+    // MARK: - Subjects
+    struct Subject: Identifiable {
+        let id: String
+        let title: String
+        let order: Int
+        let active: Bool
+    }
+
+    @Published var subjects: [Subject] = []
     @Published var subjectsDebug: String = ""
 
-    /// Fetch subject items from the `subjects` collection and publish as strings (ordered by `order` if present).
+    /// Fetch all subjects from the `subjects` collection, ordered by the `order` field.
     func fetchSubjects() {
         DispatchQueue.main.async { self.subjectsDebug = "Starting fetchSubjects..." }
-        let coll = self.db.collection("subjects")
-        // Order by 'order' if exists, otherwise by title
-        coll.order(by: "order", descending: false).getDocuments { snapshot, error in
+        let coll = self.db.collection("subjects").order(by: "order")
+        coll.getDocuments { snapshot, error in
             if let error = error {
                 let msg = "fetchSubjects error: \(error.localizedDescription)"
                 print(msg)
@@ -43,16 +49,22 @@ class FirestoreManager: ObservableObject {
                 return
             }
             let docs = snapshot?.documents ?? []
-            var items: [String] = []
-            for d in docs {
+            let header = "fetchSubjects: total=\(docs.count)"
+            print(header)
+            DispatchQueue.main.async { self.subjectsDebug += "\n\(header)" }
+
+            let mapped: [Subject] = docs.map { d in
                 let data = d.data()
-                if let title = (data["title"] as? String) ?? (data["name"] as? String) {
-                    items.append(title)
-                }
+                let id = d.documentID
+                let title = (data["title"] as? String) ?? ""
+                let order = data["order"] as? Int ?? 0
+                let active = data["active"] as? Bool ?? true
+                return Subject(id: id, title: title, order: order, active: active)
             }
+
             DispatchQueue.main.async {
-                self.subjects = items
-                self.subjectsDebug += "\nLoaded \(items.count) subjects"
+                self.subjects = mapped
+                self.subjectsDebug += "\nAssigned \(mapped.count) subjects"
             }
         }
     }
@@ -90,6 +102,41 @@ class FirestoreManager: ObservableObject {
                 if let err = err { print("seedSubjectsIfEmpty: commit error: \(err)"); completion(err); return }
                 print("seedSubjectsIfEmpty: seeded \(defaults.count) subjects")
                 // refresh local cache
+                self.fetchSubjects()
+                completion(nil)
+            }
+        }
+    }
+
+    /// Add a new subject into the `subjects` collection (idempotent w.r.t. title, case-insensitive).
+    func addSubject(title: String, completion: @escaping (Error?) -> Void = { _ in }) {
+        let coll = self.db.collection("subjects")
+        // Normalize
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { completion(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "Empty title"])); return }
+
+        // Check for duplicates (case-insensitive) then add
+        coll.getDocuments { snap, err in
+            if let err = err { completion(err); return }
+            let docs = snap?.documents ?? []
+            let lower = trimmed.lowercased()
+            if docs.contains(where: { (($0.data()["title"] as? String)?.lowercased() == lower) }) {
+                // Already exists - refresh cache and return success
+                self.fetchSubjects()
+                completion(nil)
+                return
+            }
+
+            let order = docs.count
+            let data: [String: Any] = [
+                "title": trimmed,
+                "order": order,
+                "active": true,
+                "createdAt": FieldValue.serverTimestamp()
+            ]
+            coll.addDocument(data: data) { err in
+                if let err = err { completion(err); return }
+                // refresh in-memory subjects
                 self.fetchSubjects()
                 completion(nil)
             }
