@@ -6,6 +6,7 @@ struct BookingsView: View {
 
     @State private var showingNewBooking = false
     @State private var selectedBookingForAccept: FirestoreManager.BookingItem? = nil
+    @State private var selectedBookingForReview: FirestoreManager.BookingItem? = nil
     
     private var currentUserRole: String? { firestore.currentUserType?.uppercased() }
 
@@ -93,6 +94,11 @@ struct BookingsView: View {
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
+            .sheet(item: $selectedBookingForReview) { booking in
+                ReviewBookingView(booking: booking)
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+            }
         }
     }
 
@@ -117,8 +123,22 @@ struct BookingsView: View {
                 Text("No bookings yet").foregroundColor(.secondary)
             } else {
                 ForEach(firestore.bookings, id: \.id) { b in
-                    BookingRowView(item: b)
-                }
+                    VStack(alignment: .leading, spacing: 6) {
+                        BookingRowView(item: b)
+
+                        // If booking is pending acceptance, show a Review Booking button for clients
+                        if (b.status ?? "").lowercased() == "pending acceptance" {
+                            HStack {
+                                Spacer()
+                                Button(action: { selectedBookingForReview = b }) {
+                                    Text("Review Booking")
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.blue)
+                            }
+                        }
+                    }
+                 }
             }
         }
     }
