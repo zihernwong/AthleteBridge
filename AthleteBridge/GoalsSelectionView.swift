@@ -112,7 +112,7 @@ struct GoalsSelectionView: View {
         let title = suggestedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         isAdding = true
-        firestore.addSubject(title: title) { err in
+        firestore.addSubjectWithSlug(title: title, completion: { err in
             DispatchQueue.main.async {
                 isAdding = false
                 if let err = err {
@@ -130,6 +130,6 @@ struct GoalsSelectionView: View {
                     showingSuggestSheet = false
                 }
             }
-        }
+        })
     }
 }
