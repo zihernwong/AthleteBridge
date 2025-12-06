@@ -218,6 +218,9 @@ class FirestoreManager: ObservableObject {
     @Published var chats: [ChatItem] = []
     @Published var chatsDebug: String = ""
 
+    // simple cache mapping uid -> display name for participants
+    @Published var participantNames: [String: String] = [:]
+
     // messagesByChat stores messages per chat id
     @Published var messagesByChat: [String: [ChatMessage]] = [:]
 
@@ -256,6 +259,7 @@ class FirestoreManager: ObservableObject {
 
             let docs = snap?.documents ?? []
             var mapped: [ChatItem] = []
+            var otherUidsToResolve: Set<String> = []
             for d in docs {
                 let data = d.data()
                 let id = d.documentID
@@ -268,6 +272,20 @@ class FirestoreManager: ObservableObject {
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
                 mapped.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+
+                // collect other participant uids (exclude current user)
+                if let currentUid = Auth.auth().currentUser?.uid {
+                    for p in participantsArr where p != currentUid {
+                        otherUidsToResolve.insert(p)
+                    }
+                } else {
+                    for p in participantsArr { otherUidsToResolve.insert(p) }
+                }
+            }
+
+            // Resolve participant names for display (async) - will update published participantNames
+            if !otherUidsToResolve.isEmpty {
+                self.ensureParticipantNames(Array(otherUidsToResolve))
             }
 
             DispatchQueue.main.async {
@@ -322,6 +340,53 @@ class FirestoreManager: ObservableObject {
         }
 
         messageListeners[chatId] = listener
+    }
+
+    /// Ensure the provided participant UIDs have display names cached in `participantNames`.
+    /// This uses the local `coaches` cache and current profiles first to avoid extra reads,
+    /// and falls back to fetching the `coaches/{uid}` then `clients/{uid}` document.
+    func ensureParticipantNames(_ uids: [String]) {
+        // Determine which uids are missing from the cache
+        let missing = uids.filter { self.participantNames[$0] == nil }
+        guard !missing.isEmpty else { return }
+
+        var toFetch: [String] = []
+        for uid in missing {
+            if let c = self.coaches.first(where: { $0.id == uid }) {
+                DispatchQueue.main.async { self.participantNames[uid] = c.name }
+            } else if let cur = self.currentCoach, cur.id == uid {
+                DispatchQueue.main.async { self.participantNames[uid] = cur.name }
+            } else if let curc = self.currentClient, curc.id == uid {
+                DispatchQueue.main.async { self.participantNames[uid] = curc.name }
+            } else {
+                toFetch.append(uid)
+            }
+        }
+
+        // Fetch remaining uids from server; try coaches first then clients
+        for uid in toFetch {
+            let coachDoc = db.collection("coaches").document(uid)
+            coachDoc.getDocument { snap, _ in
+                if let data = snap?.data(), !data.isEmpty {
+                    let first = data["FirstName"] as? String ?? ""
+                    let last = data["LastName"] as? String ?? ""
+                    let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                    DispatchQueue.main.async { self.participantNames[uid] = name.isEmpty ? uid : name }
+                    return
+                }
+
+                // fallback to client doc
+                let clientDoc = self.db.collection("clients").document(uid)
+                clientDoc.getDocument { csnap, _ in
+                    if let cdata = csnap?.data(), !cdata.isEmpty {
+                        let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? uid
+                        DispatchQueue.main.async { self.participantNames[uid] = name }
+                    } else {
+                        DispatchQueue.main.async { self.participantNames[uid] = uid }
+                    }
+                }
+            }
+        }
     }
 
     func stopListeningForMessages(chatId: String) {
