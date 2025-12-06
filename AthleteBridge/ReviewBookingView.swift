@@ -1,5 +1,4 @@
 import SwiftUI
-import FirebaseFirestore
 
 struct ReviewBookingView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -7,12 +6,6 @@ struct ReviewBookingView: View {
     @Environment(\.dismiss) private var dismiss
 
     let booking: FirestoreManager.BookingItem
-
-    // Fetch coach-provided offer details at runtime (BookingItem doesn't include rate/coachNote)
-    @State private var rateUSD: Double? = nil
-    @State private var coachNoteText: String? = nil
-    @State private var loadingDetails: Bool = true
-    @State private var fetchError: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -28,32 +21,41 @@ struct ReviewBookingView: View {
                     Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                 }
 
-                if loadingDetails {
-                    HStack { ProgressView(); Text("Loading offer...").font(.subheadline).foregroundColor(.secondary) }
-                } else {
-                    if let rate = rateUSD {
-                        Text(String(format: "Coach Price: $%.2f", rate))
-                            .font(.headline)
-                    } else {
-                        Text("Coach Price: Not provided")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
+                // Offer details are stored on the booking document (RateUSD / RateCents / CoachNote).
+                // The BookingItem struct does not carry these fields, so we keep this view minimal for now.
+                Text("Coach Price: (see booking details)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-                    if let note = coachNoteText, !note.isEmpty {
-                        Text("Note from coach:")
-                            .font(.subheadline).bold()
-                        Text(note)
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if let err = fetchError {
-                        Text("Error loading offer: \(err)")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
+                if let note = booking.notes, !note.isEmpty {
+                    Text("Note from coach:")
+                        .font(.subheadline).bold()
+                    Text(booking.notes ?? "")
+                        .font(.body)
+                        .foregroundColor(.secondary)
                 }
+
+                Spacer()
+
+                // Action buttons: Decline (left) and Confirm (right)
+                HStack {
+                    Button(role: .destructive) {
+                        confirmOrDecline(status: "declined_by_client")
+                    } label: {
+                        Text("Decline")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        confirmOrDecline(status: "confirmed")
+                    } label: {
+                        Text("Confirm Booking")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.top)
 
                 Spacer()
 
@@ -70,40 +72,25 @@ struct ReviewBookingView: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .task {
-                await fetchOfferDetails()
-            }
         }
     }
 
-    // Fetch RateUSD / RateCents and CoachNote / Notes from root booking doc
-    private func fetchOfferDetails() async {
-        loadingDetails = true
-        fetchError = nil
-        let docRef = Firestore.firestore().collection("bookings").document(booking.id)
-        docRef.getDocument { snap, err in
-            if let err = err {
-                fetchError = err.localizedDescription
-                loadingDetails = false
-                return
+    private func confirmOrDecline(status: String) {
+        // Call the centralized updater in FirestoreManager which updates root + mirrored docs.
+        firestore.updateBookingStatus(bookingId: booking.id, status: status) { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    firestore.showToast("Failed to update booking: \(err.localizedDescription)")
+                } else {
+                    let friendly = (status == "confirmed") ? "Booking confirmed" : "Booking declined"
+                    firestore.showToast(friendly)
+                    // Optionally refresh lists
+                    firestore.fetchBookingsForCurrentClientSubcollection()
+                    // refresh the coach-specific subcollection listing for the affected coach
+                    firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
+                    dismiss()
+                }
             }
-            guard let data = snap?.data() else {
-                fetchError = "Booking not found"
-                loadingDetails = false
-                return
-            }
-
-            if let r = data["RateUSD"] as? Double {
-                rateUSD = r
-            } else if let cents = data["RateCents"] as? Int {
-                rateUSD = Double(cents) / 100.0
-            } else if let rStr = data["RateUSD"] as? String, let r = Double(rStr) {
-                rateUSD = r
-            }
-
-            // Try several keys that might hold the coach note
-            coachNoteText = (data["CoachNote"] as? String) ?? (data["coachNote"] as? String) ?? (data["Notes"] as? String)
-            loadingDetails = false
         }
     }
 }
