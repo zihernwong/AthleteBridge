@@ -4,7 +4,9 @@ struct MainAppView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var firestore: FirestoreManager
     @State private var navigateToClientForm = false
-    @State private var selectedTab: Int = 0
+    // Small UIImage used for the TabBar icon (loaded from firestore URLs)
+    @State private var tabAvatarImage: UIImage? = nil
+    @State private var selectedTab: Int = 1 // default to Home so Profile view doesn't open fullscreen by default
     // Prevent repeated automatic switching to the coach Home tab once the user has actively
     // chosen a tab (for example, Profile). We auto-switch at most once to avoid stomping
     // the user's explicit tab selection.
@@ -44,7 +46,7 @@ struct MainAppView: View {
                 .tabItem { Image(systemName: "calendar"); Text("Bookings") }
                 .tag(3)
 
-            // Profile tab
+            // Profile tab (use system icon to avoid layout issues)
             ProfileView()
                 .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
                 .tag(0)
@@ -60,6 +62,7 @@ struct MainAppView: View {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
+            setupTabAvatarObservers()
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         .onChange(of: auth.user?.uid) { _old, _new in
@@ -105,6 +108,12 @@ struct MainAppView: View {
                 }
             }
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
+        }
+        .onChange(of: firestore.currentClientPhotoURL) { _old, new in
+            if let u = new { loadTabAvatar(from: u) } else { tabAvatarImage = nil }
+        }
+        .onChange(of: firestore.currentCoachPhotoURL) { _old, new in
+            if let u = new { loadTabAvatar(from: u) } else { if firestore.currentClientPhotoURL == nil { tabAvatarImage = nil } }
         }
     }
 
@@ -227,6 +236,26 @@ struct MainAppView: View {
                 Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
             }
         }
+    }
+
+    // MARK: - Tab avatar loading
+    private func loadTabAvatar(from url: URL?) {
+        guard let url = url else { self.tabAvatarImage = nil; return }
+        // simple fetch — small images ok; replace with caching as needed
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let d = data, let ui = UIImage(data: d) else { return }
+            // Resize to a reasonable size for tab bar to avoid large memory usage
+            let targetSize = CGSize(width: 64, height: 64)
+            let resized = ui.resizeMaintainingAspectRatio(targetSize: targetSize)
+            DispatchQueue.main.async { self.tabAvatarImage = resized }
+        }.resume()
+    }
+
+    // Watch for changes in photo URLs and load the tab avatar accordingly
+    private func setupTabAvatarObservers() {
+        // initial load
+        if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
+        else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
     }
 
     @ViewBuilder
