@@ -16,6 +16,13 @@ class FirestoreManager: ObservableObject {
 
     @Published var coaches: [Coach] = []
     @Published var coachPhotoURLs: [String: URL?] = [:]
+    // Lightweight client summaries used for new-conversation picker
+    struct UserSummary: Identifiable {
+        let id: String
+        let name: String
+        let photoURL: URL?
+    }
+    @Published var clients: [UserSummary] = []
     @Published var clientPhotoURLs: [String: URL?] = [:]
     @Published var currentClient: Client? = nil
     @Published var currentClientPhotoURL: URL? = nil
@@ -547,6 +554,8 @@ class FirestoreManager: ObservableObject {
 
         // Optionally start listening to coaches collection
         fetchCoaches()
+        // Also fetch a lightweight clients list for messaging lookup
+        fetchClients()
         // Optionally fetch current user's profile if already signed in
         if let uid = Auth.auth().currentUser?.uid {
             fetchCurrentProfiles(for: uid)
@@ -606,6 +615,46 @@ class FirestoreManager: ObservableObject {
 
             DispatchQueue.main.async {
                 self.coaches = mapped
+            }
+        }
+    }
+
+    func fetchClients() {
+        self.db.collection("clients").getDocuments { snap, err in
+            if let err = err {
+                print("fetchClients error: \(err)")
+                return
+            }
+            let docs = snap?.documents ?? []
+            var results: [UserSummary] = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                // Prefer explicit name field; otherwise build from FirstName/LastName
+                var nameVal: String = ""
+                if let n = data["name"] as? String { nameVal = n }
+                else if let n = data["Name"] as? String { nameVal = n }
+                else {
+                    let first = (data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? ""
+                    let last = (data["LastName"] as? String) ?? (data["lastName"] as? String) ?? ""
+                    nameVal = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+                }
+                // resolve photo URL if present
+                let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String)
+                if let ps = photoStr, !ps.isEmpty {
+                    self.resolvePhotoURL(ps) { url in
+                        DispatchQueue.main.async {
+                            results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: url))
+                            // after processing all docs we'll assign below; but assign incrementally for responsiveness
+                            self.clients = results.sorted { $0.name.lowercased() < $1.name.lowercased() }
+                        }
+                    }
+                } else {
+                    results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: nil))
+                    DispatchQueue.main.async {
+                        self.clients = results.sorted { $0.name.lowercased() < $1.name.lowercased() }
+                    }
+                }
             }
         }
     }
@@ -2193,35 +2242,16 @@ class FirestoreManager: ObservableObject {
                 }
             }
 
-            // capture previous preview to allow revert on failure
-            let previousPreview = self.previewTexts[chatId]
-            let previousDate = self.previewDates[chatId]
-            DispatchQueue.main.async {
-                self.previewTexts[chatId] = text
-                self.previewDates[chatId] = Date()
-            }
-
-             batch.commit { err in
-                 if let err = err {
-                     print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
-                     // revert optimistic preview to previous values
-                     DispatchQueue.main.async {
-                         self.previewTexts[chatId] = previousPreview
-                         self.previewDates[chatId] = previousDate
-                     }
-                     completion?(err)
-                     return
-                 } else {
-                    // After successful commit, ensure preview cache reflects the (now committed) message.
-                    DispatchQueue.main.async {
-                        self.previewTexts[chatId] = text
-                        self.previewDates[chatId] = Date()
-                    }
+            batch.commit { err in
+                if let err = err {
+                    print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
+                    completion?(err)
+                } else {
                     completion?(nil)
-                 }
-             }
-         }
-     }
+                }
+            }
+        }
+    }
 
     /// Ensure a chat exists for the current user and the coachId. Uses deterministic id composed of sorted uids joined with '_' so UI can optimistically navigate.
     /// Calls completion with the chatId or nil on failure. Writes participantRefs as DocumentReferences and creates per-user pointer docs.

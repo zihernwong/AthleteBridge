@@ -21,7 +21,9 @@ struct ProfileView: View {
     // Goals / specialties
     @State private var selectedGoals: Set<String> = []
     @State private var selectedSpecialties: Set<String> = []
-    private let availableSpecialties: [String] = ["Badminton", "Pickleball", "Career Consulting", "Tennis", "Basketball", "Coding", "Financial Planning"]
+    @State private var showingSpecialtiesSheet: Bool = false
+    // derive available specialties dynamically from Firestore subjects
+    private var availableSpecialties: [String] { firestore.subjects.map { $0.title } }
 
     // Client UI: meeting preference, skill level
     private let meetingOptionsClient: [String] = ["In-Person", "Virtual"]
@@ -124,6 +126,10 @@ struct ProfileView: View {
                 }
                 .sheet(isPresented: $showingGoalsSheet) {
                     GoalsSelectionView(selection: $selectedGoals, options: subjectIDs)
+                        .environmentObject(firestore)
+                }
+                .sheet(isPresented: $showingSpecialtiesSheet) {
+                    GoalsSelectionView(selection: $selectedSpecialties, options: subjectIDs)
                         .environmentObject(firestore)
                 }
             }
@@ -274,7 +280,16 @@ struct ProfileView: View {
         Section("Coach Details") {
             VStack(alignment: .leading) {
                 Text("Specialties").font(.subheadline).foregroundColor(.secondary)
-                ChipMultiSelect(items: availableSpecialties, selection: $selectedSpecialties)
+                Button(action: { showingSpecialtiesSheet = true }) {
+                    HStack {
+                        Text(selectedSpecialties.isEmpty ? "Select specialties" : selectedSpecialties.sorted().joined(separator: ", "))
+                            .foregroundColor(selectedSpecialties.isEmpty ? .secondary : .primary)
+                        Spacer()
+                        Image(systemName: "chevron.right") .foregroundColor(.secondary)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+                }
             }
 
             VStack(alignment: .leading) {
