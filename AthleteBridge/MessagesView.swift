@@ -4,9 +4,12 @@ struct MessagesView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
     @State private var showingNewConversation = false
+    @State private var navPath = NavigationPath()
+    @State private var newConvSearch: String = ""
+    @State private var isCreatingChat: Bool = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             Group {
                 // Empty state when there are no chats
                 if firestore.chats.isEmpty {
@@ -93,14 +96,78 @@ struct MessagesView: View {
                 ChatView(chatId: chatId).environmentObject(firestore)
             }
             .sheet(isPresented: $showingNewConversation) {
-                VStack(spacing: 16) {
-                    Text("Create a new conversation\n(Coming soon)")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        HStack {
+                            TextField("Search", text: $newConvSearch)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Button("Close") { showingNewConversation = false }
+                        }
                         .padding()
-                    Button("Close") { showingNewConversation = false }
+
+                        // Determine role: treat unknown as client by default
+                        let roleIsClient = (firestore.currentUserType ?? "CLIENT").uppercased() != "COACH"
+
+                        if roleIsClient {
+                            // Show coaches list
+                            List {
+                                ForEach(firestore.coaches.filter { newConvSearch.isEmpty ? true : $0.name.lowercased().contains(newConvSearch.lowercased()) }) { coach in
+                                    Button(action: {
+                                        createAndOpenChat(with: coach.id)
+                                    }) {
+                                        HStack {
+                                            AvatarView(url: firestore.coachPhotoURLs[coach.id] ?? nil, size: 36, useCurrentUser: false)
+                                            Text(coach.name)
+                                            Spacer()
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Show clients list
+                            List {
+                                ForEach(firestore.clients.filter { newConvSearch.isEmpty ? true : $0.name.lowercased().contains(newConvSearch.lowercased()) }) { client in
+                                    Button(action: {
+                                        createAndOpenChat(with: client.id)
+                                    }) {
+                                        HStack {
+                                            AvatarView(url: client.photoURL, size: 36, useCurrentUser: false)
+                                            Text(client.name)
+                                            Spacer()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if isCreatingChat {
+                            ProgressView("Creating chat...")
+                                .padding()
+                        }
+                    }
+                    .navigationTitle("New Conversation")
                 }
-                .padding()
+                .onAppear {
+                    // refresh lists
+                    firestore.fetchCoaches()
+                    firestore.fetchClients()
+                }
+            }
+        }
+    }
+
+    private func createAndOpenChat(with otherId: String) {
+        guard let _ = auth.user?.uid else { return }
+        isCreatingChat = true
+        // Use createOrGetChat - FirestoreManager will resolve roles and create participantRefs appropriately
+        firestore.createOrGetChat(withCoachId: otherId) { chatId in
+            DispatchQueue.main.async {
+                self.isCreatingChat = false
+                self.showingNewConversation = false
+                if let cid = chatId {
+                    // navigate into the chat
+                    self.navPath.append(cid)
+                }
             }
         }
     }

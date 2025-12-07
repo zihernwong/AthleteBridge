@@ -115,7 +115,7 @@ struct GoalsSelectionView: View {
         let title = suggestedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return }
         isAdding = true
-        firestore.addSubjectWithSlug(title: title, completion: { err in
+        firestore.addSubject(title: title) { err in
             DispatchQueue.main.async {
                 isAdding = false
                 if let err = err {
@@ -124,8 +124,7 @@ struct GoalsSelectionView: View {
                     firestore.showToast("Suggestion submitted")
                     // refresh local list
                     firestore.fetchSubjects()
-                    // auto-select the newly added subject if present in options
-                    // since fetchSubjects updates `subjects`, read from it to find the title
+                    // auto-select the newly added subject by title if present
                     if firestore.subjects.map({ $0.title.lowercased() }).contains(title.lowercased()) {
                         selection.insert(title)
                     }
@@ -133,6 +132,6 @@ struct GoalsSelectionView: View {
                     showingSuggestSheet = false
                 }
             }
-        })
+        }
     }
 }
