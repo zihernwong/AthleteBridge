@@ -16,6 +16,7 @@ class FirestoreManager: ObservableObject {
 
     @Published var coaches: [Coach] = []
     @Published var coachPhotoURLs: [String: URL?] = [:]
+    @Published var clientPhotoURLs: [String: URL?] = [:]
     @Published var currentClient: Client? = nil
     @Published var currentClientPhotoURL: URL? = nil
     // Small cached UIImage for the tab bar/avatar usage (keeps MainAppView simple and avoids re-downloading)
@@ -344,49 +345,119 @@ class FirestoreManager: ObservableObject {
 
     /// Ensure the provided participant UIDs have display names cached in `participantNames`.
     /// This uses the local `coaches` cache and current profiles first to avoid extra reads,
-    /// and falls back to fetching the `coaches/{uid}` then `clients/{uid}` document.
+    /// and falls back to fetching the `coaches/{uid}` then `clients/{uid}` documents in batch (up to 10 per query) for efficiency.
     func ensureParticipantNames(_ uids: [String]) {
         // Determine which uids are missing from the cache
         let missing = uids.filter { self.participantNames[$0] == nil }
         guard !missing.isEmpty else { return }
 
-        var toFetch: [String] = []
+        // First satisfy from in-memory caches
+        var toFetch = Set<String>()
         for uid in missing {
             if let c = self.coaches.first(where: { $0.id == uid }) {
                 DispatchQueue.main.async { self.participantNames[uid] = c.name }
+                // coachPhotoURLs likely already populated by fetchCoaches
             } else if let cur = self.currentCoach, cur.id == uid {
                 DispatchQueue.main.async { self.participantNames[uid] = cur.name }
             } else if let curc = self.currentClient, curc.id == uid {
                 DispatchQueue.main.async { self.participantNames[uid] = curc.name }
             } else {
-                toFetch.append(uid)
+                toFetch.insert(uid)
             }
         }
 
-        // Fetch remaining uids from server; try coaches first then clients
-        for uid in toFetch {
-            let coachDoc = db.collection("coaches").document(uid)
-            coachDoc.getDocument { snap, _ in
-                if let data = snap?.data(), !data.isEmpty {
-                    let first = data["FirstName"] as? String ?? ""
-                    let last = data["LastName"] as? String ?? ""
-                    let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-                    DispatchQueue.main.async { self.participantNames[uid] = name.isEmpty ? uid : name }
+        guard !toFetch.isEmpty else { return }
+
+        // Helper to chunk arrays into size-limited arrays (Firestore 'in' supports up to 10)
+        func chunks<T>(_ arr: [T], size: Int) -> [[T]] {
+            guard size > 0 else { return [] }
+            var res: [[T]] = []
+            var i = 0
+            while i < arr.count {
+                let end = Swift.min(i + size, arr.count)
+                res.append(Array(arr[i..<end]))
+                i = end
+            }
+            return res
+        }
+
+        let uidsToFetch = Array(toFetch)
+        let uidChunks = chunks(uidsToFetch, size: 10)
+
+        for chunk in uidChunks {
+            // 1) query coaches collection for any of these uids
+            let coachQuery = db.collection("coaches").whereField(FieldPath.documentID(), in: chunk)
+            coachQuery.getDocuments { snap, _ in
+                var found: Set<String> = []
+                if let docs = snap?.documents {
+                    for doc in docs {
+                        let id = doc.documentID
+                        let data = doc.data()
+                        let first = data["FirstName"] as? String ?? ""
+                        let last = data["LastName"] as? String ?? ""
+                        let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                        DispatchQueue.main.async { self.participantNames[id] = name.isEmpty ? id : name }
+
+                        // cache photo URL for coach if present
+                        let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
+                        if let ps = photoStr, !ps.isEmpty {
+                            self.resolvePhotoURL(ps) { url in
+                                DispatchQueue.main.async { self.coachPhotoURLs[id] = url }
+                            }
+                        } else {
+                            DispatchQueue.main.async { self.coachPhotoURLs[id] = nil }
+                        }
+
+                        found.insert(id)
+                    }
+                }
+
+                // remaining ids in this chunk not found in coaches -> query clients
+                let remaining = chunk.filter { !found.contains($0) }
+                if remaining.isEmpty {
+                    // set any not-returned ids to their uid (fallback) just in case
+                    for id in chunk where self.participantNames[id] == nil {
+                        DispatchQueue.main.async { self.participantNames[id] = id }
+                    }
                     return
                 }
 
-                // fallback to client doc
-                let clientDoc = self.db.collection("clients").document(uid)
-                clientDoc.getDocument { csnap, _ in
-                    if let cdata = csnap?.data(), !cdata.isEmpty {
-                        let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? uid
-                        DispatchQueue.main.async { self.participantNames[uid] = name }
-                    } else {
-                        DispatchQueue.main.async { self.participantNames[uid] = uid }
+                let clientQuery = self.db.collection("clients").whereField(FieldPath.documentID(), in: remaining)
+                clientQuery.getDocuments { csnap, _ in
+                    var foundClients: Set<String> = []
+                    if let cdocs = csnap?.documents {
+                        for cdoc in cdocs {
+                            let id = cdoc.documentID
+                            let cdata = cdoc.data()
+                            let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? id
+                            DispatchQueue.main.async { self.participantNames[id] = name }
+
+                            // cache client photo URL if present
+                            let photoStr = (cdata["photoURL"] as? String) ?? (cdata["PhotoURL"] as? String) ?? (cdata["photoUrl"] as? String)
+                            if let ps = photoStr, !ps.isEmpty {
+                                self.resolvePhotoURL(ps) { url in
+                                    DispatchQueue.main.async { self.clientPhotoURLs[id] = url }
+                                }
+                            } else {
+                                DispatchQueue.main.async { self.clientPhotoURLs[id] = nil }
+                            }
+
+                            foundClients.insert(id)
+                        }
+                    }
+
+                    // For any ids still not found, set the participant name to the raw uid as fallback
+                    for id in remaining where !foundClients.contains(id) {
+                        DispatchQueue.main.async { self.participantNames[id] = id }
                     }
                 }
             }
         }
+    }
+
+    /// Return the best-known photo URL for a participant (coach first, then client).
+    func participantPhotoURL(_ uid: String) -> URL? {
+        return coachPhotoURLs[uid] ?? clientPhotoURLs[uid] ?? nil
     }
 
     func stopListeningForMessages(chatId: String) {
@@ -1131,7 +1202,7 @@ class FirestoreManager: ObservableObject {
                     }
                 } else if let s = data["ClientID"] as? String {
                     clientID = s.split(separator: "/").last.map(String.init) ?? s
-                    // attempt to fetch the client doc to get a name
+                    // fallback to direct client lookup
                     inner.enter()
                     self.db.collection("clients").document(clientID).getDocument { sSnap, _ in
                         if let sdata = sSnap?.data() {
@@ -1770,7 +1841,7 @@ class FirestoreManager: ObservableObject {
         fetchBookingsFromClientSubcollection(clientId: uid)
     }
 
-    /// Fetch all bookings stored under each coach's `bookings` subcollection and populate `coachBookings`.
+    /// Fetch all bookings mirrored under each coach's `bookings` subcollection and populate `coachBookings`.
     func fetchAllCoachBookings() {
         DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchAllCoachBookings..." }
         let coachColl = self.db.collection("coaches")
@@ -2052,11 +2123,11 @@ class FirestoreManager: ObservableObject {
             let messagesColl = chatRef.collection("messages")
             let newMsgRef = messagesColl.document()
 
-            // include initial readBy for the sender so their outgoing message is immediately marked as read by them
+            // When creating a new message, do NOT mark the sender in `readBy`.
+            // `readBy` should represent recipients who have read the message. The sender should not be listed here.
             var data: [String: Any] = [
                 "text": text,
                 "createdAt": FieldValue.serverTimestamp(),
-                "readBy": [uid: FieldValue.serverTimestamp()],
                 // write both reference and id for backward compatibility
                 "senderRef": senderRef,
                 "senderId": uid
@@ -2417,5 +2488,21 @@ class FirestoreManager: ObservableObject {
         }
 
         group.notify(queue: .main) { completion(firstError) }
+    }
+
+    /// Fetch latest message doc for a chat and return senderId and readBy map (if any)
+    func fetchLatestMessageInfo(chatId: String, completion: @escaping ((_ info: (senderId: String?, readBy: [String: Any]?)?) -> Void)) {
+        let coll = db.collection("chats").document(chatId).collection("messages")
+        coll.order(by: "createdAt", descending: true).limit(to: 1).getDocuments { snap, err in
+            if let err = err { print("fetchLatestMessageInfo(\(chatId)) error: \(err)"); completion(nil); return }
+            guard let doc = snap?.documents.first else { completion(nil); return }
+            let data = doc.data()
+            var sender: String? = nil
+            if let sRef = data["senderRef"] as? DocumentReference { sender = sRef.documentID }
+            else if let s = data["senderId"] as? String { sender = s }
+            else if let s = data["sender"] as? String { sender = s }
+            let readBy = data["readBy"] as? [String: Any]
+            completion((sender, readBy))
+        }
     }
 }
