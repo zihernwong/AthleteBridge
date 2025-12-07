@@ -64,9 +64,6 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Messages")
                     .font(.headline)
-                Text("Conversation id: \(chatId)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
             .padding(.horizontal)
             .padding(.top, 8)

@@ -218,13 +218,6 @@ struct ReviewsView: View {
                         }
                     }
                 }
-
-                // Debug panel for review fetch status
-                if !firestore.reviewsDebug.isEmpty {
-                    Section(header: Text("Debug")) {
-                        Text(firestore.reviewsDebug).font(.caption).foregroundColor(.secondary)
-                    }
-                }
             }
             .navigationTitle("Reviews")
             .listStyle(InsetGroupedListStyle())

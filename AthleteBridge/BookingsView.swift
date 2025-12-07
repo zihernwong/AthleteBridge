@@ -13,24 +13,6 @@ struct BookingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Debug section
-                Section(header: Text("Debug")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(firestore.bookingsDebug.isEmpty ? "No debug messages yet" : firestore.bookingsDebug)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(nil)
-
-                        HStack {
-                            Spacer()
-                            Button("Clear Debug") { firestore.bookingsDebug = "" }
-                            Spacer()
-                        }
-                        .font(.caption2)
-                    }
-                    .padding(.vertical, 4)
-                }
-
                 // Requested bookings section for coaches
                 if currentUserRole == "COACH" {
                     Section(header: Text("Requested Bookings")) {
@@ -145,23 +127,15 @@ struct BookingsView: View {
 
     private var coachBookingsSection: some View {
         Section(header: Text("Accepted Bookings")) {
-            VStack(alignment: .leading, spacing: 8) {
-                if !firestore.coachBookingsDebug.isEmpty {
-                    Text(firestore.coachBookingsDebug)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if firestore.coachBookings.isEmpty {
-                Text("No coach bookings found").foregroundColor(.secondary)
-            } else {
-                ForEach(firestore.coachBookings, id: \.id) { b in
-                    BookingRowView(item: b)
-                }
-            }
-        }
-    }
+             if firestore.coachBookings.isEmpty {
+                 Text("No coach bookings found").foregroundColor(.secondary)
+             } else {
+                 ForEach(firestore.coachBookings, id: \.id) { b in
+                     BookingRowView(item: b)
+                 }
+             }
+         }
+     }
 }
 
 // Small reusable row view for displaying a booking
