@@ -73,21 +73,38 @@ struct ChatView: View {
 
             Divider()
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(messages) { m in
-                            MessageRow(message: m, isMe: m.senderId == Auth.auth().currentUser?.uid)
-                                .id(m.id)
-                        }
-                    }
-                    .padding()
+            // Message list or empty state
+            if messages.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Text("No messages, start a conversation today!")
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 40)
+                    Text("Be the first to send a message in this conversation.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
                 }
-                .onChange(of: messages.count) { _, _ in
-                    // scroll to bottom when messages change
-                    if let last = messages.last {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(messages) { m in
+                                MessageRow(message: m, isMe: m.senderId == Auth.auth().currentUser?.uid)
+                                    .id(m.id)
+                            }
+                        }
+                        .padding()
+                    }
+                    .onChange(of: messages.count) { _, _ in
+                        // scroll to bottom when messages change
+                        if let last = messages.last {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                            }
                         }
                     }
                 }
@@ -229,31 +246,75 @@ fileprivate struct Message: Identifiable, Equatable {
 fileprivate struct MessageRow: View {
     let message: Message
     let isMe: Bool
+    @EnvironmentObject var firestore: FirestoreManager
+
+    func initials(from name: String) -> String {
+        let parts = name.split(separator: " ").map { String($0) }
+        if parts.count == 0 { return "?" }
+        if parts.count == 1 { return String(parts[0].prefix(1)).uppercased() }
+        return (String(parts[0].prefix(1)) + String(parts[1].prefix(1))).uppercased()
+    }
+
+    // Compute latest reader info outside the ViewBuilder to avoid using let/var inside the body
+    private var latestReaderInfo: (uid: String, name: String, photoURL: URL?, date: Date)? {
+        guard let rb = message.readBy else { return nil }
+        let currentUid = Auth.auth().currentUser?.uid
+        let otherEntries = rb.filter { $0.key != currentUid }
+        guard let latestEntry = otherEntries.max(by: { $0.value < $1.value }) else { return nil }
+        let readerUid = latestEntry.key
+        let readDate = latestEntry.value
+        let readerName = firestore.participantNames[readerUid] ?? readerUid
+        var photoURL: URL? = nil
+        if let u = firestore.coachPhotoURLs[readerUid] { photoURL = u }
+        else if let u2 = firestore.clientPhotoURLs[readerUid] { photoURL = u2 }
+        return (readerUid, readerName, photoURL, readDate)
+    }
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom) {
             if isMe { Spacer() }
-            VStack(alignment: .leading, spacing: 4) {
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text(message.text)
                     .foregroundColor(isMe ? .white : .primary)
                     .padding(10)
                     .background(isMe ? Color.blue : Color(UIColor.secondarySystemBackground))
                     .cornerRadius(12)
+
                 if let date = message.createdAt {
                     Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                // Show read receipt info for messages sent by me: display count of other users who have read
-                if isMe, let rb = message.readBy {
-                    let otherReaders = rb.keys.filter { $0 != Auth.auth().currentUser?.uid }
-                    if !otherReaders.isEmpty {
-                        Text("Read by: \(otherReaders.count)")
+
+                // Show read receipt info for messages sent by me: display reader name and time with avatar
+                if isMe, let info = latestReaderInfo {
+                    HStack(spacing: 8) {
+                        if let url = info.photoURL {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
+                                case .success(let img):
+                                    img.resizable().scaledToFill().frame(width: 18, height: 18).clipShape(Circle())
+                                case .failure(_):
+                                    Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
+                                @unknown default:
+                                    Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
+                                }
+                            }
+                        } else {
+                            Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
+                        }
+
+                        let timeStr = DateFormatter.localizedString(from: info.date, dateStyle: .none, timeStyle: .short)
+                        Text("Read by \(info.name) at \(timeStr)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
             }
+
             if !isMe { Spacer() }
         }
         .padding(.horizontal, 8)
