@@ -9,12 +9,53 @@ struct ChatView: View {
     @State private var messages: [Message] = []
     @State private var listener: ListenerRegistration? = nil
     @State private var sending: Bool = false
+    // locally track which message IDs we've already marked as read to avoid repeated writes
+    @State private var locallyMarkedRead: Set<String> = []
 
     private var messagesColl: CollectionReference {
         return Firestore.firestore().collection("chats").document(chatId).collection("messages")
     }
     private var chatDoc: DocumentReference {
         return Firestore.firestore().collection("chats").document(chatId)
+    }
+
+    // Mark messages as read for the current user by adding readBy.<uid> = serverTimestamp()
+    private func markUnreadMessagesAsRead(_ msgs: [Message]) {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        var idsToMark: [String] = []
+        for m in msgs {
+            // skip messages sent by me
+            if m.senderId == uid { continue }
+            // skip if Firestore already shows this uid
+            if let rb = m.readBy, rb[uid] != nil { continue }
+            // skip if we've already marked this id locally to avoid re-writing
+            if locallyMarkedRead.contains(m.id) { continue }
+            idsToMark.append(m.id)
+        }
+        guard !idsToMark.isEmpty else { return }
+
+        // chunk writes to stay under Firestore batch limits
+        let chunkSize = 400
+        var start = 0
+        while start < idsToMark.count {
+            let end = min(start + chunkSize, idsToMark.count)
+            let slice = Array(idsToMark[start..<end])
+            let batch = Firestore.firestore().batch()
+            for id in slice {
+                let ref = messagesColl.document(id)
+                batch.updateData(["readBy.\(uid)": FieldValue.serverTimestamp()], forDocument: ref)
+            }
+            batch.commit { err in
+                if let err = err {
+                    print("ChatView: markUnreadMessagesAsRead commit error: \(err)")
+                } else {
+                    DispatchQueue.main.async {
+                        for id in slice { self.locallyMarkedRead.insert(id) }
+                    }
+                }
+            }
+            start += chunkSize
+        }
     }
 
     var body: some View {
@@ -124,9 +165,11 @@ struct ChatView: View {
             }
             DispatchQueue.main.async {
                 self.messages = mapped
-            }
-        }
-    }
+                // mark unread incoming messages as read for the current user (only once per message)
+                self.markUnreadMessagesAsRead(mapped)
+             }
+         }
+     }
 
     private func stopListening() {
         listener?.remove()
@@ -145,12 +188,12 @@ struct ChatView: View {
         let userTypeUpper = (firestore.currentUserType ?? "").uppercased()
         let userColl = (userTypeUpper == "COACH") ? Firestore.firestore().collection("coaches") : Firestore.firestore().collection("clients")
         let senderRef = userColl.document(uid)
+        // Do NOT pre-populate readBy for the sender. Recipients are marked when they view the message.
         let payload: [String: Any] = [
             "senderRef": senderRef,
             "senderId": uid, // keep legacy field for compatibility
             "text": trimmed,
-            "createdAt": nowField,
-            "readBy": [uid: nowField]
+            "createdAt": nowField
         ]
 
         // Use batch to write message and update parent chat's last message metadata
