@@ -18,7 +18,10 @@ struct MessagesView: View {
 
                             VStack(alignment: .leading) {
                                 Text(displayName).font(.headline)
-                                if let last = chat.lastMessageText {
+                                // Use centralized preview cache from FirestoreManager if available
+                                if let preview = firestore.previewTexts[chat.id], !preview.isEmpty {
+                                    Text(preview).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                                } else if let last = chat.lastMessageText, !last.isEmpty {
                                     Text(last).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
                                 } else {
                                     Text("No messages").font(.subheadline).foregroundColor(.secondary)
@@ -27,7 +30,7 @@ struct MessagesView: View {
 
                             Spacer()
 
-                            if let date = chat.lastMessageAt {
+                            if let date = firestore.previewDates[chat.id] ?? chat.lastMessageAt {
                                 Text(DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)).font(.caption).foregroundColor(.secondary)
                             }
                         }
@@ -36,7 +39,14 @@ struct MessagesView: View {
                 }
             }
             .navigationTitle("Messages")
-            .onAppear { firestore.listenForChatsForCurrentUser() }
+            .onAppear {
+                firestore.listenForChatsForCurrentUser()
+                let ids = firestore.chats.map { $0.id }
+                if !ids.isEmpty { firestore.loadPreviewsForChats(chatIds: ids) }
+            }
+            .onChange(of: firestore.chats.map { $0.id }) { newIds in
+                if !newIds.isEmpty { firestore.loadPreviewsForChats(chatIds: newIds) }
+            }
             .navigationDestination(for: String.self) { chatId in
                 ChatView(chatId: chatId).environmentObject(firestore)
             }

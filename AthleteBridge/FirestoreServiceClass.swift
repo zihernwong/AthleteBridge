@@ -225,13 +225,50 @@ class FirestoreManager: ObservableObject {
     // messagesByChat stores messages per chat id
     @Published var messagesByChat: [String: [ChatMessage]] = [:]
 
-    // Firestore listener handles
-    private var chatsListener: ListenerRegistration? = nil
-    private var messageListeners: [String: ListenerRegistration] = [:]
+    // centralized preview caches (latest message text and date) for chats
+    @Published var previewTexts: [String: String] = [:]
+    @Published var previewDates: [String: Date] = [:]
 
-    /// Start listening for all chat documents where the current user is a participant.
-    /// Updates `chats` published property whenever chats are created/updated.
-    func listenForChatsForCurrentUser() {
+    /// Load the latest message preview for the given chat IDs.
+    /// This fetches the newest message document from chats/{chatId}/messages ordered by createdAt desc limit 1
+    /// and stores the text/time in `previewTexts`/`previewDates`.
+    func loadPreviewsForChats(chatIds: [String]) {
+        guard let collRoot = db else { return }
+        for chatId in chatIds {
+            // If we already have a preview date that matches chats' denormalized lastMessageAt, we can skip,
+            // but the caller may handle that optimization. We'll always fetch to ensure correctness.
+            let coll = collRoot.collection("chats").document(chatId).collection("messages")
+            coll.order(by: "createdAt", descending: true).limit(to: 1).getDocuments { snap, err in
+                if let err = err {
+                    print("loadPreviewsForChats: error fetching latest message for chat \(chatId): \(err)")
+                    return
+                }
+                if let doc = snap?.documents.first {
+                    let data = doc.data()
+                    let text = data["text"] as? String ?? ""
+                    var date: Date? = nil
+                    if let ts = data["createdAt"] as? Timestamp { date = ts.dateValue() }
+                    DispatchQueue.main.async {
+                        self.previewTexts[chatId] = text
+                        if let d = date { self.previewDates[chatId] = d }
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.previewTexts[chatId] = ""
+                        self.previewDates[chatId] = nil
+                    }
+                }
+            }
+        }
+    }
+
+ // Firestore listener handles
+     private var chatsListener: ListenerRegistration? = nil
+     private var messageListeners: [String: ListenerRegistration] = [:]
+
+     /// Start listening for all chat documents where the current user is a participant.
+     /// Updates `chats` published property whenever chats are created/updated.
+     func listenForChatsForCurrentUser() {
         guard let uid = Auth.auth().currentUser?.uid else {
             print("listenForChatsForCurrentUser: no authenticated user")
             DispatchQueue.main.async { self.chats = []; self.chatsDebug = "No user" }
@@ -292,6 +329,9 @@ class FirestoreManager: ObservableObject {
             DispatchQueue.main.async {
                 self.chats = mapped
                 self.chatsDebug = "Loaded \(mapped.count) chats"
+                // Trigger centralized preview cache population for the loaded chats
+                let ids = mapped.map { $0.id }
+                if !ids.isEmpty { self.loadPreviewsForChats(chatIds: ids) }
             }
         }
     }
@@ -2153,16 +2193,35 @@ class FirestoreManager: ObservableObject {
                 }
             }
 
-            batch.commit { err in
-                if let err = err {
-                    print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
-                    completion?(err)
-                } else {
-                    completion?(nil)
-                }
+            // capture previous preview to allow revert on failure
+            let previousPreview = self.previewTexts[chatId]
+            let previousDate = self.previewDates[chatId]
+            DispatchQueue.main.async {
+                self.previewTexts[chatId] = text
+                self.previewDates[chatId] = Date()
             }
-        }
-    }
+
+             batch.commit { err in
+                 if let err = err {
+                     print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
+                     // revert optimistic preview to previous values
+                     DispatchQueue.main.async {
+                         self.previewTexts[chatId] = previousPreview
+                         self.previewDates[chatId] = previousDate
+                     }
+                     completion?(err)
+                     return
+                 } else {
+                    // After successful commit, ensure preview cache reflects the (now committed) message.
+                    DispatchQueue.main.async {
+                        self.previewTexts[chatId] = text
+                        self.previewDates[chatId] = Date()
+                    }
+                    completion?(nil)
+                 }
+             }
+         }
+     }
 
     /// Ensure a chat exists for the current user and the coachId. Uses deterministic id composed of sorted uids joined with '_' so UI can optimistically navigate.
     /// Calls completion with the chatId or nil on failure. Writes participantRefs as DocumentReferences and creates per-user pointer docs.
@@ -2369,12 +2428,7 @@ class FirestoreManager: ObservableObject {
                             }
                         }
                         batch.commit { berr in
-                            if let berr = berr {
-                                print("migrateChatsToParticipantRefs: failed to write pointer docs for chat \(doc.documentID): \(berr)")
-                                if firstError == nil { firstError = berr }
-                            } else {
-                                print("migrateChatsToParticipantRefs: migrated chat \(doc.documentID)")
-                            }
+                            if let berr = berr { print("migrateChatsToParticipantRefs: failed to commit pointers for \(doc.documentID): \(berr)"); if firstError == nil { firstError = berr } }
                             group.leave()
                         }
                     }
