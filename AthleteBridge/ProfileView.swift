@@ -71,6 +71,9 @@ struct ProfileView: View {
     // Dynamic subject IDs loaded from Firestore (document IDs of `subjects` collection)
     @State private var subjectIDs: [String] = []
 
+    // Manage subscription sheet
+    @State private var showingManageSubscription: Bool = false
+
     @Environment(\.presentationMode) private var presentationMode
 
     var body: some View {
@@ -132,6 +135,9 @@ struct ProfileView: View {
                     GoalsSelectionView(selection: $selectedSpecialties, options: subjectIDs)
                         .environmentObject(firestore)
                 }
+                .sheet(isPresented: $showingManageSubscription) {
+                    ManageSubscriptionView()
+                }
             }
 
             // Copied confirmation toast (appears above the form)
@@ -178,6 +184,20 @@ struct ProfileView: View {
 
     private var clientSection: some View {
         Section("Client Details") {
+            // Manage subscription button for clients
+            VStack(alignment: .leading) {
+                Text("Subscription").font(.subheadline).foregroundColor(.secondary)
+                Button(action: { showingManageSubscription = true }) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(.secondary)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+
             VStack(alignment: .leading) {
                 Text("Goals").font(.subheadline).foregroundColor(.secondary)
                 Button(action: { showingGoalsSheet = true }) {
@@ -278,6 +298,20 @@ struct ProfileView: View {
     
     private var coachSection: some View {
         Section("Coach Details") {
+            // Manage subscription button for coaches
+            VStack(alignment: .leading) {
+                Text("Subscription").font(.subheadline).foregroundColor(.secondary)
+                Button(action: { showingManageSubscription = true }) {
+                    HStack {
+                        Text("Manage My Subscription")
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(.secondary)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+
             VStack(alignment: .leading) {
                 Text("Specialties").font(.subheadline).foregroundColor(.secondary)
                 Button(action: { showingSpecialtiesSheet = true }) {
