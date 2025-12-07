@@ -8,6 +8,8 @@ struct AvatarView: View {
 
     // Optional explicit URL to show (when listing many coaches we pass their URL)
     private let explicitURL: URL?
+    // Optional display name (used to generate initials fallback)
+    private let displayName: String?
     // Whether to fall back to the currently-signed-in user's client/coach photo when explicitURL is nil
     private let useCurrentUser: Bool
 
@@ -17,8 +19,9 @@ struct AvatarView: View {
 
     private let size: CGFloat
 
-    init(url: URL? = nil, size: CGFloat = 44, useCurrentUser: Bool = true) {
+    init(url: URL? = nil, name: String? = nil, size: CGFloat = 44, useCurrentUser: Bool = true) {
         self.explicitURL = url
+        self.displayName = name
         self.size = size
         self.useCurrentUser = useCurrentUser
     }
@@ -32,7 +35,7 @@ struct AvatarView: View {
             } else if useCurrentUser, let coachURL = firestore.currentCoachPhotoURL {
                 imageFor(url: coachURL).onAppear { prepare(url: coachURL) }
             } else {
-                placeholder
+                initialsView
             }
         }
     }
@@ -42,6 +45,18 @@ struct AvatarView: View {
             .resizable()
             .frame(width: size, height: size)
             .foregroundColor(.secondary)
+    }
+
+    private var initialsView: some View {
+        let nameToUse = displayName ?? (useCurrentUser ? (firestore.currentClient?.name ?? firestore.currentCoach?.name ?? "") : "")
+        let initials = initialsFrom(name: nameToUse)
+        return ZStack {
+            Circle().fill(Color.gray.opacity(0.25))
+            Text(initials)
+                .font(.system(size: size * 0.36, weight: .semibold))
+                .foregroundColor(.white)
+        }
+        .frame(width: size, height: size)
     }
 
     @ViewBuilder
@@ -67,12 +82,12 @@ struct AvatarView: View {
                         .shadow(radius: 4)
                 } else {
                     ZStack {
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .frame(width: size, height: size)
-                            .foregroundColor(.secondary)
-                        ProgressView()
+                        Circle().fill(Color.gray.opacity(0.25))
+                        Text(initialsFrom(name: displayName ?? ""))
+                            .font(.system(size: size * 0.36, weight: .semibold))
+                            .foregroundColor(.white)
                     }
+                    .frame(width: size, height: size)
                     .onAppear { tryFallbackDownload(url: url) }
                 }
             @unknown default:
@@ -105,13 +120,27 @@ struct AvatarView: View {
             self.isDownloadingFallback = false
         }
     }
+
+    private func initialsFrom(name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "?" }
+        let parts = trimmed.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        if parts.count == 1 {
+            let p = parts[0]
+            return String(p.prefix(2)).uppercased()
+        } else {
+            let first = parts.first?.prefix(1) ?? ""
+            let last = parts.last?.prefix(1) ?? ""
+            return (String(first) + String(last)).uppercased()
+        }
+    }
 }
 
 // Preview
 struct AvatarView_Previews: PreviewProvider {
     static var previews: some View {
         VStack(spacing: 16) {
-            AvatarView().environmentObject(FirestoreManager())
+            AvatarView(name: "John Appleseed").environmentObject(FirestoreManager())
             AvatarView(size: 100).environmentObject(FirestoreManager())
         }
         .padding()
