@@ -269,9 +269,14 @@ struct MainAppView: View {
 
         let needsProfile: Bool = {
             guard auth.user != nil else { return false }
-            if !firestore.userTypeLoaded {
-                return !(firestore.currentCoach != nil)
+            // If we haven't finished loading the user's type/profile yet, avoid blocking the UI.
+            // We only want to show the "Create Profile" blur once we've confirmed there is no profile.
+            if !firestore.userTypeLoaded && firestore.currentClient == nil && firestore.currentCoach == nil {
+                // Still checking; do not require profile yet to prevent a brief flash
+                return false
             }
+
+            // Otherwise evaluate normally: non-coach users without either profile need to create one.
             return !isCoachUser && (firestore.currentClient == nil && firestore.currentCoach == nil)
         }()
 
