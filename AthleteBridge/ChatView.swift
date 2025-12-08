@@ -11,12 +11,38 @@ struct ChatView: View {
     @State private var sending: Bool = false
     // locally track which message IDs we've already marked as read to avoid repeated writes
     @State private var locallyMarkedRead: Set<String> = []
+    // Resolved other participant for header display
+    @State private var otherParticipantUID: String? = nil
 
     private var messagesColl: CollectionReference {
         return Firestore.firestore().collection("chats").document(chatId).collection("messages")
     }
     private var chatDoc: DocumentReference {
         return Firestore.firestore().collection("chats").document(chatId)
+    }
+
+    private func resolveOtherParticipant() {
+        chatDoc.getDocument { snap, err in
+            if let err = err {
+                print("ChatView: failed to fetch chat doc for header: \(err)")
+                return
+            }
+            guard let data = snap?.data() else { return }
+            var participantsArr: [String] = []
+            if let refs = data["participantRefs"] as? [DocumentReference] {
+                participantsArr = refs.map { $0.documentID }
+            } else if let strs = data["participants"] as? [String] {
+                participantsArr = strs
+            }
+            guard !participantsArr.isEmpty else { return }
+            let current = Auth.auth().currentUser?.uid
+            // choose the first participant that is not the current user
+            let other = participantsArr.first(where: { $0 != current }) ?? participantsArr.first
+            DispatchQueue.main.async {
+                self.otherParticipantUID = other
+                if let o = other { self.firestore.ensureParticipantNames([o]) }
+            }
+        }
     }
 
     // Mark messages as read for the current user by adding readBy.<uid> = serverTimestamp()
@@ -60,10 +86,42 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // header area
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Messages")
-                    .font(.headline)
+            // header area - show other participant's avatar + name when available
+            HStack(spacing: 12) {
+                if let other = otherParticipantUID {
+                    // Try to obtain photo URL from cached maps
+                    if let url = firestore.participantPhotoURL(other) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 40, height: 40)
+                            case .success(let img):
+                                img.resizable().scaledToFill().frame(width: 40, height: 40).clipShape(Circle())
+                            case .failure(_):
+                                let name = firestore.participantNames[other] ?? other
+                                Text(String(name.prefix(1))).font(.headline).foregroundColor(.white).frame(width: 40, height: 40).background(Circle().fill(Color.gray))
+                            @unknown default:
+                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 40, height: 40)
+                            }
+                        }
+                    } else {
+                        // no photo, show initials from cached name (or UID)
+                        let name = firestore.participantNames[other] ?? other
+                        Text(initials(from: name)).font(.headline).foregroundColor(.white).frame(width: 40, height: 40).background(Circle().fill(Color.gray))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(firestore.participantNames[other] ?? other)
+                            .font(.headline)
+                        Text("Online")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    Text("Messages").font(.headline)
+                }
+
+                Spacer()
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -132,8 +190,19 @@ struct ChatView: View {
             .background(Color(UIColor.systemBackground))
         }
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: startListening)
+        .onAppear {
+            startListening()
+            resolveOtherParticipant()
+        }
         .onDisappear(perform: stopListening)
+    }
+
+    // Helper to compute initials for header fallback
+    private func initials(from name: String) -> String {
+        let parts = name.split(separator: " ").map { String($0) }
+        if parts.count == 0 { return "?" }
+        if parts.count == 1 { return String(parts[0].prefix(1)).uppercased() }
+        return (String(parts[0].prefix(1)) + String(parts[1].prefix(1))).uppercased()
     }
 
     // MARK: - Firestore
