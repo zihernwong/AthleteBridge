@@ -43,25 +43,42 @@ struct MessagesView: View {
                             let photoURL = firestore.participantPhotoURL(other)
 
                             NavigationLink(value: chat.id) {
-                                HStack {
+                                HStack(alignment: .center) {
                                     AvatarView(url: photoURL, size: 44, useCurrentUser: false)
 
                                     VStack(alignment: .leading) {
                                         Text(displayName).font(.headline)
+
                                         // Use centralized preview cache from FirestoreManager if available
-                                        if let preview = firestore.previewTexts[chat.id], !preview.isEmpty {
-                                            Text(preview).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                                        } else if let last = chat.lastMessageText, !last.isEmpty {
-                                            Text(last).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                                        } else {
+                                        let previewText = (firestore.previewTexts[chat.id]?.isEmpty == false) ? firestore.previewTexts[chat.id]! : (chat.lastMessageText ?? "")
+                                        if previewText.isEmpty {
                                             Text("No messages").font(.subheadline).foregroundColor(.secondary)
+                                        } else {
+                                            // If the chat has unread messages for current user, emphasize the preview and show a blue dot badge to the right
+                                            if firestore.unreadChatIds.contains(chat.id) {
+                                                HStack(alignment: .center, spacing: 8) {
+                                                    Text(previewText)
+                                                        .font(.subheadline)
+                                                        .fontWeight(.semibold)
+                                                        .foregroundColor(.primary)
+                                                        .lineLimit(1)
+                                                    // small blue dot
+                                                    Circle()
+                                                        .fill(Color.accentColor)
+                                                        .frame(width: 10, height: 10)
+                                                }
+                                            } else {
+                                                Text(previewText).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
+                                            }
                                         }
                                     }
 
                                     Spacer()
 
-                                    if let date = firestore.previewDates[chat.id] ?? chat.lastMessageAt {
-                                        Text(DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)).font(.caption).foregroundColor(.secondary)
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        if let date = firestore.previewDates[chat.id] ?? chat.lastMessageAt {
+                                            Text(DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)).font(.caption).foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                                 .padding(.vertical, 8)

@@ -235,41 +235,101 @@ class FirestoreManager: ObservableObject {
     // centralized preview caches (latest message text and date) for chats
     @Published var previewTexts: [String: String] = [:]
     @Published var previewDates: [String: Date] = [:]
+    // Set of chat ids that currently have unread messages for the signed-in user
+    @Published var unreadChatIds: Set<String> = []
+
+    // Snapshot listeners keyed by chat id for the latest-message preview (limit 1 listener per chat)
+    private var previewListeners: [String: ListenerRegistration] = [:]
 
     /// Load the latest message preview for the given chat IDs.
     /// This fetches the newest message document from chats/{chatId}/messages ordered by createdAt desc limit 1
     /// and stores the text/time in `previewTexts`/`previewDates`.
     func loadPreviewsForChats(chatIds: [String]) {
         guard let collRoot = db else { return }
-        for chatId in chatIds {
-            // If we already have a preview date that matches chats' denormalized lastMessageAt, we can skip,
-            // but the caller may handle that optimization. We'll always fetch to ensure correctness.
-            let coll = collRoot.collection("chats").document(chatId).collection("messages")
-            coll.order(by: "createdAt", descending: true).limit(to: 1).getDocuments { snap, err in
-                if let err = err {
-                    print("loadPreviewsForChats: error fetching latest message for chat \(chatId): \(err)")
-                    return
-                }
-                if let doc = snap?.documents.first {
-                    let data = doc.data()
-                    let text = data["text"] as? String ?? ""
-                    var date: Date? = nil
-                    if let ts = data["createdAt"] as? Timestamp { date = ts.dateValue() }
-                    DispatchQueue.main.async {
-                        self.previewTexts[chatId] = text
-                        if let d = date { self.previewDates[chatId] = d }
-                    }
-                } else {
-                    DispatchQueue.main.async {
-                        self.previewTexts[chatId] = ""
-                        self.previewDates[chatId] = nil
-                    }
+
+        // Remove listeners for chats that are no longer in the provided list
+        let incomingSet = Set(chatIds)
+        for (id, listener) in previewListeners {
+            if !incomingSet.contains(id) {
+                listener.remove()
+                previewListeners.removeValue(forKey: id)
+                DispatchQueue.main.async {
+                    self.previewTexts.removeValue(forKey: id)
+                    self.previewDates.removeValue(forKey: id)
+                    self.unreadChatIds.remove(id)
                 }
             }
         }
+
+        for chatId in chatIds {
+            // if already listening, skip
+            if previewListeners[chatId] != nil { continue }
+
+            let coll = collRoot.collection("chats").document(chatId).collection("messages")
+            let q = coll.order(by: "createdAt", descending: true).limit(to: 1)
+            let listener = q.addSnapshotListener { snap, err in
+                if let err = err {
+                    print("loadPreviewsForChats listener error for \(chatId): \(err)")
+                    return
+                }
+
+                guard let doc = snap?.documents.first else {
+                    DispatchQueue.main.async {
+                        self.previewTexts[chatId] = ""
+                        self.previewDates[chatId] = nil
+                        self.unreadChatIds.remove(chatId)
+                    }
+                    return
+                }
+
+                let data = doc.data()
+                let text = data["text"] as? String ?? ""
+                var date: Date? = nil
+                if let ts = data["createdAt"] as? Timestamp { date = ts.dateValue() }
+
+                // Determine unread status for current user
+                var isUnread = false
+                if let uid = Auth.auth().currentUser?.uid {
+                    var senderId: String? = nil
+                    if let sRef = data["senderRef"] as? DocumentReference { senderId = sRef.documentID }
+                    else if let s = data["senderId"] as? String { senderId = s }
+                    else if let s = data["sender"] as? String { senderId = s }
+
+                    if let sid = senderId, sid != uid {
+                        if let readBy = data["readBy"] as? [String: Any] {
+                            if readBy[uid] == nil { isUnread = true }
+                        } else {
+                            isUnread = true
+                        }
+                    }
+                } else {
+                    // If we don't have an authenticated uid yet, conservatively treat it as unread
+                    isUnread = true
+                }
+
+                DispatchQueue.main.async {
+                    self.previewTexts[chatId] = text
+                    if let d = date { self.previewDates[chatId] = d }
+                    if isUnread { self.unreadChatIds.insert(chatId) } else { self.unreadChatIds.remove(chatId) }
+                }
+            }
+
+            previewListeners[chatId] = listener
+        }
     }
 
- // Firestore listener handles
+    // Ensure preview listeners are cleaned up when stopping all chat listeners
+    func stopAllPreviewListeners() {
+        for (_, l) in previewListeners { l.remove() }
+        previewListeners.removeAll()
+        DispatchQueue.main.async {
+            self.previewTexts = [:]
+            self.previewDates = [:]
+            self.unreadChatIds = []
+        }
+    }
+
+    // Firestore listener handles
      private var chatsListener: ListenerRegistration? = nil
      private var messageListeners: [String: ListenerRegistration] = [:]
 
@@ -516,6 +576,8 @@ class FirestoreManager: ObservableObject {
         if let l = chatsListener { l.remove(); chatsListener = nil }
         for (_, l) in messageListeners { l.remove() }
         messageListeners.removeAll()
+        // also remove preview listeners
+        self.stopAllPreviewListeners()
         DispatchQueue.main.async { self.chats = []; self.messagesByChat = [:]; self.chatsDebug = "stopped" }
     }
 
@@ -2529,12 +2591,23 @@ class FirestoreManager: ObservableObject {
                     userTypeDoc.getDocument { utsnap, _ in
                         if let t = utsnap?.data()?["type"] as? String {
                             let upper = t.uppercased()
-                            if upper == "COACH" { resolvedRefs.append(self.db.collection("coaches").document(uid)); inner.leave(); return }
-                            else { resolvedRefs.append(self.db.collection("clients").document(uid)); inner.leave(); return }
+                            if upper == "COACH" {
+                                resolvedRefs.append(self.db.collection("coaches").document(uid))
+                                inner.leave()
+                                return
+                            } else {
+                                resolvedRefs.append(self.db.collection("clients").document(uid))
+                                inner.leave()
+                                return
+                            }
                         }
+                        // fallback: check coaches/{uid} existence
                         self.db.collection("coaches").document(uid).getDocument { csnap, _ in
-                            if let cs = csnap, cs.exists { resolvedRefs.append(self.db.collection("coaches").document(uid)) }
-                            else { resolvedRefs.append(self.db.collection("clients").document(uid)) }
+                            if let cs = csnap, cs.exists {
+                                resolvedRefs.append(self.db.collection("coaches").document(uid))
+                            } else {
+                                resolvedRefs.append(self.db.collection("clients").document(uid))
+                            }
                             inner.leave()
                         }
                     }
@@ -2572,28 +2645,6 @@ class FirestoreManager: ObservableObject {
         }
 
         group.notify(queue: .main) { completion(firstError) }
-    }
-
-    /// Commits a write batch but ensures the completion is called even if the SDK callback is delayed or lost.
-    /// Uses a DispatchWorkItem timeout to call completion with an NSError if the SDK doesn't invoke callback.
-    private func commitBatchWithTimeout(_ batch: WriteBatch, timeout: TimeInterval = 15.0, completion: @escaping (Error?) -> Void) {
-        var finished = false
-        let timeoutItem = DispatchWorkItem {
-            if !finished {
-                finished = true
-                let err = NSError(domain: "FirestoreManager", code: -9999, userInfo: [NSLocalizedDescriptionKey: "Batch commit timed out after \(timeout) seconds"])
-                print("commitBatchWithTimeout: timed out")
-                completion(err)
-            }
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
-
-        batch.commit { err in
-            if finished { return } // timeout already fired
-            finished = true
-            timeoutItem.cancel()
-            completion(err)
-        }
     }
 
     /// Fetch latest message doc for a chat and return senderId and readBy map (if any)
