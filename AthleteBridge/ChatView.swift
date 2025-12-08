@@ -11,7 +11,6 @@ struct ChatView: View {
     @State private var sending: Bool = false
     // locally track which message IDs we've already marked as read to avoid repeated writes
     @State private var locallyMarkedRead: Set<String> = []
-    // Resolved other participant for header display
     @State private var otherParticipantUID: String? = nil
 
     private var messagesColl: CollectionReference {
@@ -19,30 +18,6 @@ struct ChatView: View {
     }
     private var chatDoc: DocumentReference {
         return Firestore.firestore().collection("chats").document(chatId)
-    }
-
-    private func resolveOtherParticipant() {
-        chatDoc.getDocument { snap, err in
-            if let err = err {
-                print("ChatView: failed to fetch chat doc for header: \(err)")
-                return
-            }
-            guard let data = snap?.data() else { return }
-            var participantsArr: [String] = []
-            if let refs = data["participantRefs"] as? [DocumentReference] {
-                participantsArr = refs.map { $0.documentID }
-            } else if let strs = data["participants"] as? [String] {
-                participantsArr = strs
-            }
-            guard !participantsArr.isEmpty else { return }
-            let current = Auth.auth().currentUser?.uid
-            // choose the first participant that is not the current user
-            let other = participantsArr.first(where: { $0 != current }) ?? participantsArr.first
-            DispatchQueue.main.async {
-                self.otherParticipantUID = other
-                if let o = other { self.firestore.ensureParticipantNames([o]) }
-            }
-        }
     }
 
     // Mark messages as read for the current user by adding readBy.<uid> = serverTimestamp()
@@ -89,25 +64,23 @@ struct ChatView: View {
             // header area - show other participant's avatar + name when available
             HStack(spacing: 12) {
                 if let other = otherParticipantUID {
-                    // Try to obtain photo URL from cached maps
                     if let url = firestore.participantPhotoURL(other) {
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .empty:
-                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 40, height: 40)
+                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 44, height: 44)
                             case .success(let img):
-                                img.resizable().scaledToFill().frame(width: 40, height: 40).clipShape(Circle())
+                                img.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle())
                             case .failure(_):
                                 let name = firestore.participantNames[other] ?? other
-                                Text(String(name.prefix(1))).font(.headline).foregroundColor(.white).frame(width: 40, height: 40).background(Circle().fill(Color.gray))
+                                Text(String(name.prefix(1))).font(.headline).foregroundColor(.white).frame(width: 44, height: 44).background(Circle().fill(Color.gray))
                             @unknown default:
-                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 40, height: 40)
+                                Circle().fill(Color.gray.opacity(0.3)).frame(width: 44, height: 44)
                             }
                         }
                     } else {
-                        // no photo, show initials from cached name (or UID)
                         let name = firestore.participantNames[other] ?? other
-                        Text(initials(from: name)).font(.headline).foregroundColor(.white).frame(width: 40, height: 40).background(Circle().fill(Color.gray))
+                        Text(initials(from: name)).font(.headline).foregroundColor(.white).frame(width: 44, height: 44).background(Circle().fill(Color.gray))
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -149,6 +122,7 @@ struct ChatView: View {
                         LazyVStack(spacing: 8) {
                             ForEach(messages) { m in
                                 MessageRow(message: m, isMe: m.senderId == Auth.auth().currentUser?.uid)
+                                    .environmentObject(firestore)
                                     .id(m.id)
                             }
                         }
@@ -206,6 +180,68 @@ struct ChatView: View {
     }
 
     // MARK: - Firestore
+    private func resolveOtherParticipant() {
+        chatDoc.getDocument { snap, err in
+            if let err = err {
+                print("ChatView: failed to fetch chat doc for header: \(err)")
+                return
+            }
+            guard let data = snap?.data() else { return }
+            var participantsArr: [String] = []
+            if let refs = data["participantRefs"] as? [DocumentReference] {
+                participantsArr = refs.map { $0.documentID }
+            } else if let strs = data["participants"] as? [String] {
+                participantsArr = strs
+            }
+            guard !participantsArr.isEmpty else { return }
+            let current = Auth.auth().currentUser?.uid
+            let other = participantsArr.first(where: { $0 != current }) ?? participantsArr.first
+            DispatchQueue.main.async {
+                self.otherParticipantUID = other
+                if let o = other {
+                    self.firestore.ensureParticipantNames([o])
+                    if self.firestore.participantNames[o] == nil {
+                        self.fetchAndCacheParticipant(o)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Fetch a single participant document (coach then client) and populate FirestoreManager's caches
+    private func fetchAndCacheParticipant(_ uid: String) {
+        let db = Firestore.firestore()
+        let coachRef = db.collection("coaches").document(uid)
+        coachRef.getDocument { snap, err in
+            if let err = err { print("ChatView: fetchAndCacheParticipant coach error: \(err)") }
+            if let data = snap?.data(), snap?.exists == true {
+                let first = (data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? ""
+                let last = (data["LastName"] as? String) ?? (data["lastName"] as? String) ?? ""
+                let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                DispatchQueue.main.async { self.firestore.participantNames[uid] = name.isEmpty ? uid : name }
+                let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
+                if let ps = photoStr, !ps.isEmpty {
+                    self.firestore.resolvePhotoURL(ps) { url in DispatchQueue.main.async { self.firestore.coachPhotoURLs[uid] = url } }
+                }
+                return
+            }
+            let clientRef = db.collection("clients").document(uid)
+            clientRef.getDocument { csnap, cerr in
+                if let cerr = cerr { print("ChatView: fetchAndCacheParticipant client error: \(cerr)") }
+                if let cdata = csnap?.data(), csnap?.exists == true {
+                    let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? uid
+                    DispatchQueue.main.async { self.firestore.participantNames[uid] = name }
+                    let photoStr = (cdata["photoURL"] as? String) ?? (cdata["PhotoURL"] as? String) ?? (cdata["photoUrl"] as? String)
+                    if let ps = photoStr, !ps.isEmpty {
+                        self.firestore.resolvePhotoURL(ps) { url in DispatchQueue.main.async { self.firestore.clientPhotoURLs[uid] = url } }
+                    }
+                } else {
+                    DispatchQueue.main.async { self.firestore.participantNames[uid] = uid }
+                }
+            }
+        }
+    }
+
     private func startListening() {
         // Attach listener ordered by createdAt asc (server timestamps may be nil initially)
         stopListening()
@@ -240,6 +276,17 @@ struct ChatView: View {
                 }
                 mapped.append(Message(id: id, senderId: sender, text: text, createdAt: createdAt, readBy: readByMap))
             }
+            // Ensure we have display names/photos for all senders to avoid showing raw UIDs.
+            let senderIds = Array(Set(mapped.map { $0.senderId }).filter { !$0.isEmpty })
+            if !senderIds.isEmpty {
+                // Ask FirestoreManager to batch-resolve names/photos; it's asynchronous and updates @Published caches.
+                self.firestore.ensureParticipantNames(senderIds)
+                // As a fast fallback, directly fetch any participants not yet resolved.
+                for uid in senderIds where self.firestore.participantNames[uid] == nil {
+                    self.fetchAndCacheParticipant(uid)
+                }
+            }
+
             // sort by createdAt (nil -> older)
             mapped.sort { (a,b) in
                 let ad = a.createdAt ?? Date.distantPast
@@ -321,7 +368,6 @@ fileprivate struct MessageRow: View {
         return (String(parts[0].prefix(1)) + String(parts[1].prefix(1))).uppercased()
     }
 
-    // Compute latest reader info outside the ViewBuilder to avoid using let/var inside the body
     private var latestReaderInfo: (uid: String, name: String, photoURL: URL?, date: Date)? {
         guard let rb = message.readBy else { return nil }
         let currentUid = Auth.auth().currentUser?.uid
@@ -337,53 +383,95 @@ fileprivate struct MessageRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom) {
-            if isMe { Spacer() }
+        // Use a full-width HStack and place content left/right using Spacers
+        HStack(alignment: .top) {
+            if isMe {
+                Spacer(minLength: 8)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(message.text)
-                    .foregroundColor(isMe ? .white : .primary)
-                    .padding(10)
-                    .background(isMe ? Color.blue : Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                // Outgoing message: right aligned bubble
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(message.text)
+                        .foregroundColor(.white)
+                        .padding(12)
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .trailing)
 
-                if let date = message.createdAt {
-                    Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    if let date = message.createdAt {
+                        Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let info = latestReaderInfo {
+                        HStack(spacing: 8) {
+                            if let url = info.photoURL {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
+                                    case .success(let img):
+                                        img.resizable().scaledToFill().frame(width: 18, height: 18).clipShape(Circle())
+                                    case .failure(_):
+                                        Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
+                                    @unknown default:
+                                        Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
+                                    }
+                                }
+                            } else {
+                                Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
+                            }
+
+                            let timeStr = DateFormatter.localizedString(from: info.date, dateStyle: .none, timeStyle: .short)
+                            Text("Read by \(info.name) at \(timeStr)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            } else {
+                // Incoming message: avatar + left-aligned bubble
+                if let url = firestore.participantPhotoURL(message.senderId) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            Circle().fill(Color.gray.opacity(0.3)).frame(width: 36, height: 36)
+                        case .success(let img):
+                            img.resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle())
+                        case .failure(_):
+                            Text(initials(from: firestore.participantNames[message.senderId] ?? message.senderId)).font(.caption2).foregroundColor(.white).frame(width: 36, height: 36).background(Circle().fill(Color.gray))
+                        @unknown default:
+                            Circle().fill(Color.gray.opacity(0.3)).frame(width: 36, height: 36)
+                        }
+                    }
+                } else {
+                    Text(initials(from: firestore.participantNames[message.senderId] ?? message.senderId)).font(.caption2).foregroundColor(.white).frame(width: 36, height: 36).background(Circle().fill(Color.gray))
                 }
 
-                // Show read receipt info for messages sent by me: display reader name and time with avatar
-                if isMe, let info = latestReaderInfo {
-                    HStack(spacing: 8) {
-                        if let url = info.photoURL {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .empty:
-                                    Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
-                                case .success(let img):
-                                    img.resizable().scaledToFill().frame(width: 18, height: 18).clipShape(Circle())
-                                case .failure(_):
-                                    Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
-                                @unknown default:
-                                    Circle().fill(Color.gray.opacity(0.3)).frame(width: 18, height: 18)
-                                }
-                            }
-                        } else {
-                            Text(initials(from: info.name)).font(.caption2).foregroundColor(.white).frame(width: 18, height: 18).background(Circle().fill(Color.gray))
-                        }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(firestore.participantNames[message.senderId] ?? message.senderId)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
 
-                        let timeStr = DateFormatter.localizedString(from: info.date, dateStyle: .none, timeStyle: .short)
-                        Text("Read by \(info.name) at \(timeStr)")
+                    Text(message.text)
+                        .foregroundColor(.primary)
+                        .padding(12)
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .leading)
+
+                    if let date = message.createdAt {
+                        Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-            }
 
-            if !isMe { Spacer() }
+                Spacer(minLength: 8)
+            }
         }
         .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 }
 
