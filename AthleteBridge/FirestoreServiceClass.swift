@@ -2574,6 +2574,28 @@ class FirestoreManager: ObservableObject {
         group.notify(queue: .main) { completion(firstError) }
     }
 
+    /// Commits a write batch but ensures the completion is called even if the SDK callback is delayed or lost.
+    /// Uses a DispatchWorkItem timeout to call completion with an NSError if the SDK doesn't invoke callback.
+    private func commitBatchWithTimeout(_ batch: WriteBatch, timeout: TimeInterval = 15.0, completion: @escaping (Error?) -> Void) {
+        var finished = false
+        let timeoutItem = DispatchWorkItem {
+            if !finished {
+                finished = true
+                let err = NSError(domain: "FirestoreManager", code: -9999, userInfo: [NSLocalizedDescriptionKey: "Batch commit timed out after \(timeout) seconds"])
+                print("commitBatchWithTimeout: timed out")
+                completion(err)
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
+
+        batch.commit { err in
+            if finished { return } // timeout already fired
+            finished = true
+            timeoutItem.cancel()
+            completion(err)
+        }
+    }
+
     /// Fetch latest message doc for a chat and return senderId and readBy map (if any)
     func fetchLatestMessageInfo(chatId: String, completion: @escaping ((_ info: (senderId: String?, readBy: [String: Any]?)?) -> Void)) {
         let coll = db.collection("chats").document(chatId).collection("messages")

@@ -236,11 +236,23 @@ struct BookingEditorView: View {
         }
 
         isSaving = true
+        // UI-level timeout: ensure spinner cleared if backend callback never invoked
+        var uiTimeoutItem: DispatchWorkItem? = nil
+        uiTimeoutItem = DispatchWorkItem {
+            if self.isSaving {
+                self.isSaving = false
+                self.alertMessage = "Save timed out. Please check your network and try again."
+                self.showAlert = true
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20.0, execute: uiTimeoutItem!)
         // Determine location name from the selected saved location id; allow nil for no selection
         let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
         // Always create bookings with default status "requested"
         firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
             DispatchQueue.main.async {
+                // cancel UI timeout
+                uiTimeoutItem?.cancel()
                 self.isSaving = false
                 if let err = err {
                     self.alertMessage = "Failed to save booking: \(err.localizedDescription)"
