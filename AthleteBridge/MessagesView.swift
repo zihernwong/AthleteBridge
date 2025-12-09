@@ -95,12 +95,21 @@ struct MessagesView: View {
             }
             .navigationTitle("Messages")
             .toolbar {
+                // Leading action: contextual label depending on user role
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { showingNewConversation = true }) {
+                        // If Firestore knows the user is a coach, show 'Message Clients', otherwise default to clients messaging coaches
+                        let isCoach = (firestore.currentUserType ?? "CLIENT").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH"
+                        Text(isCoach ? "Message Nearby Clients" : "Message Nearby Coaches")
+                    }
+                }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingNewConversation = true }) {
                         Image(systemName: "plus")
                     }
                 }
-            }
+             }
             .onAppear {
                 firestore.listenForChatsForCurrentUser()
                 let ids = firestore.chats.map { $0.id }
