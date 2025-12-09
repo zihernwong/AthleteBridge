@@ -5,6 +5,7 @@ import FirebaseAuth
 import FirebaseStorage
 import SwiftUI
 import CoreLocation
+import EventKit
 
 @MainActor
 class FirestoreManager: ObservableObject {
@@ -2691,6 +2692,83 @@ class FirestoreManager: ObservableObject {
             else if let s = data["sender"] as? String { sender = s }
             let readBy = data["readBy"] as? [String: Any]
             completion((sender, readBy))
+        }
+    }
+
+    /// Add a booking to the Apple Calendar as an event.
+    /// - Parameter title: The title of the event.
+    /// - Parameter start: The start date and time of the event.
+    /// - Parameter end: The end date and time of the event.
+    /// - Parameter location: The location of the event.
+    /// - Parameter notes: Any notes for the event.
+    /// - Parameter bookingId: The Firestore booking document ID, used to check for duplicates.
+    /// - Parameter completion: Completion handler with the event identifier or error.
+    func addBookingToAppleCalendar(title: String, start: Date, end: Date, location: String?, notes: String?, bookingId: String, completion: @escaping (Result<String, Error>) -> Void) {
+        let eventStore = EKEventStore()
+        // Request access if needed (use iOS 17+ API when available)
+        let handleAccessResponse: (Bool, Error?) -> Void = { granted, error in
+            if let err = error {
+                print("addBookingToAppleCalendar: requestAccess error: \(err)")
+                completion(.failure(err))
+                return
+            }
+            if !granted {
+                let err = NSError(domain: "FirestoreManager", code: 403, userInfo: [NSLocalizedDescriptionKey: "Calendar access not granted"])
+                print("addBookingToAppleCalendar: calendar access denied by user")
+                completion(.failure(err))
+                return
+            }
+
+            // Avoid duplicates: check if booking doc already has calendarEventId
+            let bookingRef = self.db.collection("bookings").document(bookingId)
+            bookingRef.getDocument { snap, err in
+                if let err = err {
+                    print("addBookingToAppleCalendar: failed to read booking doc: \(err)")
+                    // continue attempt but still check later
+                }
+                if let data = snap?.data(), let existingEventId = data["calendarEventId"] as? String, !existingEventId.isEmpty {
+                    // Already added on some device; return existing id
+                    DispatchQueue.main.async { completion(.success(existingEventId)) }
+                    return
+                }
+
+                // Create the event
+                let event = EKEvent(eventStore: eventStore)
+                event.title = title
+                event.startDate = start
+                event.endDate = end
+                event.location = location
+                event.notes = notes
+                event.calendar = eventStore.defaultCalendarForNewEvents
+
+                do {
+                    try eventStore.save(event, span: .thisEvent)
+                    let eventId = event.eventIdentifier ?? ""
+                    // Persist the event identifier on the booking doc to avoid duplicates
+                    bookingRef.setData(["calendarEventId": eventId, "calendarAddedAt": FieldValue.serverTimestamp(), "calendarAddedBy": Auth.auth().currentUser?.uid ?? NSNull()], merge: true) { err in
+                        if let err = err {
+                            print("addBookingToAppleCalendar: failed to persist calendarEventId to booking: \(err)")
+                            // still return success for the local calendar save
+                            DispatchQueue.main.async { completion(.success(eventId)) }
+                        } else {
+                            DispatchQueue.main.async { completion(.success(eventId)) }
+                        }
+                    }
+                } catch {
+                    print("addBookingToAppleCalendar: failed to save event: \(error)")
+                    DispatchQueue.main.async { completion(.failure(error)) }
+                }
+            }
+        }
+
+        if #available(iOS 17.0, *) {
+            eventStore.requestFullAccessToEvents { granted, error in
+                handleAccessResponse(granted, error)
+            }
+        } else {
+            eventStore.requestAccess(to: .event) { granted, error in
+                handleAccessResponse(granted, error)
+            }
         }
     }
 }
