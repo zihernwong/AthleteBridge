@@ -11,7 +11,6 @@ struct MessagesView: View {
     var body: some View {
         NavigationStack(path: $navPath) {
             Group {
-                // Empty state when there are no chats
                 if firestore.chats.isEmpty {
                     VStack(spacing: 18) {
                         Spacer()
@@ -37,57 +36,10 @@ struct MessagesView: View {
                 } else {
                     List {
                         ForEach(firestore.chats) { chat in
-                            // compute these here so modifiers (like onAppear) can capture them
-                            let other = chat.participants.first(where: { $0 != auth.user?.uid }) ?? ""
-                            let displayName = firestore.participantNames[other] ?? other
-                            let photoURL = firestore.participantPhotoURL(other)
-
                             NavigationLink(value: chat.id) {
-                                HStack(alignment: .center) {
-                                    AvatarView(url: photoURL, size: 44, useCurrentUser: false)
-
-                                    VStack(alignment: .leading) {
-                                        Text(displayName).font(.headline)
-
-                                        // Use centralized preview cache from FirestoreManager if available
-                                        let previewText = (firestore.previewTexts[chat.id]?.isEmpty == false) ? firestore.previewTexts[chat.id]! : (chat.lastMessageText ?? "")
-                                        if previewText.isEmpty {
-                                            Text("No messages").font(.subheadline).foregroundColor(.secondary)
-                                        } else {
-                                            // If the chat has unread messages for current user, emphasize the preview and show a blue dot badge to the right
-                                            if firestore.unreadChatIds.contains(chat.id) {
-                                                HStack(alignment: .center, spacing: 8) {
-                                                    Text(previewText)
-                                                        .font(.subheadline)
-                                                        .fontWeight(.semibold)
-                                                        .foregroundColor(.primary)
-                                                        .lineLimit(1)
-                                                    // small blue dot
-                                                    Circle()
-                                                        .fill(Color.accentColor)
-                                                        .frame(width: 10, height: 10)
-                                                }
-                                            } else {
-                                                Text(previewText).font(.subheadline).foregroundColor(.secondary).lineLimit(1)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer()
-
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        if let date = firestore.previewDates[chat.id] ?? chat.lastMessageAt {
-                                            Text(DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)).font(.caption).foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                                .onAppear {
-                                    // If we don't have a cached display name for the other participant, attempt to fetch it now.
-                                    if !other.isEmpty && firestore.participantNames[other] == nil {
-                                        firestore.ensureParticipantNames([other])
-                                    }
-                                }
+                                ChatRow(chat: chat)
+                                    .environmentObject(firestore)
+                                    .environmentObject(auth)
                             }
                         }
                     }
@@ -95,27 +47,22 @@ struct MessagesView: View {
             }
             .navigationTitle("Messages")
             .toolbar {
-                // Leading action: contextual label depending on user role
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { showingNewConversation = true }) {
-                        // If Firestore knows the user is a coach, show 'Message Clients', otherwise default to clients messaging coaches
                         let isCoach = (firestore.currentUserType ?? "CLIENT").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH"
-                        Text(isCoach ? "Message Nearby Clients" : "Message Nearby Coaches")
+                        Text(isCoach ? "Message Clients" : "Message Nearby Coaches")
                     }
                 }
-
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingNewConversation = true }) {
-                        Image(systemName: "plus")
-                    }
+                    Button(action: { showingNewConversation = true }) { Image(systemName: "plus") }
                 }
-             }
+            }
             .onAppear {
                 firestore.listenForChatsForCurrentUser()
                 let ids = firestore.chats.map { $0.id }
                 if !ids.isEmpty { firestore.loadPreviewsForChats(chatIds: ids) }
             }
-            .onChange(of: firestore.chats.map { $0.id }) { _ , newIds in
+            .onChange(of: firestore.chats.map { $0.id }) { oldIds, newIds in
                 if !newIds.isEmpty { firestore.loadPreviewsForChats(chatIds: newIds) }
             }
             .navigationDestination(for: String.self) { chatId in
@@ -131,16 +78,12 @@ struct MessagesView: View {
                         }
                         .padding()
 
-                        // Determine role: treat unknown as client by default
                         let roleIsClient = (firestore.currentUserType ?? "CLIENT").uppercased() != "COACH"
 
                         if roleIsClient {
-                            // Show coaches list
                             List {
                                 ForEach(firestore.coaches.filter { newConvSearch.isEmpty ? true : $0.name.lowercased().contains(newConvSearch.lowercased()) }) { coach in
-                                    Button(action: {
-                                        createAndOpenChat(with: coach.id)
-                                    }) {
+                                    Button(action: { createAndOpenChat(with: coach.id) }) {
                                         HStack {
                                             AvatarView(url: firestore.coachPhotoURLs[coach.id] ?? nil, size: 36, useCurrentUser: false)
                                             Text(coach.name)
@@ -150,12 +93,9 @@ struct MessagesView: View {
                                 }
                             }
                         } else {
-                            // Show clients list
                             List {
                                 ForEach(firestore.clients.filter { newConvSearch.isEmpty ? true : $0.name.lowercased().contains(newConvSearch.lowercased()) }) { client in
-                                    Button(action: {
-                                        createAndOpenChat(with: client.id)
-                                    }) {
+                                    Button(action: { createAndOpenChat(with: client.id) }) {
                                         HStack {
                                             AvatarView(url: client.photoURL, size: 36, useCurrentUser: false)
                                             Text(client.name)
@@ -166,15 +106,11 @@ struct MessagesView: View {
                             }
                         }
 
-                        if isCreatingChat {
-                            ProgressView("Creating chat...")
-                                .padding()
-                        }
+                        if isCreatingChat { ProgressView("Creating chat...").padding() }
                     }
                     .navigationTitle("New Conversation")
                 }
                 .onAppear {
-                    // refresh lists
                     firestore.fetchCoaches()
                     firestore.fetchClients()
                 }
@@ -185,17 +121,56 @@ struct MessagesView: View {
     private func createAndOpenChat(with otherId: String) {
         guard let _ = auth.user?.uid else { return }
         isCreatingChat = true
-        // Use createOrGetChat - FirestoreManager will resolve roles and create participantRefs appropriately
         firestore.createOrGetChat(withCoachId: otherId) { chatId in
             DispatchQueue.main.async {
                 self.isCreatingChat = false
                 self.showingNewConversation = false
-                if let cid = chatId {
-                    // navigate into the chat
-                    self.navPath.append(cid)
+                if let cid = chatId { self.navPath.append(cid) }
+            }
+        }
+    }
+}
+
+fileprivate struct ChatRow: View {
+    let chat: FirestoreManager.ChatItem
+    @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var auth: AuthViewModel
+
+    var body: some View {
+        HStack(alignment: .center) {
+            let other = chat.participants.first(where: { $0 != auth.user?.uid }) ?? ""
+            let photoURL = firestore.participantPhotoURL(other)
+            AvatarView(url: photoURL, size: 44, useCurrentUser: false)
+
+            VStack(alignment: .leading) {
+                Text(displayName(for: other)).font(.headline)
+                let previewText = (firestore.previewTexts[chat.id]?.isEmpty == false) ? firestore.previewTexts[chat.id]! : (chat.lastMessageText ?? "")
+                if previewText.isEmpty { Text("No messages").font(.subheadline).foregroundColor(.secondary) }
+                else if firestore.unreadChatIds.contains(chat.id) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(previewText).font(.subheadline).fontWeight(.semibold).foregroundColor(.primary).lineLimit(1)
+                        Circle().fill(Color.accentColor).frame(width: 10, height: 10)
+                    }
+                } else { Text(previewText).font(.subheadline).foregroundColor(.secondary).lineLimit(1) }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
+                if let date = firestore.previewDates[chat.id] ?? chat.lastMessageAt {
+                    Text(DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)).font(.caption).foregroundColor(.secondary)
                 }
             }
         }
+        .padding(.vertical, 8)
+        .onAppear { let other = chat.participants.first(where: { $0 != auth.user?.uid }) ?? ""; if !other.isEmpty && firestore.participantNames[other] == nil { firestore.ensureParticipantNames([other]) } }
+    }
+
+    private func displayName(for uid: String) -> String {
+        if let name = firestore.participantNames[uid], !name.isEmpty { return name }
+        if let c = firestore.coaches.first(where: { $0.id == uid }) { return c.name }
+        if let cl = firestore.clients.first(where: { $0.id == uid }) { return cl.name }
+        return uid
     }
 }
 
