@@ -4,6 +4,7 @@ import FirebaseFirestore
 import FirebaseAuth
 import FirebaseStorage
 import SwiftUI
+import CoreLocation
 
 @MainActor
 class FirestoreManager: ObservableObject {
@@ -2287,28 +2288,53 @@ class FirestoreManager: ObservableObject {
             // Use a batch to write the message and update the parent chat metadata atomically
             let batch = self.db.batch()
             batch.setData(data, forDocument: newMsgRef)
+            // Update chat metadata (last message). Avoid writing into other users' subcollections here because
+            // client-originated writes may be blocked by security rules (clients can't write into coaches/{id}/chats).
             batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatRef, merge: true)
-
-            // If participants are known on the chat document, update per-user pointer docs under each participant
-            if let pData = snap?.data(), let partRefs = pData["participantRefs"] as? [DocumentReference] {
-                for pref in partRefs {
-                    let userChatDoc = pref.collection("chats").document(chatId)
-                    var pointerData: [String: Any] = [
-                        "chatRef": chatRef,
-                        "lastMessageText": text,
-                        "lastMessageAt": FieldValue.serverTimestamp()
-                    ]
-                    // store participantRefs as an array of DocumentReference for listing
-                    pointerData["participantRefs"] = partRefs
-                    batch.setData(pointerData, forDocument: userChatDoc, merge: true)
-                }
-            }
 
             batch.commit { err in
                 if let err = err {
                     print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
                     completion?(err)
                 } else {
+                    // After successfully writing the message, write small pendingNotifications for recipients (non-blocking)
+                    if let pData = snap?.data() {
+                        var recipients: [String] = []
+                        if let prefRefs = pData["participantRefs"] as? [DocumentReference] {
+                            for r in prefRefs {
+                                let rid = r.documentID
+                                if rid != uid { recipients.append(rid) }
+                            }
+                        } else if let pArr = pData["participants"] as? [String] {
+                            for raw in pArr {
+                                let rid = raw.split(separator: "/").last.map(String.init) ?? raw
+                                if rid != uid { recipients.append(rid) }
+                            }
+                        }
+
+                        var senderDisplayName: String = uid
+                        if let cached = self.participantNames[uid], !cached.isEmpty { senderDisplayName = cached }
+                        else if let curCoach = self.currentCoach, curCoach.id == uid { senderDisplayName = curCoach.name }
+                        else if let curClient = self.currentClient, curClient.id == uid { senderDisplayName = curClient.name }
+
+                        for rid in recipients {
+                            let notifColl = self.db.collection("pendingNotifications").document(rid).collection("notifications")
+                            let notifDoc = notifColl.document()
+                            let payload: [String: Any] = [
+                                "title": senderDisplayName,
+                                "body": text,
+                                "chatId": chatId,
+                                "messageId": newMsgRef.documentID,
+                                "senderId": uid,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                            notifDoc.setData(payload) { nerr in
+                                if let nerr = nerr { print("sendMessage: failed to write pending notification for \(rid): \(nerr)") }
+                            }
+                        }
+                    }
+
                     completion?(nil)
                 }
             }
@@ -2406,30 +2432,35 @@ class FirestoreManager: ObservableObject {
                     } else {
                         // also create pointer docs under each participant for fast per-user listing
                         let batch = self.db.batch()
+                        // Only write the per-user pointer doc for the current authenticated user to avoid
+                        // writing into other users' collections (which may be prohibited by security rules).
                         for pref in participantRefs {
                             let comps = pref.path.split(separator: "/").map(String.init)
                             if comps.count >= 2 {
                                 let collName = comps[0]
                                 let userId = comps[1]
-                                let userChatDoc = self.db.collection(collName).document(userId).collection("chats").document(chatId)
-                                let pointerData: [String: Any] = [
-                                    "chatRef": chatRef,
-                                    "participantRefs": participantRefs,
-                                    "lastMessageText": NSNull(),
-                                    "lastMessageAt": FieldValue.serverTimestamp()
-                                ]
-                                batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                                // only create pointer doc for the current user
+                                if userId == uid {
+                                    let userChatDoc = self.db.collection(collName).document(userId).collection("chats").document(chatId)
+                                    let pointerData: [String: Any] = [
+                                        "chatRef": chatRef,
+                                        "participantRefs": participantRefs,
+                                        "lastMessageText": NSNull(),
+                                        "lastMessageAt": FieldValue.serverTimestamp()
+                                    ]
+                                    batch.setData(pointerData, forDocument: userChatDoc, merge: true)
+                                }
                             }
                         }
                         batch.commit { berr in
                             if let berr = berr { print("createOrGetChat: failed to create pointer docs: \(berr)") }
                             completion(chatId)
                         }
-                    }
-                }
-            }
-        }
-    }
+                     }
+                 }
+             }
+         }
+     }
 
     /// Migrate legacy chat documents that store `participants` as [String] into using `participantRefs` ([DocumentReference]).
     /// This also creates/updates per-user pointer docs under coaches/{id}/chats and clients/{id}/chats.
