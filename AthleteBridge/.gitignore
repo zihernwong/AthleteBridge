@@ -39,3 +39,9 @@ GoogleService-Info.plist
 
 # User settings
 *.xcuserdatad
+
+# APNs Auth Key files (.p8) - private keys should never be committed
+# Ignore any .p8 files and AuthKey_*.p8 naming convention used by Apple
+AuthKey_*.p8
+*.p8
+secrets/*.p8
