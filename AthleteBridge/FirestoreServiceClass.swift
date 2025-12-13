@@ -383,9 +383,13 @@ class FirestoreManager: ObservableObject {
         // Prefer per-user pointer docs under coaches/{id}/chats or clients/{id}/chats for efficient listing.
         let userTypeUpper = (self.currentUserType ?? "").uppercased()
         let userCollName = (userTypeUpper == "COACH") ? "coaches" : "clients"
-        let userChatColl = db.collection(userCollName).document(uid).collection("chats")
+        let userRef = db.collection(userCollName).document(uid)
 
-        let query = userChatColl.order(by: "lastMessageAt", descending: true)
+        // Query the root `chats` collection for any chat containing a participantRef equal to the
+        // current user's document reference. This ensures the user will see newly-created chats
+        // even if the creator didn't (or couldn't) write the per-user pointer document under
+        // coaches/{id}/chats or clients/{id}/chats due to security restrictions.
+        let query = db.collection("chats").whereField("participantRefs", arrayContains: userRef).order(by: "lastMessageAt", descending: true)
 
         chatsListener = query.addSnapshotListener { snap, err in
             if let err = err {
