@@ -57,6 +57,17 @@ struct ReviewBookingView: View {
                 }
                 .padding(.top)
 
+                // Manual add-to-calendar button
+                HStack {
+                    Spacer()
+                    Button(action: { addToCalendar() }) {
+                        Label("Add to Calendar", systemImage: "calendar.badge.plus")
+                    }
+                    .buttonStyle(.bordered)
+                    Spacer()
+                }
+                .padding(.top, 8)
+
                 Spacer()
 
                 Text("This is a placeholder page where the client can confirm or decline the pending booking. UI to be implemented.")
@@ -72,6 +83,9 @@ struct ReviewBookingView: View {
                     Button("Close") { dismiss() }
                 }
             }
+        }
+        .alert(isPresented: $showCalendarAlert) {
+            Alert(title: Text("Calendar"), message: Text(calendarAlertMessage), dismissButton: .default(Text("OK")))
         }
     }
 
@@ -89,6 +103,39 @@ struct ReviewBookingView: View {
                     // refresh the coach-specific subcollection listing for the affected coach
                     firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
                     dismiss()
+                }
+            }
+        }
+    }
+
+    @State private var isAddingToCalendar: Bool = false
+    @State private var showCalendarAlert: Bool = false
+    @State private var calendarAlertMessage: String = ""
+    @State private var calendarAlertTitle: String = ""
+    @State private var calendarAlertDate: Date? = nil
+
+    private func addToCalendar() {
+        guard !isAddingToCalendar else { return }
+        isAddingToCalendar = true
+        // Extract booking details and call manager
+        let title = "Session with \(booking.coachName ?? booking.clientName ?? "Booking")"
+        let start = booking.startAt ?? Date()
+        let end = booking.endAt ?? Calendar.current.date(byAdding: .minute, value: 30, to: start) ?? Date()
+        firestore.addBookingToAppleCalendar(title: title, start: start, end: end, location: booking.location, notes: booking.notes, bookingId: booking.id) { res in
+            DispatchQueue.main.async {
+                self.isAddingToCalendar = false
+                switch res {
+                case .success(_):
+                    // show user-friendly alert with title and start date
+                    self.calendarAlertTitle = title
+                    self.calendarAlertDate = start
+                    self.calendarAlertMessage = "Added \(title) on \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))"
+                    self.showCalendarAlert = true
+                    firestore.showToast("Added to Calendar")
+                case .failure(let err):
+                    self.calendarAlertMessage = "Failed to add to Calendar: \(err.localizedDescription)"
+                    self.showCalendarAlert = true
+                    firestore.showToast("Calendar add failed: \(err.localizedDescription)")
                 }
             }
         }
