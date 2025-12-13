@@ -36,6 +36,36 @@ class FirestoreManager: ObservableObject {
     @Published var currentUserType: String? = nil
     @Published var userTypeLoaded: Bool = false
 
+    // User preference: whether to automatically add confirmed bookings to the device calendar
+    @Published var autoAddToCalendar: Bool = false
+
+    /// Fetch user-specific settings stored under `userSettings/{uid}` and populate local published properties.
+    func fetchUserSettings(for uid: String) {
+        let ref = db.collection("userSettings").document(uid)
+        ref.getDocument { snap, err in
+            if let err = err {
+                print("fetchUserSettings error: \(err)")
+                return
+            }
+            let data = snap?.data() ?? [:]
+            let auto = data["autoAddCalendar"] as? Bool ?? false
+            DispatchQueue.main.async {
+                self.autoAddToCalendar = auto
+            }
+        }
+    }
+
+    /// Persist the auto-add-to-calendar preference for the current user into Firestore.
+    func setAutoAddToCalendar(_ value: Bool, completion: ((Error?) -> Void)? = nil) {
+        DispatchQueue.main.async { self.autoAddToCalendar = value }
+        guard let uid = Auth.auth().currentUser?.uid else { completion?(nil); return }
+        let ref = db.collection("userSettings").document(uid)
+        ref.setData(["autoAddCalendar": value], merge: true) { err in
+            if let err = err { print("setAutoAddToCalendar error: \(err)") }
+            completion?(err)
+        }
+    }
+
     // MARK: - Subjects
     struct Subject: Identifiable {
         let id: String
@@ -601,6 +631,8 @@ class FirestoreManager: ObservableObject {
                  self.fetchUserType(for: uid)
                  // Start listening for user's chats
                  self.listenForChatsForCurrentUser()
+                 // Fetch user settings
+                 self.fetchUserSettings(for: uid)
               } else {
                   // user signed out - clear cached profiles and photo URLs
                   DispatchQueue.main.async {
@@ -2214,6 +2246,36 @@ class FirestoreManager: ObservableObject {
                     completion(err)
                 } else {
                     print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
+                    // If booking was confirmed and the user opted into auto-add, add to calendar
+                    if status.lowercased() == "confirmed" || status.lowercased() == "accepted" {
+                        // Only proceed if the current user opted in
+                        if self.autoAddToCalendar {
+                            // Fetch the booking doc to extract details and add to calendar
+                            bookingRef.getDocument { bsnap, berr in
+                                if let berr = berr { print("updateBookingStatus: failed fetching booking to add calendar: \(berr)"); completion(nil); return }
+                                guard let bdata = bsnap?.data() else { completion(nil); return }
+                                // Extract title: prefer coach/client names
+                                var title = "Booking"
+                                if let clientRef = bdata["ClientID"] as? DocumentReference {
+                                    title = "Session with \(clientRef.documentID)"
+                                }
+                                if let coachRef = bdata["CoachID"] as? DocumentReference {
+                                    title = "Session with \(coachRef.documentID)"
+                                }
+                                // Extract start/end
+                                let start = (bdata["StartAt"] as? Timestamp)?.dateValue() ?? Date()
+                                let end = (bdata["EndAt"] as? Timestamp)?.dateValue() ?? Calendar.current.date(byAdding: .minute, value: 30, to: start) ?? Date()
+                                let location = bdata["Location"] as? String
+                                let notes = bdata["Notes"] as? String
+                                self.addBookingToAppleCalendar(title: title, start: start, end: end, location: location, notes: notes, bookingId: bookingId) { res in
+                                    switch res {
+                                    case .success(let eventId): print("Added booking to calendar: \(eventId)")
+                                    case .failure(let err): print("Failed to add booking to calendar: \(err)")
+                                    }
+                                }
+                            }
+                        }
+                    }
                     completion(nil)
                 }
             }

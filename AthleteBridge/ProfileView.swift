@@ -217,6 +217,19 @@ struct ProfileView: View {
                 ChipMultiSelect(items: availableAvailability, selection: $selectedClientAvailability)
             }
 
+            // Auto-add confirmed bookings to device calendar (opt-in)
+            VStack(alignment: .leading) {
+                Text("Calendar") .font(.subheadline).foregroundColor(.secondary)
+                Toggle(isOn: Binding(get: { firestore.autoAddToCalendar }, set: { newVal in
+                    firestore.setAutoAddToCalendar(newVal) { err in
+                        if let err = err { print("setAutoAddToCalendar error: \(err)") }
+                    }
+                })) {
+                    Text("Automatically add confirmed bookings to my Calendar")
+                        .font(.subheadline)
+                }
+            }
+
             VStack(alignment: .leading) {
                 Text("Meeting Preference").font(.subheadline).foregroundColor(.secondary)
                 Picker("Meeting Preference", selection: $selectedClientMeetingPreference) {
@@ -323,6 +336,19 @@ struct ProfileView: View {
                     }
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+
+            // Auto-add confirmed bookings to device calendar (opt-in) for coaches
+            VStack(alignment: .leading) {
+                Text("Calendar") .font(.subheadline).foregroundColor(.secondary)
+                Toggle(isOn: Binding(get: { firestore.autoAddToCalendar }, set: { newVal in
+                    firestore.setAutoAddToCalendar(newVal) { err in
+                        if let err = err { print("setAutoAddToCalendar error: \(err)") }
+                    }
+                })) {
+                    Text("Automatically add confirmed bookings to my Calendar")
+                        .font(.subheadline)
                 }
             }
 

@@ -11,10 +11,32 @@ struct GoalsSelectionView: View {
     @State private var showingSuggestSheet: Bool = false
     @State private var suggestedText: String = ""
     @State private var isAdding: Bool = false
+    // locally track newly added titles so the UI reflects them immediately
+    @State private var newlyAdded: [String] = []
+
+    // Combine server-provided subjects with the static `options` and any newly added entries,
+    // remove duplicates while preserving order. This ensures newly submitted goals show up immediately
+    // and that server updates still take precedence once fetched.
+    private var allOptions: [String] {
+        // assume FirestoreManager.subjects is an array of objects with `title` property
+        let remote = firestore.subjects.map { $0.title }
+        let combined = remote + newlyAdded + options
+        var seen = Set<String>()
+        var result: [String] = []
+        for item in combined {
+            if !seen.contains(item) {
+                seen.insert(item)
+                result.append(item)
+            }
+        }
+        return result
+    }
 
     private var filtered: [String] {
-        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return options }
-        return options.filter { $0.localizedCaseInsensitiveContains(query) }
+        let list = allOptions
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.isEmpty { return list }
+        return list.filter { $0.localizedCaseInsensitiveContains(q) }
     }
 
     var body: some View {
@@ -122,12 +144,13 @@ struct GoalsSelectionView: View {
                     firestore.showToast("Failed: \(err.localizedDescription)")
                 } else {
                     firestore.showToast("Suggestion submitted")
-                    // refresh local list
-                    firestore.fetchSubjects()
-                    // auto-select the newly added subject by title if present
-                    if firestore.subjects.map({ $0.title.lowercased() }).contains(title.lowercased()) {
-                        selection.insert(title)
+                    // reflect immediately in the UI: add to local cache and select
+                    if !newlyAdded.contains(title) {
+                        newlyAdded.append(title)
                     }
+                    selection.insert(title)
+                    // refresh canonical data from server
+                    firestore.fetchSubjects()
                     suggestedText = ""
                     showingSuggestSheet = false
                 }
