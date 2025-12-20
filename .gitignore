@@ -20,3 +20,21 @@ Pods/
 
 # Editor files
 *.swp
+# Ignore functions directory (keep locally but not tracked)
+/functions/
+
+# Node modules
+/node_modules/
+/functions/node_modules/
+
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcuserdatad/
+xcuserdata/
+
+# Build / derived
+build/
+DerivedData/
+Pods/
