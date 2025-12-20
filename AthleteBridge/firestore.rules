@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // TEMPORARY: Allow reads/writes only to authenticated users.
+    // This fixes "Missing or insufficient permissions" for authenticated clients.
+    // IMPORTANT: This is meant as a quick unblock. Harden these rules before releasing to production.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

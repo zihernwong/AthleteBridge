@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AthleteBridge — Stripe Checkout</title>
+  <style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial;margin:40px;color:#111}a{color:#0069ff}</style>
+</head>
+<body>
+  <h1>AthleteBridge — Payment Pages</h1>
+  <p>This site hosts the Stripe Checkout redirect pages used by the app.</p>
+  <ul>
+    <li><a href="/stripe/success?session_id=test123">Success page (test)</a></li>
+    <li><a href="/stripe/cancel">Cancel page</a></li>
+  </ul>
+  <p>If you want the success redirect to open the app, ensure the app handles the custom URL scheme <code>athletebridge://</code> or configure Universal Links.</p>
+  <hr>
+  <p>If you see this page after deploying, the hosting root is correct.</p>
+</body>
+</html>

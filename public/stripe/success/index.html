@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment successful</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color:#111; text-align:center; padding:24px; }
+    .card { max-width:720px; margin:40px auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 6px 20px rgba(0,0,0,0.08); }
+    a.button { display:inline-block; margin-top:18px; padding:14px 20px; background:#0069ff; color:#fff; text-decoration:none; border-radius:10px; font-weight:600 }
+    code { background:#f6f8fa; padding:2px 6px; border-radius:6px; }
+    .muted { color:#666; font-size:0.95rem }
+    .debug { margin-top:12px; font-family: monospace; background:#f6f8fa; padding:8px; border-radius:6px; word-break: break-all; }
+    .warn { color:#b33; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Payment complete</h1>
+    <p class="muted">Thank you — your payment completed successfully.</p>
+    <p id="info" class="muted">Tap the button below to open the app if it is installed.</p>
+    <p style="margin-top:12px;">If nothing happens, tap the button below to open the app.</p>
+    <a id="openButton" class="button" href="#">Open app</a>
+    <div id="debugArea" class="debug" aria-live="polite" style="display:none"></div>
+    <p style="margin-top:16px" class="muted">If you don't have the app installed, you can close this page.</p>
+  </div>
+
+  <script>
+    (function(){
+      var appScheme = 'athletebridge'; // custom URL scheme your app handles
+      var params = new URLSearchParams(window.location.search);
+      var sessionId = params.get('session_id') || '';
+
+      function sanitizeSessionId(id) {
+        if (!id) return '';
+        var s = id.trim();
+        if (s.indexOf('{') !== -1 || s.indexOf('}') !== -1) return '';
+        var safe = s.match(/^[A-Za-z0-9_:\-\.]+$/);
+        return safe ? s : '';
+      }
+
+      var cleanSessionId = sanitizeSessionId(sessionId);
+      var appUrl = cleanSessionId ? (appScheme + '://stripe/success?session_id=' + encodeURIComponent(cleanSessionId)) : (appScheme + '://stripe/success');
+
+      // Validate final URL: must be scheme://... and contain no spaces
+      var urlValid = /^[A-Za-z][A-Za-z0-9+\-.]*:\/\/[^\s]+$/.test(appUrl);
+
+      var openButton = document.getElementById('openButton');
+      openButton.href = urlValid ? appUrl : '#';
+
+      var debugArea = document.getElementById('debugArea');
+      function showDebug(msg, isWarn) {
+        debugArea.style.display = 'block';
+        debugArea.innerHTML = (isWarn ? '<div class="warn">' + msg + '</div>' : msg);
+      }
+
+      // Debug: capture clicks on the Open App button so we can see exactly what URL is used
+      openButton.addEventListener('click', function(e) {
+        // Prevent default so we can log before navigating
+        e.preventDefault();
+        var clickedHref = openButton.href || '(no href)';
+        var ua = navigator.userAgent || 'unknown UA';
+        var ts = new Date().toISOString();
+        var msg = 'Open App button clicked.\nTime: ' + ts + '\nHref: ' + clickedHref + '\nCurrent page: ' + window.location.href + '\nUser agent: ' + ua;
+        showDebug(msg, false);
+
+        // Try to navigate after a short delay (gives the debug UI a moment to render)
+        setTimeout(function() {
+          try {
+            window.location = clickedHref;
+          } catch (err) {
+            showDebug('Navigation error: ' + String(err), true);
+          }
+        }, 160);
+      });
+
+      if (!urlValid) {
+        showDebug('Computed app URL is invalid and will not be opened automatically.\nURL: ' + appUrl + (cleanSessionId ? ('\nSanitized session_id: ' + cleanSessionId) : '\nNo valid session_id provided'), true);
+      } else {
+        showDebug('App URL ready. Tap "Open app" to continue: ' + appUrl, false);
+      }
+
+      if (sessionId && !cleanSessionId) {
+        showDebug((debugArea.innerHTML || '') + '\nNote: the session_id provided by the server looked unsafe and was removed to prevent an invalid deep-link. Contact support if this persists.', true);
+      }
+
+    })();
+  </script>
+</body>
+</html>
