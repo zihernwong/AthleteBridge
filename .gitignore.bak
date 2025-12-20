@@ -1,0 +1,40 @@
+# Node modules
+/functions/node_modules/
+/node_modules/
+
+# Firebase functions lock/build artifacts
+/functions/.package-lock.json
+/functions/package-lock.json
+
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcuserdatad/
+xcuserdata/
+
+# Build / derived
+build/
+DerivedData/
+Pods/
+
+# Editor files
+*.swp
+# Ignore functions directory (keep locally but not tracked)
+/functions/
+
+# Node modules
+/node_modules/
+/functions/node_modules/
+
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcuserdatad/
+xcuserdata/
+
+# Build / derived
+build/
+DerivedData/
+Pods/
