@@ -22,19 +22,13 @@ Pods/
 *.swp
 # Ignore functions directory (keep locally but not tracked)
 /functions/
-
-# Node modules
-/node_modules/
-/functions/node_modules/
-
-# macOS
+functions/*.json
+functions/node_modules/
+node_modules/
+# macOS & Xcode
 .DS_Store
-
-# Xcode user data
 *.xcuserdatad/
 xcuserdata/
-
-# Build / derived
-build/
 DerivedData/
 Pods/
+build/
