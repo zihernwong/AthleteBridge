@@ -24,3 +24,6 @@ Pods/
 
 # Editor files
 *.swp
+# Ignore Firebase functions and node modules
+AthleteBridge/functions/
+**/node_modules/

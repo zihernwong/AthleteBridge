@@ -7,12 +7,17 @@ struct BookingsView: View {
     @State private var showingNewBooking = false
     @State private var selectedBookingForAccept: FirestoreManager.BookingItem? = nil
     @State private var selectedBookingForReview: FirestoreManager.BookingItem? = nil
-    
+    @State private var selectedDate = Date()
+    @State private var currentMonthAnchor = Date() // month displayed by calendar
+
     private var currentUserRole: String? { firestore.currentUserType?.uppercased() }
 
     var body: some View {
         NavigationStack {
             List {
+                // === Today’s Bookings (for both roles) ===
+                todaysBookingsSection
+
                 // Requested bookings section for coaches
                 if currentUserRole == "COACH" {
                     Section(header: Text("Requested Bookings")) {
@@ -51,6 +56,9 @@ struct BookingsView: View {
                     clientBookingsSection
                     coachBookingsSection
                 }
+
+                // === Month Calendar ===
+                monthCalendarSection
             }
             .navigationTitle("Bookings")
             .toolbar {
@@ -80,6 +88,38 @@ struct BookingsView: View {
                 ReviewBookingView(booking: booking)
                     .environmentObject(firestore)
                     .environmentObject(auth)
+            }
+        }
+    }
+
+    // Helper: determine if two dates are the same day
+    private func isSameDay(_ d1: Date, _ d2: Date) -> Bool {
+        Calendar.current.isDate(d1, inSameDayAs: d2)
+    }
+
+    // Helper: all bookings combined relevant to current user
+    private var allRelevantBookings: [FirestoreManager.BookingItem] {
+        let role = currentUserRole
+        if role == "CLIENT" { return firestore.bookings }
+        if role == "COACH" { return firestore.coachBookings }
+        // unknown role: combine
+        return firestore.bookings + firestore.coachBookings
+    }
+
+    // === Today’s Bookings Section ===
+    private var todaysBookingsSection: some View {
+        let today = Date()
+        let todays = allRelevantBookings.filter { b in
+            if let start = b.startAt { return isSameDay(start, today) }
+            return false
+        }
+        return Section(header: Text("Today")) {
+            if todays.isEmpty {
+                Text("No bookings today").foregroundColor(.secondary)
+            } else {
+                ForEach(todays, id: \.id) { b in
+                    BookingRowView(item: b)
+                }
             }
         }
     }
@@ -136,6 +176,144 @@ struct BookingsView: View {
              }
          }
      }
+
+    // === Month Calendar Section ===
+    private var monthCalendarSection: some View {
+        Section(header: calendarHeaderView) {
+            MonthCalendarView(monthAnchor: $currentMonthAnchor,
+                              selectedDate: $selectedDate,
+                              bookings: allRelevantBookings)
+            // Selected date details
+            let dayBookings = allRelevantBookings.filter { b in
+                if let start = b.startAt { return isSameDay(start, selectedDate) }
+                return false
+            }
+            if !dayBookings.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
+                        .font(.headline)
+                    ForEach(dayBookings, id: \.id) { b in
+                        BookingRowView(item: b)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private var calendarHeaderView: some View {
+        HStack {
+            Button(action: { currentMonthAnchor = Calendar.current.date(byAdding: .month, value: -1, to: currentMonthAnchor) ?? currentMonthAnchor }) {
+                Image(systemName: "chevron.left")
+            }
+            Spacer()
+            Text(monthTitle(for: currentMonthAnchor)).font(.headline)
+            Spacer()
+            Button(action: { currentMonthAnchor = Calendar.current.date(byAdding: .month, value: 1, to: currentMonthAnchor) ?? currentMonthAnchor }) {
+                Image(systemName: "chevron.right")
+            }
+        }
+    }
+
+    private func monthTitle(for date: Date) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "LLLL yyyy"
+        return df.string(from: date)
+    }
+}
+
+// === Simple Month Calendar View ===
+struct MonthCalendarView: View {
+    @Binding var monthAnchor: Date
+    @Binding var selectedDate: Date
+    let bookings: [FirestoreManager.BookingItem]
+
+    private var calendar: Calendar { Calendar.current }
+
+    private var monthDays: [Date] {
+        // Start of month
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: monthAnchor))!
+        // Range of days in month
+        let range = calendar.range(of: .day, in: .month, for: startOfMonth)!
+        // First weekday offset
+        let firstWeekday = calendar.component(.weekday, from: startOfMonth)
+        let leadingPlaceholders = (firstWeekday - calendar.firstWeekday + 7) % 7
+        var days: [Date] = []
+        // Leading placeholders (use previous month dates purely for spacing)
+        if leadingPlaceholders > 0 {
+            for i in stride(from: leadingPlaceholders, to: 0, by: -1) {
+                let d = calendar.date(byAdding: .day, value: -i, to: startOfMonth)!
+                days.append(d)
+            }
+        }
+        // Actual days
+        for day in range {
+            let d = calendar.date(byAdding: .day, value: day - 1, to: startOfMonth)!
+            days.append(d)
+        }
+        // Trailing to complete weeks to 6 rows (optional)
+        while days.count % 7 != 0 { days.append(calendar.date(byAdding: .day, value: 1, to: days.last!)!) }
+        return days
+    }
+
+    private func bookingsCount(on date: Date) -> Int {
+        bookings.filter { b in
+            if let start = b.startAt { return calendar.isDate(start, inSameDayAs: date) }
+            return false
+        }.count
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            // Weekday headers
+            let symbols = calendar.shortStandaloneWeekdaySymbols
+            HStack {
+                ForEach(symbols, id: \.self) { s in
+                    Text(s).font(.caption).frame(maxWidth: .infinity)
+                }
+            }
+            // Grid of days (7 columns)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 6) {
+                ForEach(monthDays, id: \.self) { d in
+                    DayCell(date: d,
+                            isCurrentMonth: calendar.isDate(d, equalTo: monthAnchor, toGranularity: .month),
+                            isSelected: calendar.isDate(d, inSameDayAs: selectedDate),
+                            count: bookingsCount(on: d))
+                    .onTapGesture { selectedDate = d }
+                }
+            }
+        }
+    }
+}
+
+struct DayCell: View {
+    let date: Date
+    let isCurrentMonth: Bool
+    let isSelected: Bool
+    let count: Int
+
+    var body: some View {
+        let day = Calendar.current.component(.day, from: date)
+        VStack(spacing: 4) {
+            Text("\(day)")
+                .font(.subheadline)
+                .fontWeight(isSelected ? .bold : .regular)
+                .foregroundColor(isCurrentMonth ? .primary : .secondary)
+                .frame(maxWidth: .infinity)
+            if count > 0 {
+                Text("\(count)")
+                    .font(.caption2)
+                    .padding(4)
+                    .background(Color.blue.opacity(0.15))
+                    .clipShape(Capsule())
+            } else {
+                Spacer().frame(height: 8)
+            }
+        }
+        .padding(6)
+        .background(isSelected ? Color.blue.opacity(0.15) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
 }
 
 // Small reusable row view for displaying a booking
