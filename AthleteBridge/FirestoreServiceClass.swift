@@ -836,7 +836,17 @@ class FirestoreManager: ObservableObject {
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, meetingPreference: meetingPref)
+                    // Extract payments dictionary if present
+                    var paymentsMap: [String: String]? = nil
+                    if let pm = data["payments"] as? [String: String] {
+                        paymentsMap = pm
+                    } else if let anyMap = data["payments"] as? [String: Any] {
+                        var tmp: [String: String] = [:]
+                        for (k, v) in anyMap { if let s = v as? String { tmp[k] = s } }
+                        paymentsMap = tmp.isEmpty ? nil : tmp
+                    }
+
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, meetingPreference: meetingPref, payments: paymentsMap)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -1571,15 +1581,10 @@ class FirestoreManager: ObservableObject {
                     }
                 } else if let s = data["CoachID"] as? String {
                     coachID = s.split(separator: "/").last.map(String.init) ?? s
-                    // attempt to fetch coach doc to resolve name
-                    self.db.collection("coaches").document(coachID).getDocument { sSnap, _ in
-                        if let sdata = sSnap?.data() {
-                            coachName = ([sdata["FirstName"] as? String, sdata["LastName"] as? String].compactMap { $0 }.joined(separator: " ")).trimmingCharacters(in: .whitespaces)
-                        }
-                        let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
-                        results.append(item)
-                        group.leave()
-                    }
+                    coachName = coachID
+                    let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
+                    results.append(item)
+                    group.leave()
                 } else {
                     let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
                     results.append(item)
@@ -2835,6 +2840,38 @@ class FirestoreManager: ObservableObject {
             eventStore.requestAccess(to: .event) { granted, error in
                 handleAccessResponse(granted, error)
             }
+        }
+    }
+
+    /// Update or set the payments dictionary on the current coach document. Keys are payment types (e.g., "venmo", "paypal"), values are usernames.
+    func updateCurrentCoachPayments(_ payments: [String: String], completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let ref = db.collection("coaches").document(uid)
+        ref.setData(["payments": payments, "updatedAt": FieldValue.serverTimestamp()], merge: true) { err in
+            if let err = err {
+                print("updateCurrentCoachPayments error: \(err)")
+                completion?(err)
+                return
+            }
+            if let cur = self.currentCoach {
+                let updated = Coach(id: cur.id,
+                                    name: cur.name,
+                                    specialties: cur.specialties,
+                                    experienceYears: cur.experienceYears,
+                                    availability: cur.availability,
+                                    bio: cur.bio,
+                                    hourlyRate: cur.hourlyRate,
+                                    photoURLString: cur.photoURLString,
+                                    meetingPreference: cur.meetingPreference,
+                                    zipCode: cur.zipCode,
+                                    city: cur.city,
+                                    payments: payments)
+                self.currentCoach = updated
+            }
+            completion?(nil)
         }
     }
 }

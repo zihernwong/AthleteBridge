@@ -32,6 +32,20 @@
 		4B4157E12ECFE20E00C67BEC /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E02ECFE20E00C67BEC /* FirebaseRemoteConfig */; };
 		4B4157E32ECFE20E00C67BEC /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E22ECFE20E00C67BEC /* FirebaseStorage */; };
 		4B4157E52ECFE20E00C67BEC /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4157E42ECFE20E00C67BEC /* FirebaseStorageCombine-Community */; };
+		4B8C54542F19A7CA003E0C2E /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4B74E5E32EDD451E0030F699 /* LaunchScreen.storyboard */; };
+		4B8C54572F1AAE71003E0C2E /* BraintreeAmericanExpress in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54562F1AAE71003E0C2E /* BraintreeAmericanExpress */; };
+		4B8C54592F1AAE71003E0C2E /* BraintreeApplePay in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54582F1AAE71003E0C2E /* BraintreeApplePay */; };
+		4B8C545B2F1AAE71003E0C2E /* BraintreeCard in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C545A2F1AAE71003E0C2E /* BraintreeCard */; };
+		4B8C545D2F1AAE71003E0C2E /* BraintreeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C545C2F1AAE71003E0C2E /* BraintreeCore */; };
+		4B8C545F2F1AAE71003E0C2E /* BraintreeDataCollector in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C545E2F1AAE71003E0C2E /* BraintreeDataCollector */; };
+		4B8C54612F1AAE71003E0C2E /* BraintreeLocalPayment in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54602F1AAE71003E0C2E /* BraintreeLocalPayment */; };
+		4B8C54632F1AAE71003E0C2E /* BraintreePayPal in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54622F1AAE71003E0C2E /* BraintreePayPal */; };
+		4B8C54652F1AAE71003E0C2E /* BraintreePayPalMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54642F1AAE71003E0C2E /* BraintreePayPalMessaging */; };
+		4B8C54672F1AAE71003E0C2E /* BraintreeSEPADirectDebit in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54662F1AAE71003E0C2E /* BraintreeSEPADirectDebit */; };
+		4B8C54692F1AAE71003E0C2E /* BraintreeShopperInsights in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C54682F1AAE71003E0C2E /* BraintreeShopperInsights */; };
+		4B8C546B2F1AAE71003E0C2E /* BraintreeThreeDSecure in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C546A2F1AAE71003E0C2E /* BraintreeThreeDSecure */; };
+		4B8C546D2F1AAE71003E0C2E /* BraintreeUIComponents in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C546C2F1AAE71003E0C2E /* BraintreeUIComponents */; };
+		4B8C546F2F1AAE71003E0C2E /* BraintreeVenmo in Frameworks */ = {isa = PBXBuildFile; productRef = 4B8C546E2F1AAE71003E0C2E /* BraintreeVenmo */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -5278,26 +5292,39 @@
 				4B4157D52ECFE20E00C67BEC /* FirebaseFunctionsCombine-Community in Frameworks */,
 				4B4157BF2ECFE20E00C67BEC /* FirebaseAILogic in Frameworks */,
 				4B4157C52ECFE20E00C67BEC /* FirebaseAnalyticsIdentitySupport in Frameworks */,
+				4B8C545F2F1AAE71003E0C2E /* BraintreeDataCollector in Frameworks */,
 				4B4157E32ECFE20E00C67BEC /* FirebaseStorage in Frameworks */,
+				4B8C546F2F1AAE71003E0C2E /* BraintreeVenmo in Frameworks */,
 				4B4157D12ECFE20E00C67BEC /* FirebaseFirestoreCombine-Community in Frameworks */,
 				4B4157BD2ECFE20E00C67BEC /* FirebaseAI in Frameworks */,
+				4B8C545D2F1AAE71003E0C2E /* BraintreeCore in Frameworks */,
 				4B4157B52ECFAEC800C67BEC /* Cloudinary in Frameworks */,
 				4B4157DB2ECFE20E00C67BEC /* FirebaseMLModelDownloader in Frameworks */,
+				4B8C546D2F1AAE71003E0C2E /* BraintreeUIComponents in Frameworks */,
 				4B285BE42ECECCF300241189 /* FirebaseCore in Frameworks */,
 				4B4157DD2ECFE20E00C67BEC /* FirebaseMessaging in Frameworks */,
+				4B8C54612F1AAE71003E0C2E /* BraintreeLocalPayment in Frameworks */,
+				4B8C54572F1AAE71003E0C2E /* BraintreeAmericanExpress in Frameworks */,
 				4B4157D92ECFE20E00C67BEC /* FirebaseInstallations in Frameworks */,
 				4B285BE22ECECCF300241189 /* FirebaseAuth in Frameworks */,
+				4B8C54632F1AAE71003E0C2E /* BraintreePayPal in Frameworks */,
 				4B4157CB2ECFE20E00C67BEC /* FirebaseAuthCombine-Community in Frameworks */,
 				4B285BEA2ECEE91D00241189 /* FirebaseFirestore in Frameworks */,
+				4B8C54592F1AAE71003E0C2E /* BraintreeApplePay in Frameworks */,
 				4B4157D72ECFE20E00C67BEC /* FirebaseInAppMessaging-Beta in Frameworks */,
 				4B4157CD2ECFE20E00C67BEC /* FirebaseCrashlytics in Frameworks */,
+				4B8C546B2F1AAE71003E0C2E /* BraintreeThreeDSecure in Frameworks */,
 				4B4157D32ECFE20E00C67BEC /* FirebaseFunctions in Frameworks */,
 				4B4157E12ECFE20E00C67BEC /* FirebaseRemoteConfig in Frameworks */,
+				4B8C54692F1AAE71003E0C2E /* BraintreeShopperInsights in Frameworks */,
+				4B8C54672F1AAE71003E0C2E /* BraintreeSEPADirectDebit in Frameworks */,
 				4B4157C72ECFE20E00C67BEC /* FirebaseAppCheck in Frameworks */,
 				4B4157C92ECFE20E00C67BEC /* FirebaseAppDistribution-Beta in Frameworks */,
 				4B4157E52ECFE20E00C67BEC /* FirebaseStorageCombine-Community in Frameworks */,
 				4B4157CF2ECFE20E00C67BEC /* FirebaseDatabase in Frameworks */,
+				4B8C54652F1AAE71003E0C2E /* BraintreePayPalMessaging in Frameworks */,
 				4B4157C32ECFE20E00C67BEC /* FirebaseAnalyticsCore in Frameworks */,
+				4B8C545B2F1AAE71003E0C2E /* BraintreeCard in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5384,6 +5411,19 @@
 				4B4157E02ECFE20E00C67BEC /* FirebaseRemoteConfig */,
 				4B4157E22ECFE20E00C67BEC /* FirebaseStorage */,
 				4B4157E42ECFE20E00C67BEC /* FirebaseStorageCombine-Community */,
+				4B8C54562F1AAE71003E0C2E /* BraintreeAmericanExpress */,
+				4B8C54582F1AAE71003E0C2E /* BraintreeApplePay */,
+				4B8C545A2F1AAE71003E0C2E /* BraintreeCard */,
+				4B8C545C2F1AAE71003E0C2E /* BraintreeCore */,
+				4B8C545E2F1AAE71003E0C2E /* BraintreeDataCollector */,
+				4B8C54602F1AAE71003E0C2E /* BraintreeLocalPayment */,
+				4B8C54622F1AAE71003E0C2E /* BraintreePayPal */,
+				4B8C54642F1AAE71003E0C2E /* BraintreePayPalMessaging */,
+				4B8C54662F1AAE71003E0C2E /* BraintreeSEPADirectDebit */,
+				4B8C54682F1AAE71003E0C2E /* BraintreeShopperInsights */,
+				4B8C546A2F1AAE71003E0C2E /* BraintreeThreeDSecure */,
+				4B8C546C2F1AAE71003E0C2E /* BraintreeUIComponents */,
+				4B8C546E2F1AAE71003E0C2E /* BraintreeVenmo */,
 			);
 			productName = AthleteBridge;
 			productReference = 4B285B3E2ECEBBAB00241189 /* AthleteBridge.app */;
@@ -5470,6 +5510,7 @@
 			packageReferences = (
 				4B285B772ECEC13E00241189 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				4B4157B32ECFAEC800C67BEC /* XCRemoteSwiftPackageReference "cloudinary_ios" */,
+				4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4B285B3F2ECEBBAB00241189 /* Products */;
@@ -5502,6 +5543,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4B8C54542F19A7CA003E0C2E /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5854,6 +5896,14 @@
 				minimumVersion = 5.2.3;
 			};
 		};
+		4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/braintree/braintree_ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.2.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -5981,6 +6031,71 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4B285B772ECEC13E00241189 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = "FirebaseStorageCombine-Community";
+		};
+		4B8C54562F1AAE71003E0C2E /* BraintreeAmericanExpress */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeAmericanExpress;
+		};
+		4B8C54582F1AAE71003E0C2E /* BraintreeApplePay */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeApplePay;
+		};
+		4B8C545A2F1AAE71003E0C2E /* BraintreeCard */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeCard;
+		};
+		4B8C545C2F1AAE71003E0C2E /* BraintreeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeCore;
+		};
+		4B8C545E2F1AAE71003E0C2E /* BraintreeDataCollector */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeDataCollector;
+		};
+		4B8C54602F1AAE71003E0C2E /* BraintreeLocalPayment */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeLocalPayment;
+		};
+		4B8C54622F1AAE71003E0C2E /* BraintreePayPal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreePayPal;
+		};
+		4B8C54642F1AAE71003E0C2E /* BraintreePayPalMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreePayPalMessaging;
+		};
+		4B8C54662F1AAE71003E0C2E /* BraintreeSEPADirectDebit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeSEPADirectDebit;
+		};
+		4B8C54682F1AAE71003E0C2E /* BraintreeShopperInsights */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeShopperInsights;
+		};
+		4B8C546A2F1AAE71003E0C2E /* BraintreeThreeDSecure */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeThreeDSecure;
+		};
+		4B8C546C2F1AAE71003E0C2E /* BraintreeUIComponents */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeUIComponents;
+		};
+		4B8C546E2F1AAE71003E0C2E /* BraintreeVenmo */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B8C54552F1AAE71003E0C2E /* XCRemoteSwiftPackageReference "braintree_ios" */;
+			productName = BraintreeVenmo;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

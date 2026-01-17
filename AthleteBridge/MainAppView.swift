@@ -29,26 +29,30 @@ struct MainAppView: View {
         TabView(selection: $selectedTab) {
             // Messages tab (placeholder) — moved Locations into Bookings
             RequiresProfile(content: { messagesTab }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "message"); Text("Messages") }
+                .tabItem { Label("Messages", systemImage: "message") }
                 .tag(4)
 
-            // Home
-            RequiresProfile(content: { homeTab }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "house"); Text("Home") }
+            // Home (or Payments for coaches)
+            RequiresProfile(content: { homeOrPaymentsTab() }, selectedTab: $selectedTab)
+                .tabItem {
+                    let homeTitle = isCoachUserComputed ? "Payments" : "Home"
+                    let homeIcon = isCoachUserComputed ? "creditcard" : "house"
+                    Label(homeTitle, systemImage: homeIcon)
+                }
                 .tag(1)
 
             RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "star.bubble"); Text("Reviews") }
+                .tabItem { Label("Reviews", systemImage: "star.bubble") }
                 .tag(2)
 
             // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
             RequiresProfile(content: { bookingsTab }, selectedTab: $selectedTab)
-                .tabItem { Image(systemName: "calendar"); Text("Bookings") }
+                .tabItem { Label("Bookings", systemImage: "calendar") }
                 .tag(3)
 
             // Profile tab (use system icon to avoid layout issues)
             ProfileView()
-                .tabItem { Image(systemName: "person.crop.circle"); Text("Profile") }
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                 .tag(0)
         }
         // Track manual tab selection so we don't override the user's explicit choice.
@@ -204,6 +208,14 @@ struct MainAppView: View {
         }
     }
 
+    // New Payments tab content for coaches
+    private var paymentsTab: some View {
+        NavigationStack {
+            PaymentsView()
+                .navigationTitle("Payments")
+        }
+    }
+
     private var avatarView: some View {
         Group {
             if let clientURL = firestore.currentClientPhotoURL {
@@ -322,6 +334,15 @@ struct MainAppView: View {
                         }
                     }
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func homeOrPaymentsTab() -> some View {
+        if isCoachUserComputed {
+            paymentsTab
+        } else {
+            homeTab
         }
     }
 }

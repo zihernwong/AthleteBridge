@@ -15,8 +15,10 @@ struct Coach: Identifiable, Hashable {
     // Optional location info
     let zipCode: String?
     let city: String?
+    // Payments map: key is platform (e.g., venmo, paypal), value is username/handle
+    let payments: [String: String]?
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil) {
         self.id = id
         self.name = name
         self.specialties = specialties
@@ -28,6 +30,7 @@ struct Coach: Identifiable, Hashable {
         self.meetingPreference = meetingPreference
         self.zipCode = zipCode
         self.city = city
+        self.payments = payments
     }
 }
 
