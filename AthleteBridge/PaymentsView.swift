@@ -87,17 +87,51 @@ struct PaymentsView: View {
         }
     }
 
+    // Get RateUSD from a booking (prefer direct property, fallback to Mirror for safety)
+    private func rateUSDValue(for booking: FirestoreManager.BookingItem) -> Double? {
+        // Try Mirror first to match existing behavior
+        let mirror = Mirror(reflecting: booking)
+        if let child = mirror.children.first(where: { $0.label == "RateUSD" || $0.label == "rateUSD" }) {
+            if let rate = child.value as? Double { return rate }
+            if let str = child.value as? String, let val = Double(str) { return val }
+        }
+        return nil
+    }
+
+    // Sum paid bookings' RateUSD; treat nil as 0
+    private var totalPaidUSD: Double {
+        paidBookings.reduce(0.0) { acc, b in acc + (rateUSDValue(for: b) ?? 0.0) }
+    }
+
+    private func formatUSD(_ amount: Double) -> String {
+        if amount >= 1000 {
+            return String(format: "$%.0f", amount)
+        }
+        return String(format: "$%.2f", amount)
+    }
+
     var body: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "creditcard")
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundColor(.accentColor)
-                Text("Payments")
-                    .font(.title2).bold()
-                Spacer()
+            // Header: show summary for clients, else show default payments header
+            if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
+                HStack(spacing: 12) {
+                    // Replace icon + title with a total summary
+                    Text("Total Paid: \(formatUSD(totalPaidUSD))")
+                        .font(.title2).bold()
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 12) {
+                    Image(systemName: "creditcard")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                    Text("Payments")
+                        .font(.title2).bold()
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Input form for new/updated payment entry — SHOW ONLY FOR COACHES
             if isCoach {
@@ -332,20 +366,8 @@ struct PaymentsView: View {
         .padding(.vertical, 8)
     }
 
-    // Debug: print all Mirror-reflected attributes for a booking
-    private func debugDumpBooking(_ booking: FirestoreManager.BookingItem) {
-        let mirror = Mirror(reflecting: booking)
-        print("[PaymentsView] Debug booking attributes for id=\(booking.id):")
-        for (idx, child) in mirror.children.enumerated() {
-            let label = child.label ?? "<no label>"
-            print("  [\(idx)] \(label): \(String(describing: child.value))")
-        }
-    }
-
     // Resolve the USD rate directly from the booking's RateUSD field using reflection (works for Swift structs)
     private func rateUSD(for booking: FirestoreManager.BookingItem) -> String {
-        // Print attributes for debugging
-        debugDumpBooking(booking)
         let mirror = Mirror(reflecting: booking)
         if let child = mirror.children.first(where: { $0.label == "RateUSD" || $0.label == "rateUSD" }) {
             // Handle Double
