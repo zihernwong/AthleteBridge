@@ -18,6 +18,9 @@ struct BookingsView: View {
                 // === Today’s Bookings (for both roles) ===
                 todaysBookingsSection
 
+                // === Month Calendar === (moved to be below Today's and above My/Accepted Bookings)
+                monthCalendarSection
+
                 // Requested bookings section for coaches
                 if currentUserRole == "COACH" {
                     Section(header: Text("Requested Bookings")) {
@@ -56,9 +59,6 @@ struct BookingsView: View {
                     clientBookingsSection
                     coachBookingsSection
                 }
-
-                // === Month Calendar ===
-                monthCalendarSection
             }
             .navigationTitle("Bookings")
             .toolbar {
@@ -319,14 +319,12 @@ struct DayCell: View {
 // Small reusable row view for displaying a booking
 struct BookingRowView: View {
     let item: FirestoreManager.BookingItem
-    @EnvironmentObject private var firestore: FirestoreManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(item.coachName ?? "Coach").font(.headline)
                 Spacer()
-                // Always show booking Status in Bookings tab
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
                     .foregroundColor(.secondary)
