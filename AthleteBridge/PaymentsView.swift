@@ -9,6 +9,7 @@ struct PaymentsView: View {
     @State private var errorMessage: String? = nil
     @State private var isSaving: Bool = false
     @State private var localPayments: [String: String] = [:]
+    @State private var showPaid: Bool = false // keep paid collapsed so unpaid dominates
 
     private let paymentOptions: [String] = ["Paypal", "Venmo", "Zelle"]
 
@@ -45,14 +46,12 @@ struct PaymentsView: View {
         return nameForCoachId(booking.coachID) ?? booking.coachName ?? "Coach"
     }
 
-    // Action: Open Stripe Billing Portal as a fallback payment flow
+    // Helper: trigger payment flow for an unpaid booking
     private func makePayment(for booking: FirestoreManager.BookingItem) {
-        // Optionally include a return URL back to app (custom scheme if configured)
         let returnURL = "https://athletebridge.app/payments/return"
         StripeCheckoutManager.shared.openBillingPortal(returnURL: returnURL) { result in
             switch result {
             case .success:
-                // No-op, portal opened
                 break
             case .failure(let err):
                 DispatchQueue.main.async { self.errorMessage = "Unable to open payment portal: \(err.localizedDescription)" }
@@ -139,7 +138,7 @@ struct PaymentsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Previous bookings for clients — show PaymentStatus
+            // Previous bookings for clients — emphasize Unpaid
             if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Previous Bookings")
@@ -150,7 +149,7 @@ struct PaymentsView: View {
                         Text("No previous bookings found.")
                             .foregroundColor(.secondary)
                     } else {
-                        // Unpaid section
+                        // Unpaid section (dominant area)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Unpaid")
                                 .font(.subheadline).bold()
@@ -165,37 +164,46 @@ struct PaymentsView: View {
                                             Divider().opacity(0.15)
                                         }
                                     }
+                                    .padding(.bottom, 4)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(maxWidth: .infinity)
+                                .frame(maxHeight: .infinity, alignment: .top)
                             }
                         }
                         .padding(.top, 4)
+                        .frame(maxWidth: .infinity)
 
-                        // Paid section
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Paid")
-                                .font(.subheadline).bold()
-                            if paidBookings.isEmpty {
-                                Text("No paid bookings.")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                ScrollView {
-                                    VStack(spacing: 12) {
-                                        ForEach(paidBookings, id: \.id) { b in
-                                            bookingRow(for: b)
-                                            Divider().opacity(0.15)
+                        // Paid section (collapsed by default)
+                        if !paidBookings.isEmpty {
+                            DisclosureGroup(isExpanded: $showPaid) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ScrollView {
+                                        VStack(spacing: 12) {
+                                            ForEach(paidBookings, id: \.id) { b in
+                                                bookingRow(for: b)
+                                                Divider().opacity(0.15)
+                                            }
                                         }
+                                        .padding(.vertical, 4)
                                     }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            } label: {
+                                HStack {
+                                    Text("Paid")
+                                        .font(.subheadline).bold()
+                                    Spacer()
+                                    Text("\(paidBookings.count)")
+                                        .foregroundColor(.secondary)
+                                }
                             }
+                            .padding(.top, 8)
                         }
-                        .padding(.top, 12)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding()
         .onAppear {
@@ -235,7 +243,7 @@ struct PaymentsView: View {
                 Text(notes).font(.footnote).foregroundColor(.secondary)
             }
 
-            // Show Make Payment for unpaid bookings
+            // Show Make Payment button only for unpaid bookings
             if (b.paymentStatus ?? "").lowercased() != "paid" {
                 HStack {
                     Spacer()
