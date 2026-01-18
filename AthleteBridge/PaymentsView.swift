@@ -74,6 +74,19 @@ struct PaymentsView: View {
         }
     }
 
+    // Ensure username has an appropriate leading character for selected platform when empty or only previous prefix
+    private func applyPrefixIfNeeded(for platform: String) {
+        let p = platform.lowercased()
+        if p == "cash app" || p == "cashapp" {
+            if username.isEmpty || username == "@" { username = "$" }
+            // avoid duplicating $ if user already started typing
+            if !username.isEmpty, !username.hasPrefix("$") && username != "@" { /* leave as-is */ }
+        } else if p == "venmo" {
+            if username.isEmpty || username == "$" { username = "@" }
+            if !username.isEmpty, !username.hasPrefix("@") && username != "$" { /* leave as-is */ }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 12) {
@@ -228,6 +241,12 @@ struct PaymentsView: View {
             if let uid = auth.user?.uid { firestore.fetchBookingsForCurrentClientSubcollection() }
             // Load coaches for id->name mapping
             firestore.fetchCoaches()
+            // Initialize prefix based on current platform if field is empty
+            applyPrefixIfNeeded(for: platform)
+        }
+        .onChange(of: platform) { _, newVal in
+            // When platform changes, auto-populate a sensible first character if applicable
+            applyPrefixIfNeeded(for: newVal)
         }
         .onChange(of: firestore.currentCoach?.payments ?? [:]) { _, newValue in
             // Keep local state in sync if manager updates behind the scenes
@@ -332,13 +351,14 @@ struct PaymentsView: View {
     // Build a deep link URL for common platforms
     private func paymentDeepLink(for key: String, value: String) -> URL? {
         let k = key.lowercased()
-        let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var v = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if v.isEmpty { return nil }
         switch k {
         case "venmo":
+            // Venmo deep link should not include leading '@'
+            if v.hasPrefix("@") { v.removeFirst() }
             return URL(string: "https://venmo.com/u/\(v)")
         case "paypal":
-            // support paypal.me handles or email (email won’t deep link reliably)
             if v.range(of: "^[A-Za-z0-9.-_]+$", options: .regularExpression) != nil {
                 return URL(string: "https://paypal.me/\(v)")
             }
@@ -346,7 +366,7 @@ struct PaymentsView: View {
         case "cashapp":
             return URL(string: "https://cash.app/\(v)")
         case "zelle":
-            return nil // banking deep link not standardized
+            return nil
         default:
             return nil
         }
@@ -354,12 +374,23 @@ struct PaymentsView: View {
 
     private func saveEntry() {
         errorMessage = nil
-        let key = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let value = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = raw.lowercased()
+        // Canonicalize keys for storage
+        let key: String = {
+            if lower == "cash app" || lower == "cashapp" { return "cashapp" }
+            if lower == "venmo" { return "venmo" }
+            if lower == "paypal" { return "paypal" }
+            if lower == "zelle" { return "zelle" }
+            return lower
+        }()
+        var value = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Remove UI guidance prefixes before saving
+        if key == "cashapp", value.hasPrefix("$") { value.removeFirst() }
+        if key == "venmo", value.hasPrefix("@") { value.removeFirst() }
         guard !key.isEmpty && !value.isEmpty else { return }
         guard isCoach else { errorMessage = "You must be a coach to update payments."; return }
 
-        // Merge with existing map
         var next = payments
         next[key] = value
         isSaving = true
@@ -368,9 +399,10 @@ struct PaymentsView: View {
             if let err = err {
                 errorMessage = "Failed to save: \(err.localizedDescription)"
             } else {
-                // Refresh local list immediately
                 localPayments = next
                 username = ""
+                // Re-apply prefix for convenience for another entry
+                applyPrefixIfNeeded(for: platform)
             }
         }
     }
