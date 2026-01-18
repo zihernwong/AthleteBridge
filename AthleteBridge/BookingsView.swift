@@ -319,12 +319,14 @@ struct DayCell: View {
 // Small reusable row view for displaying a booking
 struct BookingRowView: View {
     let item: FirestoreManager.BookingItem
+    @EnvironmentObject private var firestore: FirestoreManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(item.coachName ?? "Coach").font(.headline)
                 Spacer()
+                // Always show booking Status in Bookings tab
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
                     .foregroundColor(.secondary)

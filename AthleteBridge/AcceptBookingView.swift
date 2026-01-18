@@ -126,7 +126,7 @@ struct AcceptBookingView: View {
 
 struct AcceptBookingView_Previews: PreviewProvider {
     static var previews: some View {
-        AcceptBookingView(booking: FirestoreManager.BookingItem(id: "1", clientID: "c1", clientName: "Alice", coachID: "s1", coachName: "Coach Sam", startAt: Date(), endAt: Date().addingTimeInterval(1800), location: "Court 1", notes: "Bring racket", status: "requested"))
+        AcceptBookingView(booking: FirestoreManager.BookingItem(id: "1", clientID: "c1", clientName: "Alice", coachID: "s1", coachName: "Coach Sam", startAt: Date(), endAt: Date().addingTimeInterval(1800), location: "Court 1", notes: "Bring racket", status: "requested", paymentStatus: "unpaid"))
             .environmentObject(FirestoreManager())
             .environmentObject(AuthViewModel())
     }

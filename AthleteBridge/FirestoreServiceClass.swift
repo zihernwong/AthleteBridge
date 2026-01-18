@@ -195,6 +195,7 @@ class FirestoreManager: ObservableObject {
         let location: String?
         let notes: String?
         let status: String?
+        let paymentStatus: String?
     }
 
     @Published var bookings: [BookingItem] = []
@@ -1143,7 +1144,8 @@ class FirestoreManager: ObservableObject {
                                 let location = data["Location"] as? String
                                 let notes = data["Notes"] as? String
                                 let status = data["Status"] as? String
-                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                                let paymentStatus = data["PaymentStatus"] as? String
+                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
                                 results.append(item)
                                 group.leave()
                             }
@@ -1155,7 +1157,8 @@ class FirestoreManager: ObservableObject {
                             let location = data["Location"] as? String
                             let notes = data["Notes"] as? String
                             let status = data["Status"] as? String
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                            let paymentStatus = data["PaymentStatus"] as? String
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
                             results.append(item)
                             group.leave()
                         }
@@ -1181,7 +1184,8 @@ class FirestoreManager: ObservableObject {
                             let location = data["Location"] as? String
                             let notes = data["Notes"] as? String
                             let status = data["Status"] as? String
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                            let paymentStatus = data["PaymentStatus"] as? String
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
                             results.append(item)
                             group.leave()
                         }
@@ -1193,7 +1197,8 @@ class FirestoreManager: ObservableObject {
                         let location = data["Location"] as? String
                         let notes = data["Notes"] as? String
                         let status = data["Status"] as? String
-                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                        let paymentStatus = data["PaymentStatus"] as? String
+                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
                         results.append(item)
                         group.leave()
                     }
@@ -1315,7 +1320,8 @@ class FirestoreManager: ObservableObject {
                 let status = data["Status"] as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
-                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                let paymentStatus = data["PaymentStatus"] as? String
+                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
             }
             completion(items)
         }
@@ -1336,7 +1342,8 @@ class FirestoreManager: ObservableObject {
                 let status = data["Status"] as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
-                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                let paymentStatus = data["PaymentStatus"] as? String
+                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
             }
             completion(items)
         }
@@ -2092,7 +2099,7 @@ class FirestoreManager: ObservableObject {
                             }
                         }
 
-                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil)
                         aggregated.append(item)
                     }
                     group.leave()
@@ -2315,7 +2322,8 @@ class FirestoreManager: ObservableObject {
                 let status = data["Status"] as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
-                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status)
+                let paymentStatus = data["PaymentStatus"] as? String
+                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
                 items.append(item)
             }
             completion(items)

@@ -41,9 +41,12 @@ struct MainAppView: View {
                 }
                 .tag(1)
 
-            RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
-                .tabItem { Label("Reviews", systemImage: "star.bubble") }
-                .tag(2)
+            // For coaches, keep Reviews as a primary tab; for clients, move it to More
+            if isCoachUserComputed {
+                RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
+                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
+                    .tag(2)
+            }
 
             // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
             RequiresProfile(content: { bookingsTab }, selectedTab: $selectedTab)
@@ -54,6 +57,18 @@ struct MainAppView: View {
             ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.crop.circle") }
                 .tag(0)
+
+            // Additional Payments tab for clients (keep Home intact and all existing tabs)
+            if !isCoachUserComputed {
+                RequiresProfile(content: { paymentsTab }, selectedTab: $selectedTab)
+                    .tabItem { Label("Payments", systemImage: "creditcard") }
+                    .tag(5)
+
+                // Move Reviews to overflow (More) for clients
+                RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
+                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
+                    .tag(6)
+            }
         }
         // Track manual tab selection so we don't override the user's explicit choice.
         .onChange(of: selectedTab) { _old, _new in

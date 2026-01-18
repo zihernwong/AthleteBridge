@@ -36,13 +36,6 @@ struct PaymentsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !isCoach {
-                Text("Only coaches can set payment preferences.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
             // Existing saved payments list
             if !payments.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -65,42 +58,44 @@ struct PaymentsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Input form for new/updated payment entry
-            VStack(spacing: 10) {
-                // Platform dropdown
-                HStack {
-                    Text("Platform")
-                    Spacer()
-                    Picker("Platform", selection: $platform) {
-                        ForEach(paymentOptions, id: \.self) { opt in
-                            Text(opt).tag(opt)
+            // Input form for new/updated payment entry — SHOW ONLY FOR COACHES
+            if isCoach {
+                VStack(spacing: 10) {
+                    // Platform dropdown
+                    HStack {
+                        Text("Platform")
+                        Spacer()
+                        Picker("Platform", selection: $platform) {
+                            ForEach(paymentOptions, id: \.self) { opt in
+                                Text(opt).tag(opt)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
-                }
-                .padding(10)
-                .background(Color(UIColor.systemGray6))
-                .cornerRadius(8)
+                    .padding(10)
+                    .background(Color(UIColor.systemGray6))
+                    .cornerRadius(8)
 
-                // Username/handle text field
-                HStack {
-                    TextField("Username/handle for this platform", text: $username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .disableAutocorrection(true)
-                }
-                .padding(10)
-                .background(Color(UIColor.systemGray6))
-                .cornerRadius(8)
+                    // Username/handle text field
+                    HStack {
+                        TextField("Username/handle for this platform", text: $username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .disableAutocorrection(true)
+                    }
+                    .padding(10)
+                    .background(Color(UIColor.systemGray6))
+                    .cornerRadius(8)
 
-                Button(action: saveEntry) {
-                    if isSaving { ProgressView().progressViewStyle(.circular) }
-                    Text(isSaving ? "Saving…" : "Save Payment")
-                        .bold()
-                        .frame(maxWidth: .infinity)
+                    Button(action: saveEntry) {
+                        if isSaving { ProgressView().progressViewStyle(.circular) }
+                        Text(isSaving ? "Saving…" : "Save Payment")
+                            .bold()
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                    .buttonStyle(.borderedProminent)
                 }
-                .disabled(!isCoach || username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
-                .buttonStyle(.borderedProminent)
             }
 
             if let err = errorMessage {
@@ -110,12 +105,60 @@ struct PaymentsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            // Previous bookings for clients — show PaymentStatus
+            if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Previous Bookings")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if firestore.bookings.isEmpty {
+                        Text("No previous bookings found.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                ForEach(firestore.bookings, id: \.id) { b in
+                                    // Inline row: coach name + PaymentStatus badge
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(b.coachName ?? "Coach").font(.headline)
+                                            Spacer()
+                                            Text((b.paymentStatus ?? "").capitalized)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        if let start = b.startAt {
+                                            Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        if let end = b.endAt {
+                                            Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        if let notes = b.notes, !notes.isEmpty {
+                                            Text(notes).font(.footnote).foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                    Divider().opacity(0.15)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+
             Spacer()
         }
         .padding()
         .onAppear {
             // Initialize local payments from manager
             localPayments = firestore.currentCoach?.payments ?? [:]
+            // For clients, fetch their bookings to show payment statuses
+            if let uid = auth.user?.uid { firestore.fetchBookingsFromClientSubcollection(clientId: uid) }
         }
         .onChange(of: firestore.currentCoach?.payments ?? [:]) { _, newValue in
             // Keep local state in sync if manager updates behind the scenes
