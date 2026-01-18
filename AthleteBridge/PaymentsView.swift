@@ -15,7 +15,7 @@ struct PaymentsView: View {
     @State private var selectedCoachPayments: [String: String] = [:]
     @State private var selectedCoachName: String = "Coach"
 
-    private let paymentOptions: [String] = ["Paypal", "Venmo", "Zelle"]
+    private let paymentOptions: [String] = ["Paypal", "Venmo", "Zelle", "Cash App"]
 
     private var payments: [String: String] {
         // Fallback to manager if local state is empty and manager has data
