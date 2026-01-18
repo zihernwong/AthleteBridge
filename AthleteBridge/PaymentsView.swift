@@ -24,12 +24,25 @@ struct PaymentsView: View {
         return (firestore.currentUserType ?? "").uppercased() == "COACH"
     }
 
-    // Split bookings by payment status for clients — align type with FirestoreManager.bookings
+    // Split bookings by payment status for clients
     private var paidBookings: [FirestoreManager.BookingItem] {
         firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
     }
     private var unpaidBookings: [FirestoreManager.BookingItem] {
         firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
+    }
+
+    // Helper: resolve coach name from a booking's coachID, falling back to booking.coachName
+    private func nameForCoachId(_ coachId: String?) -> String? {
+        guard let id = coachId, !id.isEmpty else { return nil }
+        if let coach = firestore.coaches.first(where: { $0.id == id }) {
+            return coach.name
+        }
+        return nil
+    }
+
+    private func coachDisplayName(for booking: FirestoreManager.BookingItem) -> String {
+        return nameForCoachId(booking.coachID) ?? booking.coachName ?? "Coach"
     }
 
     var body: some View {
@@ -173,8 +186,10 @@ struct PaymentsView: View {
         .onAppear {
             // Initialize local payments from manager
             localPayments = firestore.currentCoach?.payments ?? [:]
-            // For clients, fetch their bookings to show payment statuses
-            if let uid = auth.user?.uid { firestore.fetchBookingsFromClientSubcollection(clientId: uid) }
+            // For clients, fetch their bookings to show statuses
+            if let uid = auth.user?.uid { firestore.fetchBookingsForCurrentClientSubcollection() }
+            // Load coaches for id->name mapping
+            firestore.fetchCoaches()
         }
         .onChange(of: firestore.currentCoach?.payments ?? [:]) { _, newValue in
             // Keep local state in sync if manager updates behind the scenes
@@ -185,7 +200,7 @@ struct PaymentsView: View {
     private func bookingRow(for b: FirestoreManager.BookingItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(b.coachName ?? "Coach").font(.headline)
+                Text(coachDisplayName(for: b)).font(.headline)
                 Spacer()
                 Text((b.paymentStatus ?? "").capitalized)
                     .font(.caption)
