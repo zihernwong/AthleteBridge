@@ -45,6 +45,21 @@ struct PaymentsView: View {
         return nameForCoachId(booking.coachID) ?? booking.coachName ?? "Coach"
     }
 
+    // Action: Open Stripe Billing Portal as a fallback payment flow
+    private func makePayment(for booking: FirestoreManager.BookingItem) {
+        // Optionally include a return URL back to app (custom scheme if configured)
+        let returnURL = "https://athletebridge.app/payments/return"
+        StripeCheckoutManager.shared.openBillingPortal(returnURL: returnURL) { result in
+            switch result {
+            case .success:
+                // No-op, portal opened
+                break
+            case .failure(let err):
+                DispatchQueue.main.async { self.errorMessage = "Unable to open payment portal: \(err.localizedDescription)" }
+            }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 12) {
@@ -218,6 +233,18 @@ struct PaymentsView: View {
             }
             if let notes = b.notes, !notes.isEmpty {
                 Text(notes).font(.footnote).foregroundColor(.secondary)
+            }
+
+            // Show Make Payment for unpaid bookings
+            if (b.paymentStatus ?? "").lowercased() != "paid" {
+                HStack {
+                    Spacer()
+                    Button(action: { makePayment(for: b) }) {
+                        Text("Make Payment")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.top, 6)
             }
         }
         .padding(.vertical, 8)
