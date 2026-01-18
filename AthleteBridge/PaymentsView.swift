@@ -373,6 +373,8 @@ struct PaymentsView: View {
     }
 
     private func saveEntry() {
+        // Immediately dismiss keyboard when saving
+        hideKeyboard()
         errorMessage = nil
         let raw = platform.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = raw.lowercased()
@@ -403,8 +405,14 @@ struct PaymentsView: View {
                 username = ""
                 // Re-apply prefix for convenience for another entry
                 applyPrefixIfNeeded(for: platform)
+                // Ensure keyboard stays dismissed after save
+                hideKeyboard()
             }
         }
+    }
+
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
