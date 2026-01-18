@@ -79,13 +79,11 @@ struct PaymentsView: View {
         let p = platform.lowercased()
         if p == "cash app" || p == "cashapp" {
             if username.isEmpty || username == "@" { username = "$" }
+            // avoid duplicating $ if user already started typing
             if !username.isEmpty, !username.hasPrefix("$") && username != "@" { /* leave as-is */ }
         } else if p == "venmo" {
             if username.isEmpty || username == "$" { username = "@" }
             if !username.isEmpty, !username.hasPrefix("@") && username != "$" { /* leave as-is */ }
-        } else {
-            // Platforms with no auto-prefix (e.g., PayPal, Zelle): if the field only has a guidance symbol, clear it.
-            if username == "@" || username == "$" { username = "" }
         }
     }
 
@@ -334,8 +332,20 @@ struct PaymentsView: View {
         .padding(.vertical, 8)
     }
 
+    // Debug: print all Mirror-reflected attributes for a booking
+    private func debugDumpBooking(_ booking: FirestoreManager.BookingItem) {
+        let mirror = Mirror(reflecting: booking)
+        print("[PaymentsView] Debug booking attributes for id=\(booking.id):")
+        for (idx, child) in mirror.children.enumerated() {
+            let label = child.label ?? "<no label>"
+            print("  [\(idx)] \(label): \(String(describing: child.value))")
+        }
+    }
+
     // Resolve the USD rate directly from the booking's RateUSD field using reflection (works for Swift structs)
     private func rateUSD(for booking: FirestoreManager.BookingItem) -> String {
+        // Print attributes for debugging
+        debugDumpBooking(booking)
         let mirror = Mirror(reflecting: booking)
         if let child = mirror.children.first(where: { $0.label == "RateUSD" || $0.label == "rateUSD" }) {
             // Handle Double

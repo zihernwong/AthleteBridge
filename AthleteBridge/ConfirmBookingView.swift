@@ -169,7 +169,7 @@ struct ConfirmBookingView: View {
 
 struct ConfirmBookingView_Previews: PreviewProvider {
     static var previews: some View {
-        ConfirmBookingView(booking: FirestoreManager.BookingItem(id: "1", clientID: "c1", clientName: "Alice", coachID: "s1", coachName: "Coach Sam", startAt: Date(), endAt: Date().addingTimeInterval(1800), location: "Court 1", notes: "Bring racket", status: "Pending Acceptance", paymentStatus: "unpaid"))
+        ConfirmBookingView(booking: FirestoreManager.BookingItem(id: "1", clientID: "c1", clientName: "Alice", coachID: "s1", coachName: "Coach Sam", startAt: Date(), endAt: Date().addingTimeInterval(1800), location: "Court 1", notes: "Bring racket", status: "Pending Acceptance", paymentStatus: "unpaid", RateUSD: 55.0))
             .environmentObject(FirestoreManager())
             .environmentObject(AuthViewModel())
     }

@@ -196,6 +196,8 @@ class FirestoreManager: ObservableObject {
         let notes: String?
         let status: String?
         let paymentStatus: String?
+        // New: proposed/accepted rate in USD stored on the booking doc
+        let RateUSD: Double?
     }
 
     @Published var bookings: [BookingItem] = []
@@ -1142,7 +1144,8 @@ class FirestoreManager: ObservableObject {
                                 let notes = data["Notes"] as? String
                                 let status = data["Status"] as? String
                                 let paymentStatus = data["PaymentStatus"] as? String
-                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                                let rateUSD = data["RateUSD"] as? Double
+                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
                                 results.append(item)
                                 group.leave()
                             }
@@ -1155,7 +1158,8 @@ class FirestoreManager: ObservableObject {
                             let notes = data["Notes"] as? String
                             let status = data["Status"] as? String
                             let paymentStatus = data["PaymentStatus"] as? String
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                            let rateUSD = data["RateUSD"] as? Double
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
                             results.append(item)
                             group.leave()
                         }
@@ -1182,7 +1186,8 @@ class FirestoreManager: ObservableObject {
                             let notes = data["Notes"] as? String
                             let status = data["Status"] as? String
                             let paymentStatus = data["PaymentStatus"] as? String
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                            let rateUSD = data["RateUSD"] as? Double
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
                             results.append(item)
                             group.leave()
                         }
@@ -1195,7 +1200,8 @@ class FirestoreManager: ObservableObject {
                         let notes = data["Notes"] as? String
                         let status = data["Status"] as? String
                         let paymentStatus = data["PaymentStatus"] as? String
-                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                        let rateUSD = data["RateUSD"] as? Double
+                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
                         results.append(item)
                         group.leave()
                     }
@@ -1318,7 +1324,8 @@ class FirestoreManager: ObservableObject {
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                let rateUSD = data["RateUSD"] as? Double
+                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
             }
             completion(items)
         }
@@ -1340,7 +1347,8 @@ class FirestoreManager: ObservableObject {
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                let rateUSD = data["RateUSD"] as? Double
+                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
             }
             completion(items)
         }
@@ -2096,7 +2104,7 @@ class FirestoreManager: ObservableObject {
                             }
                         }
 
-                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil)
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil)
                         aggregated.append(item)
                     }
                     group.leave()
@@ -2320,7 +2328,8 @@ class FirestoreManager: ObservableObject {
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus)
+                let rateUSD = data["RateUSD"] as? Double
+                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rateUSD)
                 items.append(item)
             }
             completion(items)
