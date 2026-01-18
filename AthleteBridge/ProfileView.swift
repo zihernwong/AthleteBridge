@@ -301,9 +301,10 @@ struct ProfileView: View {
                 .buttonStyle(PlainButtonStyle())
                 .disabled(auth.user?.email == nil)
             }
-            .padding(14)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(UIColor.secondarySystemBackground)))
+            // Align with the form's white background instead of a card-style container
+            .listRowBackground(Color(UIColor.systemBackground))
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
         .padding(.bottom, 8)
