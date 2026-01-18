@@ -15,6 +15,14 @@ struct PaymentsView: View {
     @State private var selectedCoachPayments: [String: String] = [:]
     @State private var selectedCoachName: String = "Coach"
 
+    // State for payments summary sheet
+    @State private var showClientSummary: Bool = false
+
+    // New state for summary filters
+    @State private var summaryRange: SummaryRange = .last30
+    @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    @State private var customEnd: Date = Date()
+
     private let paymentOptions: [String] = ["Paypal", "Venmo", "Zelle", "Cash App"]
 
     private var payments: [String: String] {
@@ -110,17 +118,82 @@ struct PaymentsView: View {
         return String(format: "$%.2f", amount)
     }
 
+    // New enum and state for summary date range filtering
+    private enum SummaryRange: String, CaseIterable, Identifiable {
+        case all = "All"
+        case last30 = "Last 30 Days"
+        case last90 = "Last 90 Days"
+        case ytd = "Year to Date"
+        case custom = "Custom"
+        var id: String { rawValue }
+        var title: String { rawValue }
+    }
+
+    private func inSelectedRange(_ date: Date?) -> Bool {
+        guard let d = date else { return false }
+        switch summaryRange {
+        case .all:
+            return true
+        case .last30:
+            if let start = Calendar.current.date(byAdding: .day, value: -30, to: Date()) { return d >= start && d <= Date() }
+            return true
+        case .last90:
+            if let start = Calendar.current.date(byAdding: .day, value: -90, to: Date()) { return d >= start && d <= Date() }
+            return true
+        case .ytd:
+            let cal = Calendar.current
+            let comps = cal.dateComponents([.year], from: Date())
+            if let year = comps.year, let start = cal.date(from: DateComponents(year: year, month: 1, day: 1)) { return d >= start && d <= Date() }
+            return true
+        case .custom:
+            return d >= customStart && d <= customEnd
+        }
+    }
+
+    private var filteredPaid: [FirestoreManager.BookingItem] {
+        paidBookings.filter { inSelectedRange($0.startAt) }
+    }
+
+    private var filteredTotalPaidUSD: Double {
+        filteredPaid.reduce(0.0) { $0 + (rateUSDValue(for: $1) ?? 0.0) }
+    }
+
+    private var coachDistribution: [(name: String, count: Int, total: Double)] {
+        var map: [String: (count: Int, total: Double)] = [:]
+        for b in filteredPaid {
+            let name = coachDisplayName(for: b)
+            let amt = rateUSDValue(for: b) ?? 0.0
+            let cur = map[name] ?? (0, 0.0)
+            map[name] = (cur.count + 1, cur.total + amt)
+        }
+        return map.map { (key, val) in (name: key, count: val.count, total: val.total) }
+            .sorted { $0.total > $1.total }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             // Header: show summary for clients, else show default payments header
             if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
                 HStack(spacing: 12) {
-                    // Replace icon + title with a total summary
                     Text("Total Paid: \(formatUSD(totalPaidUSD))")
                         .font(.title2).bold()
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Payments summary button for clients
+                Button(action: { showClientSummary = true }) {
+                    HStack {
+                        Image(systemName: "doc.text.magnifyingglass")
+                        Text("Payments Summary")
+                            .bold()
+                        Spacer()
+                        Text(formatUSD(totalPaidUSD))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
             } else {
                 HStack(spacing: 12) {
                     Image(systemName: "creditcard")
@@ -319,6 +392,58 @@ struct PaymentsView: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showCoachPaymentsSheet = false }
                     }
+                }
+            }
+        }
+        // Present payments summary for clients
+        .sheet(isPresented: $showClientSummary) {
+            NavigationStack {
+                List {
+                    // Range selector
+                    Section("Filter") {
+                        Picker("Range", selection: $summaryRange) {
+                            ForEach(SummaryRange.allCases) { r in
+                                Text(r.title).tag(r)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        if summaryRange == .custom {
+                            DatePicker("Start", selection: $customStart, displayedComponents: [.date])
+                            DatePicker("End", selection: $customEnd, in: customStart...Date(), displayedComponents: [.date])
+                        }
+                    }
+
+                    Section("Totals") {
+                        HStack { Text("Total Paid"); Spacer(); Text(formatUSD(filteredTotalPaidUSD)).bold() }
+                        HStack { Text("Paid Bookings"); Spacer(); Text("\(filteredPaid.count)") }
+                        HStack { Text("Unpaid Bookings"); Spacer(); Text("\(unpaidBookings.count)") }
+                    }
+
+                    Section("Recently Paid") {
+                        ForEach(filteredPaid.prefix(10), id: \.id) { b in
+                            HStack {
+                                Text(coachDisplayName(for: b))
+                                Spacer()
+                                Text(formatUSD(rateUSDValue(for: b) ?? 0.0))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    Section("By Coach") {
+                        ForEach(coachDistribution, id: \.name) { entry in
+                            HStack {
+                                Text(entry.name)
+                                Spacer()
+                                Text("\(entry.count) • \(formatUSD(entry.total))")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Payments Summary")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { showClientSummary = false } }
                 }
             }
         }
