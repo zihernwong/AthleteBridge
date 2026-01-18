@@ -830,14 +830,11 @@ class FirestoreManager: ObservableObject {
             let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
             let availability = data["Availability"] as? [String] ?? []
             let bio = data["Bio"] as? String
-
-            // Read meeting preference if present (standardize key to lowercase)
             let meetingPref = data["meetingPreference"] as? String
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    // Extract payments dictionary if present
                     var paymentsMap: [String: String]? = nil
                     if let pm = data["payments"] as? [String: String] {
                         paymentsMap = pm
@@ -2880,6 +2877,42 @@ class FirestoreManager: ObservableObject {
                 self.currentCoach = updated
             }
             completion?(nil)
+        }
+    }
+
+    // MARK: - Payments Helpers
+    /// Fetch the payments dictionary for a coach by id. Returns keys like "venmo", "paypal" mapped to usernames.
+    /// Tolerant to a CoachID stored as raw uid or path (e.g., "coaches/<id>").
+    func fetchCoachPayments(coachIdOrPath: String, completion: @escaping ([String: String]) -> Void) {
+        // normalize id
+        let coachId = coachIdOrPath.split(separator: "/").last.map(String.init) ?? coachIdOrPath
+        let ref = db.collection("coaches").document(coachId)
+        ref.getDocument { snap, err in
+            if let err = err { print("fetchCoachPayments error: \(err)"); completion([:]); return }
+            guard let data = snap?.data() else { completion([:]); return }
+            if let map = data["payments"] as? [String: String] { completion(map); return }
+            // Coerce [String: Any] -> [String: String]
+            if let anyMap = data["payments"] as? [String: Any] {
+                var out: [String: String] = [:]
+                for (k, v) in anyMap { if let s = v as? String { out[k] = s } }
+                completion(out)
+                return
+            }
+            completion([:])
+        }
+    }
+
+    /// Resolve a coach display name given a CoachID (uid or path). Falls back to the id if name is not set.
+    func fetchCoachDisplayName(coachIdOrPath: String, completion: @escaping (String) -> Void) {
+        let coachId = coachIdOrPath.split(separator: "/").last.map(String.init) ?? coachIdOrPath
+        let ref = db.collection("coaches").document(coachId)
+        ref.getDocument { snap, err in
+            if let err = err { print("fetchCoachDisplayName error: \(err)"); completion(coachId); return }
+            guard let data = snap?.data() else { completion(coachId); return }
+            let first = data["FirstName"] as? String ?? ""
+            let last = data["LastName"] as? String ?? ""
+            let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+            completion(name.isEmpty ? coachId : name)
         }
     }
 }
