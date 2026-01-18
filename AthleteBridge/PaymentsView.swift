@@ -24,6 +24,14 @@ struct PaymentsView: View {
         return (firestore.currentUserType ?? "").uppercased() == "COACH"
     }
 
+    // Split bookings by payment status for clients — align type with FirestoreManager.bookings
+    private var paidBookings: [FirestoreManager.BookingItem] {
+        firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
+    }
+    private var unpaidBookings: [FirestoreManager.BookingItem] {
+        firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 12) {
@@ -36,30 +44,28 @@ struct PaymentsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Existing saved payments list
-            if !payments.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Saved Payment Handles")
-                        .font(.headline)
-                    ForEach(payments.sorted(by: { $0.key.lowercased() < $1.key.lowercased() }), id: \.key) { key, value in
-                        HStack {
-                            Text(key.capitalized)
-                            Spacer()
-                            Text(value)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.vertical, 6)
-                        Divider().opacity(0.2)
-                    }
-                }
-            } else {
-                Text("No payment handles saved yet.")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
             // Input form for new/updated payment entry — SHOW ONLY FOR COACHES
             if isCoach {
+                if !payments.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Saved Payment Handles")
+                            .font(.headline)
+                        ForEach(payments.sorted(by: { $0.key.lowercased() < $1.key.lowercased() }), id: \.key) { key, value in
+                            HStack {
+                                Text(key.capitalized)
+                                Spacer()
+                                Text(value)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                            Divider().opacity(0.2)
+                        }
+                    }
+                } else {
+                    Text("No payment handles saved yet.")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 VStack(spacing: 10) {
                     // Platform dropdown
                     HStack {
@@ -107,46 +113,56 @@ struct PaymentsView: View {
 
             // Previous bookings for clients — show PaymentStatus
             if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Previous Bookings")
                         .font(.headline)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
                     if firestore.bookings.isEmpty {
                         Text("No previous bookings found.")
                             .foregroundColor(.secondary)
                     } else {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                ForEach(firestore.bookings, id: \.id) { b in
-                                    // Inline row: coach name + PaymentStatus badge
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(b.coachName ?? "Coach").font(.headline)
-                                            Spacer()
-                                            Text((b.paymentStatus ?? "").capitalized)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        if let start = b.startAt {
-                                            Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        if let end = b.endAt {
-                                            Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        if let notes = b.notes, !notes.isEmpty {
-                                            Text(notes).font(.footnote).foregroundColor(.secondary)
+                        // Unpaid section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Unpaid")
+                                .font(.subheadline).bold()
+                            if unpaidBookings.isEmpty {
+                                Text("No unpaid bookings.")
+                                    .foregroundColor(.secondary)
+                            } else {
+                                ScrollView {
+                                    VStack(spacing: 12) {
+                                        ForEach(unpaidBookings, id: \.id) { b in
+                                            bookingRow(for: b)
+                                            Divider().opacity(0.15)
                                         }
                                     }
-                                    .padding(.vertical, 8)
-                                    Divider().opacity(0.15)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                        // Paid section
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Paid")
+                                .font(.subheadline).bold()
+                            if paidBookings.isEmpty {
+                                Text("No paid bookings.")
+                                    .foregroundColor(.secondary)
+                            } else {
+                                ScrollView {
+                                    VStack(spacing: 12) {
+                                        ForEach(paidBookings, id: \.id) { b in
+                                            bookingRow(for: b)
+                                            Divider().opacity(0.15)
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(.top, 12)
                     }
                 }
             }
@@ -164,6 +180,32 @@ struct PaymentsView: View {
             // Keep local state in sync if manager updates behind the scenes
             localPayments = newValue
         }
+    }
+
+    private func bookingRow(for b: FirestoreManager.BookingItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(b.coachName ?? "Coach").font(.headline)
+                Spacer()
+                Text((b.paymentStatus ?? "").capitalized)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            if let start = b.startAt {
+                Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            if let end = b.endAt {
+                Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            if let notes = b.notes, !notes.isEmpty {
+                Text(notes).font(.footnote).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
     }
 
     private func saveEntry() {
