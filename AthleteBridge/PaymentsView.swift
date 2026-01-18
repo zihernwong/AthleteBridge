@@ -124,9 +124,18 @@ struct PaymentsView: View {
                     .background(Color(UIColor.systemGray6))
                     .cornerRadius(8)
 
-                    // Username/handle text field
+                    // Username/handle text field with dynamic placeholder per platform
+                    let dynamicPlaceholder: String = {
+                        let p = platform.lowercased()
+                        if p == "cash app" || p == "cashapp" { return "Cash App Handle e.g., $username" }
+                        if p == "venmo" { return "Venmo Username e.g., @username" }
+                        if p == "paypal" { return "Paypal Username paypal.me/username" }
+                        if p == "zelle" { return "Zelle phone or email" }
+                        return "Username/handle for this platform"
+                    }()
+
                     HStack {
-                        TextField("Username/handle for this platform", text: $username)
+                        TextField(dynamicPlaceholder, text: $username)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .disableAutocorrection(true)
