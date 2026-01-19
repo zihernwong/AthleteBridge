@@ -106,9 +106,17 @@ struct PaymentsView: View {
         return nil
     }
 
-    // Sum paid bookings' RateUSD; treat nil as 0
+    // Sum paid bookings' RateUSD; treat nil as 0 (CLIENT side)
     private var totalPaidUSD: Double {
         paidBookings.reduce(0.0) { acc, b in acc + (rateUSDValue(for: b) ?? 0.0) }
+    }
+
+    // Coach-side: paid bookings from coachBookings and total revenue
+    private var coachPaidBookings: [FirestoreManager.BookingItem] {
+        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
+    }
+    private var totalCoachPaidUSD: Double {
+        coachPaidBookings.reduce(0.0) { $0 + (rateUSDValue(for: $1) ?? 0.0) }
     }
 
     private func formatUSD(_ amount: Double) -> String {
@@ -195,12 +203,17 @@ struct PaymentsView: View {
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
             } else {
+                // Coach header shows Total Revenue
                 HStack(spacing: 12) {
                     Image(systemName: "creditcard")
                         .font(.system(size: 32, weight: .semibold))
                         .foregroundColor(.accentColor)
-                    Text("Payments")
-                        .font(.title2).bold()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Payments").font(.title2).bold()
+                        Text("Total Revenue: \(formatUSD(totalCoachPaidUSD))")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -344,8 +357,14 @@ struct PaymentsView: View {
         .onAppear {
             // Initialize local payments from manager
             localPayments = firestore.currentCoach?.payments ?? [:]
-            // For clients, fetch their bookings to show statuses
-            if let uid = auth.user?.uid { firestore.fetchBookingsForCurrentClientSubcollection() }
+            // For clients, fetch their bookings to show statuses (avoid calling on coach accounts)
+            let userType = (firestore.currentUserType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if userType == "CLIENT" {
+                if let _ = auth.user?.uid { firestore.fetchBookingsForCurrentClientSubcollection() }
+            } else if userType == "COACH" {
+                // Ensure coach-side bookings are available
+                firestore.fetchBookingsForCurrentCoachSubcollection()
+            }
             // Load coaches for id->name mapping
             firestore.fetchCoaches()
             // Initialize prefix based on current platform if field is empty
