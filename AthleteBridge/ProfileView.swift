@@ -301,13 +301,17 @@ struct ProfileView: View {
                 .buttonStyle(PlainButtonStyle())
                 .disabled(auth.user?.email == nil)
             }
-            .padding(.vertical, 8)
+            .padding(14)
             .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
-            // Align with the form's white background instead of a card-style container
-            .listRowBackground(Color(UIColor.systemBackground))
+            // Use the same background as the list to avoid a double-toned card overlap
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(UIColor.systemBackground)))
+            // Make the row flush with the list’s horizontal margins to fix edge overlap
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            .listRowBackground(Color(UIColor.systemGroupedBackground))
+            .listRowSeparator(.hidden)
         }
-        .padding(.bottom, 8)
+        // Remove the extra bottom padding that caused visual misalignment
+        .padding(.bottom, 0)
     }
     
     private var coachSection: some View {

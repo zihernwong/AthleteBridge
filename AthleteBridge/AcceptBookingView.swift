@@ -59,6 +59,14 @@ struct AcceptBookingView: View {
                     .disabled(isSaving || !(isValidRate() || note.count > 0))
                 }
             }
+            .onAppear {
+                // Prefill the rate field: use booking.RateUSD if present; otherwise fallback to coach hourlyRate
+                if let r = booking.RateUSD, r > 0 {
+                    rateText = String(format: "%.2f", r)
+                } else if let hr = firestore.currentCoach?.hourlyRate, hr > 0 {
+                    rateText = String(format: "%.2f", hr)
+                }
+            }
         }
     }
 
