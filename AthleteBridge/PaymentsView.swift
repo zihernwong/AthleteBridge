@@ -15,8 +15,10 @@ struct PaymentsView: View {
     @State private var selectedCoachPayments: [String: String] = [:]
     @State private var selectedCoachName: String = "Coach"
 
-    // State for payments summary sheet
+    // State for payments summary sheet (client)
     @State private var showClientSummary: Bool = false
+    // State for coach revenue summary sheet
+    @State private var showCoachSummary: Bool = false
 
     // New state for summary filters
     @State private var summaryRange: SummaryRange = .last30
@@ -45,6 +47,14 @@ struct PaymentsView: View {
         firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
     }
 
+    // Coach-side bookings split (used for coach summary/revenue calculations)
+    private var coachPaidBookings: [FirestoreManager.BookingItem] {
+        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
+    }
+    private var coachUnpaidBookings: [FirestoreManager.BookingItem] {
+        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
+    }
+
     // Helper: resolve coach name from a booking's coachID, falling back to booking.coachName
     private func nameForCoachId(_ coachId: String?) -> String? {
         guard let id = coachId, !id.isEmpty else { return nil }
@@ -56,6 +66,11 @@ struct PaymentsView: View {
 
     private func coachDisplayName(for booking: FirestoreManager.BookingItem) -> String {
         return nameForCoachId(booking.coachID) ?? booking.coachName ?? "Coach"
+    }
+
+    // Helper: display client name for coach-side rows
+    private func clientDisplayName(for booking: FirestoreManager.BookingItem) -> String {
+        (booking.clientName?.isEmpty == false ? booking.clientName! : nil) ?? "Client"
     }
 
     // Helper: trigger payment flow for an unpaid booking — now fetch and show coach payment methods
@@ -111,10 +126,7 @@ struct PaymentsView: View {
         paidBookings.reduce(0.0) { acc, b in acc + (rateUSDValue(for: b) ?? 0.0) }
     }
 
-    // Coach-side: paid bookings from coachBookings and total revenue
-    private var coachPaidBookings: [FirestoreManager.BookingItem] {
-        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
-    }
+    // Coach totals (all-time)
     private var totalCoachPaidUSD: Double {
         coachPaidBookings.reduce(0.0) { $0 + (rateUSDValue(for: $1) ?? 0.0) }
     }
@@ -166,6 +178,26 @@ struct PaymentsView: View {
         filteredPaid.reduce(0.0) { $0 + (rateUSDValue(for: $1) ?? 0.0) }
     }
 
+    // Coach filtered metrics
+    private var filteredCoachPaid: [FirestoreManager.BookingItem] {
+        coachPaidBookings.filter { inSelectedRange($0.startAt) }
+    }
+    private var filteredCoachTotalPaidUSD: Double {
+        filteredCoachPaid.reduce(0.0) { $0 + (rateUSDValue(for: $1) ?? 0.0) }
+    }
+    private var clientDistributionForCoach: [(name: String, count: Int, total: Double)] {
+        var map: [String: (count: Int, total: Double)] = [:]
+        for b in filteredCoachPaid {
+            let name = clientDisplayName(for: b)
+            let amt = rateUSDValue(for: b) ?? 0.0
+            let cur = map[name] ?? (0, 0.0)
+            map[name] = (cur.count + 1, cur.total + amt)
+        }
+        return map.map { (key, val) in (name: key, count: val.count, total: val.total) }
+            .sorted { $0.total > $1.total }
+    }
+
+    // Client-side distribution by coach for the client summary sheet
     private var coachDistribution: [(name: String, count: Int, total: Double)] {
         var map: [String: (count: Int, total: Double)] = [:]
         for b in filteredPaid {
@@ -203,7 +235,7 @@ struct PaymentsView: View {
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
             } else {
-                // Coach header shows Total Revenue
+                // Coach header shows Total Revenue + summary button
                 HStack(spacing: 12) {
                     Image(systemName: "creditcard")
                         .font(.system(size: 32, weight: .semibold))
@@ -217,6 +249,17 @@ struct PaymentsView: View {
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(action: { showCoachSummary = true }) {
+                    HStack {
+                        Image(systemName: "doc.text.magnifyingglass")
+                        Text("Revenue Summary").bold()
+                        Spacer()
+                        Text(formatUSD(totalCoachPaidUSD)).foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
             }
 
             // Input form for new/updated payment entry — SHOW ONLY FOR COACHES
@@ -316,7 +359,7 @@ struct PaymentsView: View {
                             } else {
                                 ScrollView {
                                     VStack(spacing: 12) {
-                                        ForEach(unpaidBookings, id: \ .id) { b in
+                                        ForEach(unpaidBookings, id: \.id) { b in
                                             bookingRow(for: b)
                                             Divider().opacity(0.15)
                                         }
@@ -337,7 +380,7 @@ struct PaymentsView: View {
                             } else {
                                 ScrollView {
                                     VStack(spacing: 12) {
-                                        ForEach(paidBookings, id: \ .id) { b in
+                                        ForEach(paidBookings, id: \.id) { b in
                                             bookingRow(for: b)
                                             Divider().opacity(0.15)
                                         }
@@ -357,12 +400,11 @@ struct PaymentsView: View {
         .onAppear {
             // Initialize local payments from manager
             localPayments = firestore.currentCoach?.payments ?? [:]
-            // For clients, fetch their bookings to show statuses (avoid calling on coach accounts)
+            // Fetch appropriate bookings by user type (avoid corrupting client/coach queries)
             let userType = (firestore.currentUserType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if userType == "CLIENT" {
                 if let _ = auth.user?.uid { firestore.fetchBookingsForCurrentClientSubcollection() }
             } else if userType == "COACH" {
-                // Ensure coach-side bookings are available
                 firestore.fetchBookingsForCurrentCoachSubcollection()
             }
             // Load coaches for id->name mapping
@@ -463,6 +505,58 @@ struct PaymentsView: View {
                 .navigationTitle("Payments Summary")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Done") { showClientSummary = false } }
+                }
+            }
+        }
+        // Present revenue summary for coaches
+        .sheet(isPresented: $showCoachSummary) {
+            NavigationStack {
+                List {
+                    // Range selector
+                    Section("Filter") {
+                        Picker("Range", selection: $summaryRange) {
+                            ForEach(SummaryRange.allCases) { r in
+                                Text(r.title).tag(r)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        if summaryRange == .custom {
+                            DatePicker("Start", selection: $customStart, displayedComponents: [.date])
+                            DatePicker("End", selection: $customEnd, in: customStart...Date(), displayedComponents: [.date])
+                        }
+                    }
+
+                    Section("Totals") {
+                        HStack { Text("Total Revenue"); Spacer(); Text(formatUSD(filteredCoachTotalPaidUSD)).bold() }
+                        HStack { Text("Paid Bookings"); Spacer(); Text("\(filteredCoachPaid.count)") }
+                        HStack { Text("Unpaid Bookings"); Spacer(); Text("\(coachUnpaidBookings.count)") }
+                    }
+
+                    Section("Recently Paid") {
+                        ForEach(filteredCoachPaid.prefix(10), id: \.id) { b in
+                            HStack {
+                                Text(clientDisplayName(for: b))
+                                Spacer()
+                                Text(formatUSD(rateUSDValue(for: b) ?? 0.0))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    Section("By Client") {
+                        ForEach(clientDistributionForCoach, id: \.name) { entry in
+                            HStack {
+                                Text(entry.name)
+                                Spacer()
+                                Text("\(entry.count) • \(formatUSD(entry.total))")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Revenue Summary")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { showCoachSummary = false } }
                 }
             }
         }
