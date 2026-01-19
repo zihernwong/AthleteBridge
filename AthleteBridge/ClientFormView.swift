@@ -71,7 +71,7 @@ struct ClientFormView: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
-                        ChipMultiSelect(items: availabilityOptions, selection: $selectedAvailability)
+                        AvailabilityChipSelect(items: availabilityOptions, selection: $selectedAvailability)
                     }
                     
                     NavigationLink("Find Coaches") {

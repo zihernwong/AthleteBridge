@@ -43,7 +43,7 @@ struct ProfileView: View {
     private let meetingOptionsCoach: [String] = ["In-Person", "Virtual"]
     @State private var selectedCoachMeetingPreference: String = "In-Person"
     // Coach availability selection (stored as array of strings)
-    @State private var coachAvailabilitySelection: [String] = ["Morning"]
+    @State private var selectedCoachAvailability: Set<String> = []
 
     // Location
     @State private var clientZipCode: String = ""
@@ -214,7 +214,7 @@ struct ProfileView: View {
 
             VStack(alignment: .leading) {
                 Text("Preferred Availability").font(.subheadline).foregroundColor(.secondary)
-                ChipMultiSelect(items: availableAvailability, selection: $selectedClientAvailability)
+                AvailabilityChipSelect(items: availableAvailability, selection: $selectedClientAvailability)
             }
 
             // Auto-add confirmed bookings to device calendar (opt-in)
@@ -503,7 +503,7 @@ struct ProfileView: View {
             name = coach.name
             selectedSpecialties = Set(coach.specialties)
             experienceYears = coach.experienceYears
-            coachAvailabilitySelection = coach.availability
+            selectedCoachAvailability = Set(coach.availability)
             bioText = coach.bio ?? ""
             selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
             if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
@@ -535,7 +535,7 @@ struct ProfileView: View {
                 name = coach.name
                 selectedSpecialties = Set(coach.specialties)
                 experienceYears = coach.experienceYears
-                coachAvailabilitySelection = coach.availability
+                selectedCoachAvailability = Set(coach.availability)
                 bioText = coach.bio ?? ""
                 selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
                 if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
@@ -602,7 +602,7 @@ struct ProfileView: View {
                                        firstName: firstName,
                                        lastName: lastName,
                                        specialties: specialties,
-                                       availability: coachAvailabilitySelection,
+                                       availability: Array(selectedCoachAvailability),
                                        experienceYears: experience,
                                        hourlyRate: hourlyRate,
                                        meetingPreference: meetingPrefToSave,
