@@ -2958,3 +2958,28 @@ class FirestoreManager: ObservableObject {
         return error
     }
 }
+
+extension FirestoreManager {
+    struct AwayTimeItem: Identifiable {
+        let id: String
+        let startAt: Date
+        let endAt: Date
+    }
+
+    /// Fetch away time blocks for a coach from coaches/{coachId}/awayTimes within an optional date range.
+    func fetchAwayTimesForCoach(coachId: String, start: Date? = nil, end: Date? = nil, completion: @escaping ([AwayTimeItem]) -> Void) {
+        var query: Query = db.collection("coaches").document(coachId).collection("awayTimes")
+        if let s = start { query = query.whereField("startAt", isGreaterThanOrEqualTo: Timestamp(date: s)) }
+        if let e = end { query = query.whereField("startAt", isLessThan: Timestamp(date: e)) }
+        query.getDocuments { snapshot, error in
+            if let error = error { print("fetchAwayTimesForCoach error: \(error)"); completion([]); return }
+            let docs = snapshot?.documents ?? []
+            let items: [AwayTimeItem] = docs.compactMap { d in
+                let data = d.data()
+                guard let s = (data["startAt"] as? Timestamp)?.dateValue(), let e = (data["endAt"] as? Timestamp)?.dateValue() else { return nil }
+                return AwayTimeItem(id: d.documentID, startAt: s, endAt: e)
+            }
+            completion(items)
+        }
+    }
+}

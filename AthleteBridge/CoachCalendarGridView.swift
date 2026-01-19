@@ -406,6 +406,7 @@ import FirebaseAuth
      @EnvironmentObject var firestore: FirestoreManager
      @EnvironmentObject var auth: AuthViewModel
      @State private var bookings: [FirestoreManager.BookingItem] = []
+     @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
      @State private var loading: Bool = true
      // Sheet state for creating a new booking when tapping an available slot
      @State private var showBookingSheet: Bool = false
@@ -436,10 +437,16 @@ import FirebaseAuth
                      LazyVStack(spacing: 6) {
                          ForEach(slots) { slot in
                              // find any booking that overlaps this slot
-                             let overlapping = bookings.first { b in
+                             let overlappingBooking = bookings.first { b in
                                  guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
                                  return (bStart < slot.end) && (bEnd > slot.start)
                              }
+                             // find any away time that overlaps this slot
+                             let overlappingAway = awayTimes.first { a in
+                                 return (a.startAt < slot.end) && (a.endAt > slot.start)
+                             }
+
+                             let isBlocked = (overlappingBooking != nil) || (overlappingAway != nil)
 
                              HStack(spacing: 12) {
                                  Text(slot.label)
@@ -449,18 +456,24 @@ import FirebaseAuth
 
                                  ZStack(alignment: .leading) {
                                      RoundedRectangle(cornerRadius: 8)
-                                         .fill(overlapping != nil ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
+                                         .fill(isBlocked ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
                                          .frame(height: 44)
 
                                      HStack {
-                                         if let b = overlapping {
-                                             // Only display booking time range and status (no client name)
-                                             Text(timeRangeString(for: b))
-                                                 .font(.subheadline)
-                                                 .foregroundColor(.white)
-                                                 .padding(.leading, 10)
+                                         if isBlocked {
+                                             if let b = overlappingBooking {
+                                                 Text(timeRangeString(for: b))
+                                                     .font(.subheadline)
+                                                     .foregroundColor(.white)
+                                                     .padding(.leading, 10)
+                                             } else {
+                                                 Text("Away")
+                                                     .font(.subheadline)
+                                                     .foregroundColor(.white)
+                                                     .padding(.leading, 10)
+                                             }
                                              Spacer()
-                                             if let status = b.status {
+                                             if let status = overlappingBooking?.status {
                                                  Text(status.capitalized)
                                                      .font(.caption2)
                                                      .foregroundColor(.white.opacity(0.9))
@@ -476,8 +489,10 @@ import FirebaseAuth
                                      }
                                  }
                                  .onTapGesture {
-                                     if let b = overlapping {
+                                     if let b = overlappingBooking {
                                          onSlotSelected?(b)
+                                     } else if overlappingAway != nil {
+                                         // do nothing on away blocks
                                      } else {
                                          // available slot tapped — present booking form prefilled
                                          selectedSlotStart = slot.start
@@ -521,7 +536,13 @@ import FirebaseAuth
                  self.bookings = items.sorted { (a,b) in
                      (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
                  }
-                 self.loading = false
+                 // fetch away times for this date
+                 firestore.fetchAwayTimesForCoach(coachId: coachID, start: dayStart, end: dayEnd) { away in
+                     DispatchQueue.main.async {
+                         self.awayTimes = away
+                         self.loading = false
+                     }
+                 }
              }
          }
      }
