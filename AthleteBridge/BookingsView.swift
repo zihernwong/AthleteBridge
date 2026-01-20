@@ -155,7 +155,7 @@ struct BookingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         BookingRowView(item: b)
                             .overlay(alignment: .trailing) {
-                                Button(action: { selectedBookingForReview = b }) {
+                                Button(action: { acceptBooking(b) }) {
                                     Text("Review Booking")
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -181,12 +181,11 @@ struct BookingsView: View {
 
     private var coachBookingsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Removed label per request
             NavigationLink(destination:
-                            AcceptedBookingsView()
+                            CoachConfirmedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
-                Text("View Accepted Bookings")
+                Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
