@@ -105,6 +105,38 @@ struct BookingEditorView: View {
 
                 // Only after a coach is selected, show Coach Info and Calendar
                 if !selectedCoachId.isEmpty, let coach = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                    // Coach Info section (above the calendar)
+                    Section {
+                        HStack(alignment: .top, spacing: 12) {
+                            let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                            AvatarView(url: coachURL ?? nil, size: 72, useCurrentUser: false)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(coach.name).font(.headline)
+                                if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(bio).font(.body).foregroundColor(.primary)
+                                } else {
+                                    Text("No bio provided").font(.subheadline).foregroundColor(.secondary)
+                                }
+                                if !coach.specialties.isEmpty {
+                                    Text("Specialties: \(coach.specialties.joined(separator: ", "))")
+                                        .font(.caption).foregroundColor(.secondary)
+                                }
+                                Text("Experience: \(coach.experienceYears) years").font(.caption).foregroundColor(.secondary)
+                                if let rate = coach.hourlyRate {
+                                    Text(String(format: "Hourly Rate: $%.0f / hr", rate)).font(.caption).foregroundColor(.primary)
+                                } else {
+                                    Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
+                                }
+                                if !coach.availability.isEmpty {
+                                    Text("Availability: \(coach.availability.joined(separator: ", "))")
+                                        .font(.caption).foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Coach Info")
+                    }
+
                     // Show coach calendar grid once a coach is selected; hide time pickers
                     Section {
                         // Calendar day controls
