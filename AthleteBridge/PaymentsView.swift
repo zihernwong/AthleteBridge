@@ -592,6 +592,17 @@ struct PaymentsView: View {
             // Show Make Payment button only for unpaid bookings
             if (b.paymentStatus ?? "").lowercased() != "paid" {
                 HStack {
+                    // Client-only: dummy notify button
+                    if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
+                        Button(action: {
+                            // Placeholder action: surface confirmation message
+                            errorMessage = "A notification to the coach will be sent (placeholder)."
+                        }) {
+                            Text("Notify Coach of Payment")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
                     Spacer()
                     Button(action: { makePayment(for: b) }) {
                         Text("Make Payment")
