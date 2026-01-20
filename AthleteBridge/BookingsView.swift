@@ -201,16 +201,16 @@ struct BookingsView: View {
                 if let start = b.startAt { return isSameDay(start, selectedDate) }
                 return false
             }
-//            if !dayBookings.isEmpty {
-//                VStack(alignment: .leading, spacing: 8) {
-//                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
-//                        .font(.headline)
-//                    ForEach(dayBookings, id: \ .id) { b in
-//                        BookingRowView(item: b)
-//                    }
-//                }
-//                .padding(.vertical, 4)
-//            }
+            if !dayBookings.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
+                        .font(.headline)
+                    ForEach(dayBookings, id: \ .id) { b in
+                        BookingRowView(item: b)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
         }
         .padding(.horizontal)
     }
@@ -333,11 +333,21 @@ struct DayCell: View {
 // Small reusable row view for displaying a booking
 struct BookingRowView: View {
     let item: FirestoreManager.BookingItem
+    @EnvironmentObject var firestore: FirestoreManager
+
+    private var displayTitle: String {
+        let role = firestore.currentUserType?.uppercased()
+        if role == "COACH" {
+            return item.clientName ?? item.clientID
+        } else {
+            return item.coachName ?? "Coach"
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(item.coachName ?? "Coach").font(.headline)
+                Text(displayTitle).font(.headline)
                 Spacer()
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
