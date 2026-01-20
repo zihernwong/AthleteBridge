@@ -201,16 +201,16 @@ struct BookingsView: View {
                 if let start = b.startAt { return isSameDay(start, selectedDate) }
                 return false
             }
-            if !dayBookings.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
-                        .font(.headline)
-                    ForEach(dayBookings, id: \ .id) { b in
-                        BookingRowView(item: b)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
+//            if !dayBookings.isEmpty {
+//                VStack(alignment: .leading, spacing: 8) {
+//                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
+//                        .font(.headline)
+//                    ForEach(dayBookings, id: \ .id) { b in
+//                        BookingRowView(item: b)
+//                    }
+//                }
+//                .padding(.vertical, 4)
+//            }
         }
         .padding(.horizontal)
     }

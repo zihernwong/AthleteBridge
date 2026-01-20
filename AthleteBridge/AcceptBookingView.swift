@@ -14,16 +14,34 @@ struct AcceptBookingView: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String? = nil
 
+    // Resolve client display name: prefer booking.clientName, else lookup by clientID from firestore.clients
+    private var clientDisplayName: String {
+        if let name = booking.clientName, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return name
+        }
+        if let client = firestore.clients.first(where: { $0.id == booking.clientID }), !client.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return client.name
+        }
+        return "Client"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("Booking")) {
-                    Text(booking.clientName ?? "Client")
+                    HStack { Text("Client").bold(); Spacer(); Text(clientDisplayName) }
+                    if let status = booking.status, !status.isEmpty {
+                        HStack { Text("Status").bold(); Spacer(); Text(status.capitalized) }
+                    }
                     if let start = booking.startAt {
-                        Text("Starts: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
+                        HStack { Text("Starts").bold(); Spacer(); Text(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short)) }
                     }
                     if let end = booking.endAt {
-                        Text("Ends: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
+                        HStack { Text("Ends").bold(); Spacer(); Text(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short)) }
+                    }
+                    if let start = booking.startAt, let end = booking.endAt {
+                        let mins = Int(end.timeIntervalSince(start) / 60)
+                        HStack { Text("Duration").bold(); Spacer(); Text("\(mins) min") }
                     }
                 }
 
@@ -66,6 +84,8 @@ struct AcceptBookingView: View {
                 } else if let hr = firestore.currentCoach?.hourlyRate, hr > 0 {
                     rateText = String(format: "%.2f", hr)
                 }
+                // Ensure clients list is available for name resolution
+                firestore.fetchClients()
             }
         }
     }
