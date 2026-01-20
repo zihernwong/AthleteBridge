@@ -18,6 +18,12 @@ struct BookingEditorView: View {
     @State private var alertMessage: String = ""
     @State private var showAlert = false
 
+    @State private var selectedSlotStart: Date? = nil
+    @State private var selectedSlotEnd: Date? = nil
+    @State private var calendarDate: Date = Date()
+
+    @State private var showConfirmOverlay: Bool = false
+
     // Inline suggestions for coach names (prefix match)
     private var coachSuggestions: [Coach] {
         let typed = coachSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -38,7 +44,7 @@ struct BookingEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Client (defaults to signed-in user)")) {
+                Section {
                     if let client = firestore.currentClient {
                         Text("Signed in as: \(client.name)")
                     } else if let uid = auth.user?.uid {
@@ -47,9 +53,11 @@ struct BookingEditorView: View {
                     } else {
                         Text("Not signed in").foregroundColor(.secondary)
                     }
+                } header: {
+                    Text("Client (defaults to signed-in user)")
                 }
 
-                Section(header: Text("Coach")) {
+                Section {
                     if firestore.coaches.isEmpty {
                         Text("No coaches available").foregroundColor(.secondary)
                     } else {
@@ -95,83 +103,95 @@ struct BookingEditorView: View {
                             }
                         }
                     }
+                } header: {
+                    Text("Coach")
                 }
 
-                Section(header: Text("When")) {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Start")
-                        MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
-                            .frame(height: 150)
-                            .padding(.bottom, 12)
-                            .onChange(of: startAt) { _, newStart in
-                                // Snap start to nearest 30-minute increment (guard against minute-by-minute behavior)
-                                let intervalSeconds = 30 * 60
-                                let t = newStart.timeIntervalSinceReferenceDate
-                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
-                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
-                                if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 {
-                                    startAt = snappedDate
-                                }
-                                // If start is at/after end, bump end to start + 30min
-                                if startAt >= endAt {
-                                    endAt = Calendar.current.date(byAdding: .minute, value: 30, to: startAt) ?? startAt.addingTimeInterval(60*30)
-                                }
-                            }
+                // Revert: always show Coach Calendar (defaults to first coach if none selected)
+                Section {
+                    // Resolve a coach id: prefer selectedCoachId; else use first available
+                    let activeCoachId = selectedCoachId.isEmpty ? (firestore.coaches.first?.id ?? "") : selectedCoachId
 
-                        Text("End")
-                        MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
-                            .frame(height: 150)
-                            .onChange(of: endAt) { _, newEnd in
-                                // Snap end to nearest 30-minute increment
-                                let intervalSeconds = 30 * 60
-                                let t = newEnd.timeIntervalSinceReferenceDate
-                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
-                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
-                                if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 {
-                                    endAt = snappedDate
-                                }
-                                // If end is at/earlier than start, move start to end - 30min
-                                if endAt <= startAt {
-                                    startAt = Calendar.current.date(byAdding: .minute, value: -30, to: endAt) ?? endAt.addingTimeInterval(-60*30)
-                                }
-                            }
+                    // Day controls
+                    HStack {
+                        Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.left") }
+                            .buttonStyle(.plain)
+                        Spacer()
+                        Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
+                            .font(.subheadline).bold()
+                        Spacer()
+                        Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: 1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.right") }
+                            .buttonStyle(.plain)
                     }
+                    .padding(.vertical, 6)
+
+                    if !activeCoachId.isEmpty {
+                        CoachCalendarGridView(coachID: activeCoachId,
+                                              date: $calendarDate,
+                                              showOnlyAvailable: false,
+                                              onSlotSelected: nil,
+                                              embedMode: true,
+                                              onAvailableSlot: { start, end in
+                                                  selectedSlotStart = start
+                                                  selectedSlotEnd = end
+                                                  startAt = start
+                                                  endAt = end
+                                                  showConfirmOverlay = true
+                                              })
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                            .id(calendarDate)
+                    } else {
+                        Text("No coaches available").foregroundColor(.secondary)
+                    }
+
+                    if let s = selectedSlotStart, let e = selectedSlotEnd {
+                        Text("Selected: \(DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)) - \(DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Tap an Available slot to select")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } header: {
+                    Text("Coach Calendar")
                 }
 
-                Section(header: Text("Details")) {
-                    // Location is optional. If the user has saved locations they can pick one,
-                    // otherwise they can proceed without selecting a location (e.g., virtual session).
+                // Details section remains
+                Section {
                     if firestore.locations.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("No saved locations found").foregroundColor(.secondary)
                             Text("Location is optional; leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
-                        }
+                    }
                     } else {
                         Picker("Location (optional)", selection: $selectedLocationId) {
-                            // allow an explicit 'none' option
                             Text("None").tag("")
                             ForEach(firestore.locations, id: \.id) { loc in
                                 Text(loc.name ?? "Unnamed").tag(loc.id)
                             }
                         }
-                        .onAppear {
-                            // Do not auto-select a saved location — keep location optional.
-                        }
                     }
                     TextEditor(text: $notes).frame(minHeight: 80)
+                } header: {
+                    Text("Details")
                 }
 
                 if isSaving { ProgressView().frame(maxWidth: .infinity, alignment: .center) }
             }
             .navigationTitle("New Booking")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showSheet = false }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSheet = false } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveBooking() }
-                        // Disable save if coach not selected, not signed in, or times invalid (start must be before end)
-                        .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt))
+                    Button("Save") {
+                        // If a slot was tapped, use it for start/end
+                        if let s = selectedSlotStart, let e = selectedSlotEnd {
+                            startAt = s; endAt = e
+                        }
+                        saveBooking()
+                    }
+                    .disabled(selectedCoachId.isEmpty || auth.user == nil || (selectedCoachId.isEmpty && !(startAt < endAt)))
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -201,8 +221,94 @@ struct BookingEditorView: View {
                 }
                 startAt = snap(startAt)
                 endAt = snap(endAt)
+
+                calendarDate = Calendar.current.startOfDay(for: Date())
             }
         }
+        // Replace sheet with a custom overlay so dismissal is simultaneous
+        .overlay(
+            Group {
+                if showConfirmOverlay {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                            .ignoresSafeArea()
+                            .onTapGesture { withAnimation(.easeInOut) { showConfirmOverlay = false } }
+
+                        // Modal card
+                        VStack(spacing: 0) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Confirm Date & Time").font(.headline)
+                                if let coach = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                                    Text("Coach: \(coach.name)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("Start")
+                                MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
+                                    .frame(height: 150)
+                                    .padding(.bottom, 8)
+                                    .onChange(of: startAt) { _, newStart in
+                                        let intervalSeconds = 30 * 60
+                                        let t = newStart.timeIntervalSinceReferenceDate
+                                        let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                        let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                        if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 { startAt = snappedDate }
+                                        if startAt >= endAt { endAt = Calendar.current.date(byAdding: .minute, value: 30, to: startAt) ?? startAt.addingTimeInterval(60*30) }
+                                    }
+
+                                Text("End")
+                                MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
+                                    .frame(height: 150)
+                                    .onChange(of: endAt) { _, newEnd in
+                                        let intervalSeconds = 30 * 60
+                                        let t = newEnd.timeIntervalSinceReferenceDate
+                                        let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                        let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                        if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 { endAt = snappedDate }
+                                        if endAt <= startAt { startAt = Calendar.current.date(byAdding: .minute, value: -30, to: endAt) ?? endAt.addingTimeInterval(-60*30) }
+                                    }
+                            }
+                            .padding([.horizontal, .bottom])
+
+                            Divider()
+
+                            HStack(spacing: 12) {
+                                Button(role: .cancel) { withAnimation(.easeInOut) { showConfirmOverlay = false } } label: {
+                                    Text("Cancel").frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button {
+                                    // Save immediately; dismissal occurs together on success
+                                    saveBooking()
+                                } label: {
+                                    Text("Confirm Booking Time").frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt))
+                            }
+                            .padding()
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(UIColor.systemBackground))
+                        )
+                        .frame(maxWidth: 560)
+                        .padding(24)
+                        .shadow(radius: 12)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+            }
+            .animation(.easeInOut, value: showConfirmOverlay)
+        )
     }
 
     private func saveBooking() {
@@ -261,7 +367,11 @@ struct BookingEditorView: View {
                     // Refresh the client subcollection which is the canonical source
                     firestore.fetchBookingsForCurrentClientSubcollection()
                     firestore.showToast("Booking saved")
-                    showSheet = false
+                    // Dismiss both sheets simultaneously
+                    withAnimation {
+                        self.showConfirmOverlay = false
+                        self.showSheet = false
+                    }
                 }
             }
         }

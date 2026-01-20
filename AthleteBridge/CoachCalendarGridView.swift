@@ -240,161 +240,175 @@ import FirebaseAuth
     }
  }
 
- // New simple coach detail view that lists reviews for a coach
+ // Keep a single CoachDetailView definition with embedded calendar + confirm overlay
  struct CoachDetailView: View {
-     let coach: Coach
-     @EnvironmentObject var firestore: FirestoreManager
-     @State private var reviews: [FirestoreManager.ReviewItem] = []
-     @State private var bookings: [FirestoreManager.BookingItem] = []
-     @State private var loadingBookings: Bool = true
-     // selected date for the embedded coach calendar
-     @State private var selectedDate: Date = Date()
+    let coach: Coach
+    @EnvironmentObject var firestore: FirestoreManager
+    @State private var reviews: [FirestoreManager.ReviewItem] = []
+    @State private var bookings: [FirestoreManager.BookingItem] = []
+    @State private var loadingBookings: Bool = true
+    @State private var selectedDate: Date = Date()
+    @State private var selectedSlotStart: Date? = nil
+    @State private var selectedSlotEnd: Date? = nil
+    @State private var startAt: Date = Date()
+    @State private var endAt: Date = Date().addingTimeInterval(60*30)
+    @State private var showConfirmOverlay: Bool = false
 
-     var body: some View {
-         List {
-             Section {
-                 // Show avatar and bio at the top
-                 HStack(alignment: .top, spacing: 12) {
-                     // Use the resolved coach-specific photo URL when available; don't fall back to current user
-                     let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
-                     AvatarView(url: coachURL ?? nil, size: 88, useCurrentUser: false)
+    var body: some View {
+        List {
+            Section {
+                HStack(alignment: .top, spacing: 12) {
+                    let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+                    AvatarView(url: coachURL ?? nil, size: 88, useCurrentUser: false)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(bio).font(.body).foregroundColor(.primary)
+                        } else {
+                            Text("No bio provided").font(.subheadline).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+                if !coach.specialties.isEmpty { Text("Specialties: \(coach.specialties.joined(separator: ", "))") }
+                Text("Experience: \(coach.experienceYears) years")
+                if let rate = coach.hourlyRate {
+                    Text(String(format: "Hourly Rate: $%.0f / hr", rate)).font(.subheadline)
+                } else {
+                    Text("HourlyRate to be discussed").font(.subheadline).foregroundColor(.secondary)
+                }
+                if !coach.availability.isEmpty {
+                    Text("Availability: \(coach.availability.joined(separator: ", "))").font(.caption).foregroundColor(.secondary)
+                }
+            } header: { Text(coach.name).font(.title2) }
 
-                     VStack(alignment: .leading, spacing: 8) {
-                         if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                             Text(bio)
-                                 .font(.body)
-                                 .foregroundColor(.primary)
-                         } else {
-                             Text("No bio provided")
-                                 .font(.subheadline)
-                                 .foregroundColor(.secondary)
-                         }
-                         Spacer()
-                     }
-                 }
+            Section {
+                HStack {
+                    Button(action: { selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate }) { Image(systemName: "chevron.left").font(.headline) }
+                        .buttonStyle(.plain)
+                    Spacer()
+                    Text(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none)).font(.subheadline).bold()
+                    Spacer()
+                    Button(action: { selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate }) { Image(systemName: "chevron.right").font(.headline) }
+                        .buttonStyle(.plain)
+                }
+                .padding(.vertical, 6)
 
-                 // Coach attributes below the avatar/bio
-                 if !coach.specialties.isEmpty {
-                     Text("Specialties: \(coach.specialties.joined(separator: ", "))")
-                 }
-                 Text("Experience: \(coach.experienceYears) years")
-                 // Hourly rate display
-                 if let rate = coach.hourlyRate {
-                     Text(String(format: "Hourly Rate: $%.0f / hr", rate))
-                         .font(.subheadline)
-                 } else {
-                     Text("HourlyRate to be discussed")
-                         .font(.subheadline)
-                         .foregroundColor(.secondary)
-                 }
-                 if !coach.availability.isEmpty {
-                     Text("Availability: \(coach.availability.joined(separator: ", "))")
-                         .font(.caption)
-                         .foregroundColor(.secondary)
-                 }
-             } header: {
-                 Text(coach.name).font(.title2)
-             }
+                CoachCalendarGridView(coachID: coach.id, date: $selectedDate, showOnlyAvailable: false, onSlotSelected: nil, embedMode: true, onAvailableSlot: { start, end in
+                    selectedSlotStart = start
+                    selectedSlotEnd = end
+                    startAt = start
+                    endAt = end
+                    showConfirmOverlay = true
+                })
+                .environmentObject(firestore)
+            } header: { Text("Calendar") }
 
-             Section {
-                 // Calendar controls: previous / selected date / next
-                 HStack {
-                     Button(action: {
-                         // previous day
-                         selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
-                         print("[CoachDetailView] <- pressed, selectedDate=\(selectedDate)")
-                     }) {
-                         Image(systemName: "chevron.left")
-                             .font(.headline)
-                     }
-                     .buttonStyle(.plain)
-                     Spacer()
-                     Text(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))
-                         .font(.subheadline)
-                         .bold()
-                     Spacer()
-                     Button(action: {
-                         // next day
-                         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
-                         print("[CoachDetailView] -> pressed, selectedDate=\(selectedDate)")
-                     }) {
-                         Image(systemName: "chevron.right")
-                             .font(.headline)
-                     }
-                     .buttonStyle(.plain)
-                 }
-                 .padding(.vertical, 6)
-
-                 // Embedded calendar grid that reflects the selectedDate (pass binding so changes propagate)
-                 CoachCalendarGridView(coachID: coach.id, date: $selectedDate, showOnlyAvailable: false, onSlotSelected: nil)
-                     .environmentObject(firestore)
-             } header: {
-                 Text("Calendar")
-             }
-
-             Section {
-                 if reviews.isEmpty {
-                     Text("No reviews yet").foregroundColor(.secondary)
-                 } else {
-                     ForEach(reviews) { r in
-                         VStack(alignment: .leading) {
-                             HStack {
-                                 Text(r.clientName ?? "Client")
-                                     .font(.headline)
-                                 Spacer()
-                                 Text(r.rating ?? "-")
-                                     .font(.subheadline)
-                                     .foregroundColor(.secondary)
-                             }
-                             if let msg = r.ratingMessage { Text(msg).font(.body) }
-                             if let date = r.createdAt { Text(DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)).font(.caption).foregroundColor(.secondary) }
-                         }
-                         .padding(.vertical, 6)
-                     }
-                 }
-             } header: {
-                 Text("Reviews")
-             }
-         }
-         .navigationTitle("Coach")
-         .onAppear {
-             firestore.fetchReviewsForCoach(coachId: coach.id) { items in
-                 DispatchQueue.main.async { self.reviews = items }
-             }
-             // fetch bookings for this coach and show them in the Calendar section
-             loadingBookings = true
-             // initial fetch: get bookings around the selectedDate (the day)
-             let cal = Calendar.current
-             let dayStart = cal.startOfDay(for: selectedDate)
-             let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
-             firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
-                 DispatchQueue.main.async {
-                     // sort ascending by start date to show upcoming first
-                     self.bookings = items.sorted { (a,b) in
-                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
-                     }
-                     self.loadingBookings = false
-                     // booking load completed; the grid will update via binding/onChange
-                 }
-             }
-         }
-         .onChange(of: selectedDate) { old, new in
-             // when date changes, fetch bookings for that specific day and refresh the calendar
-             let cal = Calendar.current
-             let dayStart = cal.startOfDay(for: new)
-             let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
-             self.loadingBookings = true
-             firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
-                 DispatchQueue.main.async {
-                     self.bookings = items.sorted { (a,b) in
-                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
-                     }
-                     self.loadingBookings = false
-                     // the grid will update via binding/onChange
-                 }
-             }
-         }
-     }
+            Section {
+                if reviews.isEmpty {
+                    Text("No reviews yet").foregroundColor(.secondary)
+                } else {
+                    ForEach(reviews) { r in
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Text(r.clientName ?? "Client").font(.headline)
+                                Spacer()
+                                Text(r.rating ?? "-").font(.subheadline).foregroundColor(.secondary)
+                            }
+                            if let msg = r.ratingMessage { Text(msg).font(.body) }
+                            if let date = r.createdAt { Text(DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)).font(.caption).foregroundColor(.secondary) }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                }
+            } header: { Text("Reviews") }
+        }
+        .navigationTitle("Coach")
+        .onAppear {
+            firestore.fetchReviewsForCoach(coachId: coach.id) { items in
+                DispatchQueue.main.async { self.reviews = items }
+            }
+            loadingBookings = true
+            let cal = Calendar.current
+            let dayStart = cal.startOfDay(for: selectedDate)
+            let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
+            firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
+                DispatchQueue.main.async {
+                    self.bookings = items.sorted { (a,b) in (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture) }
+                    self.loadingBookings = false
+                }
+            }
+        }
+        .onChange(of: selectedDate) { old, new in
+            let cal = Calendar.current
+            let dayStart = cal.startOfDay(for: new)
+            let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
+            self.loadingBookings = true
+            firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { items in
+                DispatchQueue.main.async {
+                    self.bookings = items.sorted { (a,b) in (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture) }
+                    self.loadingBookings = false
+                }
+            }
+        }
+        .overlay(
+            Group {
+                if showConfirmOverlay {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                            .ignoresSafeArea()
+                            .onTapGesture { withAnimation(.easeInOut) { showConfirmOverlay = false } }
+                        VStack(spacing: 0) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Confirm Date & Time").font(.headline)
+                                Text("Coach: \(coach.name)").font(.subheadline).foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            Divider()
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("Start")
+                                MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
+                                    .frame(height: 150)
+                                    .padding(.bottom, 8)
+                                Text("End")
+                                MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
+                                    .frame(height: 150)
+                            }
+                            .padding([.horizontal, .bottom])
+                            Divider()
+                            HStack(spacing: 12) {
+                                Button(role: .cancel) { withAnimation(.easeInOut) { showConfirmOverlay = false } } label: { Text("Cancel").frame(maxWidth: .infinity) }
+                                .buttonStyle(.bordered)
+                                Button {
+                                    guard let uid = Auth.auth().currentUser?.uid else { return }
+                                    firestore.saveBooking(clientUid: uid, coachUid: coach.id, startAt: startAt, endAt: endAt, location: nil, notes: nil, status: "requested") { err in
+                                        DispatchQueue.main.async {
+                                            if let err = err {
+                                                firestore.showToast("Failed: \(err.localizedDescription)")
+                                            } else {
+                                                firestore.fetchBookingsForCurrentClientSubcollection()
+                                                firestore.showToast("Booking saved")
+                                                withAnimation { showConfirmOverlay = false }
+                                            }
+                                        }
+                                    }
+                                } label: { Text("Confirm Booking Time").frame(maxWidth: .infinity) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!(startAt < endAt))
+                            }
+                            .padding()
+                        }
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(UIColor.systemBackground)))
+                        .frame(maxWidth: 560)
+                        .padding(24)
+                        .shadow(radius: 12)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+            }
+            .animation(.easeInOut, value: showConfirmOverlay)
+        )
+    }
  }
 
  struct CoachCalendarGridView: View {
@@ -402,16 +416,18 @@ import FirebaseAuth
      @Binding var date: Date
      var showOnlyAvailable: Bool = false
      var onSlotSelected: ((FirestoreManager.BookingItem) -> Void)?
+    // New: embedded mode disables internal sheet and uses a callback for available slot selection
+    var embedMode: Bool = false
+    var onAvailableSlot: ((Date, Date) -> Void)?
 
      @EnvironmentObject var firestore: FirestoreManager
      @EnvironmentObject var auth: AuthViewModel
      @State private var bookings: [FirestoreManager.BookingItem] = []
-     @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
      @State private var loading: Bool = true
-     // Sheet state for creating a new booking when tapping an available slot
      @State private var showBookingSheet: Bool = false
      @State private var selectedSlotStart: Date = Date()
      @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*30)
+     @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
 
      // Configuration: generate slots between these hours
      private let startHour = 6
@@ -426,6 +442,88 @@ import FirebaseAuth
          let label: String
      }
 
+     // Helper: check booking overlap for a slot
+     private func bookingOverlapping(slotStart: Date, slotEnd: Date) -> FirestoreManager.BookingItem? {
+         return bookings.first { b in
+             guard let s = b.startAt, let e = b.endAt else { return false }
+             return (s < slotEnd) && (e > slotStart)
+         }
+     }
+
+     // Helper: check away overlap for a slot
+     private func awayOverlapping(slotStart: Date, slotEnd: Date) -> FirestoreManager.AwayTimeItem? {
+         return awayTimes.first { a in
+             return (a.startAt < slotEnd) && (a.endAt > slotStart)
+         }
+     }
+
+    // Helper to render a single slot row; breaking this out improves compiler type-check time
+    @ViewBuilder
+    private func slotRowView(slot: Slot,
+                             overlappingBooking: FirestoreManager.BookingItem?,
+                             overlappingAway: FirestoreManager.AwayTimeItem?,
+                             isBlocked: Bool) -> some View {
+        HStack(spacing: 12) {
+            Text(slot.label)
+                .font(.caption2)
+                .frame(width: 60, alignment: .leading)
+                .foregroundColor(.secondary)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isBlocked ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
+                    .frame(height: 44)
+
+                HStack {
+                    if isBlocked {
+                        if let b = overlappingBooking {
+                            Text(timeRangeString(for: b))
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.leading, 10)
+                            Spacer()
+                            if let status = b.status {
+                                Text(status.capitalized)
+                                    .font(.caption2)
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .padding(.trailing, 10)
+                            }
+                        } else {
+                            // AwayTimeItem has no notes; show generic label
+                            Text("Away")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.leading, 10)
+                            Spacer()
+                        }
+                    } else {
+                        Text("Available")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .padding(.leading, 10)
+                        Spacer()
+                    }
+                }
+            }
+            .onTapGesture {
+                if let b = overlappingBooking {
+                    onSlotSelected?(b)
+                } else if overlappingAway != nil {
+                    // do nothing on away blocks
+                } else {
+                    selectedSlotStart = slot.start
+                    selectedSlotEnd = slot.end
+                    if embedMode {
+                        onAvailableSlot?(slot.start, slot.end)
+                    } else {
+                        showBookingSheet = true
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+    }
+
      var body: some View {
          ScrollView {
              VStack(alignment: .leading, spacing: 8) {
@@ -436,73 +534,14 @@ import FirebaseAuth
                      let slots = generateSlots(for: date)
                      LazyVStack(spacing: 6) {
                          ForEach(slots) { slot in
-                             // find any booking that overlaps this slot
-                             let overlappingBooking = bookings.first { b in
-                                 guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
-                                 return (bStart < slot.end) && (bEnd > slot.start)
-                             }
-                             // find any away time that overlaps this slot
-                             let overlappingAway = awayTimes.first { a in
-                                 return (a.startAt < slot.end) && (a.endAt > slot.start)
-                             }
-
+                             let overlappingBooking = bookingOverlapping(slotStart: slot.start, slotEnd: slot.end)
+                             let overlappingAway = awayOverlapping(slotStart: slot.start, slotEnd: slot.end)
                              let isBlocked = (overlappingBooking != nil) || (overlappingAway != nil)
 
-                             HStack(spacing: 12) {
-                                 Text(slot.label)
-                                     .font(.caption2)
-                                     .frame(width: 60, alignment: .leading)
-                                     .foregroundColor(.secondary)
-
-                                 ZStack(alignment: .leading) {
-                                     RoundedRectangle(cornerRadius: 8)
-                                         .fill(isBlocked ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
-                                         .frame(height: 44)
-
-                                     HStack {
-                                         if isBlocked {
-                                             if let b = overlappingBooking {
-                                                 Text(timeRangeString(for: b))
-                                                     .font(.subheadline)
-                                                     .foregroundColor(.white)
-                                                     .padding(.leading, 10)
-                                             } else {
-                                                 Text("Away")
-                                                     .font(.subheadline)
-                                                     .foregroundColor(.white)
-                                                     .padding(.leading, 10)
-                                             }
-                                             Spacer()
-                                             if let status = overlappingBooking?.status {
-                                                 Text(status.capitalized)
-                                                     .font(.caption2)
-                                                     .foregroundColor(.white.opacity(0.9))
-                                                     .padding(.trailing, 10)
-                                             }
-                                         } else {
-                                             Text("Available")
-                                                 .font(.subheadline)
-                                                 .foregroundColor(.primary)
-                                                 .padding(.leading, 10)
-                                             Spacer()
-                                         }
-                                     }
-                                 }
-                                 .onTapGesture {
-                                     if let b = overlappingBooking {
-                                         onSlotSelected?(b)
-                                     } else if overlappingAway != nil {
-                                         // do nothing on away blocks
-                                     } else {
-                                         // available slot tapped — present booking form prefilled
-                                         selectedSlotStart = slot.start
-                                         selectedSlotEnd = slot.end
-                                         // present sheet with NewBookingFormView
-                                         showBookingSheet = true
-                                     }
-                                 }
-                             }
-                             .padding(.horizontal, 6)
+                             slotRowView(slot: slot,
+                                        overlappingBooking: overlappingBooking,
+                                        overlappingAway: overlappingAway,
+                                        isBlocked: isBlocked)
                          }
                      }
                      .padding(.vertical, 6)
@@ -511,19 +550,16 @@ import FirebaseAuth
          }
          .onAppear { fetchForSelectedDate() }
          .onChange(of: date) { _old, _new in fetchForSelectedDate() }
-         // Present booking form when user taps available slot
+         // Present booking form only when not embedded
          .sheet(isPresented: $showBookingSheet) {
-             BookingEditorView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
-                 .id(selectedSlotStart)
-                 .environmentObject(firestore)
-                 .environmentObject(auth)
-         }
-         // When the booking sheet is dismissed, refresh bookings for the selected date
-         .onChange(of: showBookingSheet) { _old, newVal in
-             if newVal == false {
-                 fetchForSelectedDate()
+             if !embedMode {
+                 BookingEditorView(showSheet: $showBookingSheet, initialCoachId: coachID, initialStart: selectedSlotStart, initialEnd: selectedSlotEnd)
+                     .id(selectedSlotStart)
+                     .environmentObject(firestore)
+                     .environmentObject(auth)
              }
          }
+         .onChange(of: showBookingSheet) { _old, newVal in if newVal == false { fetchForSelectedDate() } }
      }
 
      private func fetchForSelectedDate() {
@@ -536,13 +572,12 @@ import FirebaseAuth
                  self.bookings = items.sorted { (a,b) in
                      (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
                  }
-                 // fetch away times for this date
-                 firestore.fetchAwayTimesForCoach(coachId: coachID, start: dayStart, end: dayEnd) { away in
-                     DispatchQueue.main.async {
-                         self.awayTimes = away
-                         self.loading = false
-                     }
-                 }
+             }
+         }
+         firestore.fetchAwayTimesForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+             DispatchQueue.main.async {
+                 self.awayTimes = items
+                 self.loading = false
              }
          }
      }
