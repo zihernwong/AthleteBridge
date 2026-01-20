@@ -389,7 +389,15 @@ struct BookingEditorView: View {
         // Determine location name from the selected saved location id; allow nil for no selection
         let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
         // Always create bookings with default status "requested"
-        firestore.saveBooking(clientUid: clientUid, coachUid: coachUid, startAt: startAt, endAt: endAt, location: locationName, notes: notes, status: "requested") { err in
+        let clientNameExtra = firestore.currentClient?.name ?? ""
+        let coachNameExtra = firestore.coaches.first(where: { $0.id == coachUid })?.name ?? ""
+        let extra: [String: Any] = {
+            var m: [String: Any] = [:]
+            if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }
+            if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
+            return m
+        }()
+        firestore.saveBookingAndMirror(coachId: coachUid, clientId: clientUid, startAt: startAt, endAt: endAt, status: "requested", location: locationName, notes: notes, extra: extra) { err in
             DispatchQueue.main.async {
                 // cancel UI timeout
                 uiTimeoutItem?.cancel()

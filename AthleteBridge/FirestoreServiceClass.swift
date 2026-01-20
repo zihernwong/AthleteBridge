@@ -1916,20 +1916,11 @@ class FirestoreManager: ObservableObject {
             "Location": location ?? "",
             "Notes": notes ?? "",
             "Status": status,
-            // Use a concrete client-side timestamp for array elements; server-side
-            // sentinels (FieldValue.serverTimestamp()) aren't allowed inside
-            // arrayUnion payloads. The authoritative server timestamp still exists
-            // on the root booking document's createdAt field.
             "createdAt": Timestamp(date: Date())
         ]
 
         // Use arrayUnion to append without duplicating existing entries.
         batch.updateData(["calendar": FieldValue.arrayUnion([bookingSummary])], forDocument: coachRef)
-
-        // Also mirror the booking under the coach/client subcollections and append a
-        // denormalized summary into the coach's `calendar` array for fast lookups.
-        // Warning: storing unbounded arrays on documents can grow large; consider
-        // migrating to subcollections only if calendar arrays become too large.
 
         batch.commit { err in
             if let err = err {
@@ -2972,7 +2963,11 @@ extension FirestoreManager {
         if let s = start { query = query.whereField("startAt", isGreaterThanOrEqualTo: Timestamp(date: s)) }
         if let e = end { query = query.whereField("startAt", isLessThan: Timestamp(date: e)) }
         query.getDocuments { snapshot, error in
-            if let error = error { print("fetchAwayTimesForCoach error: \(error)"); completion([]); return }
+            if let error = error {
+                print("fetchAwayTimesForCoach error: \(error)")
+                completion([])
+                return
+            }
             let docs = snapshot?.documents ?? []
             let items: [AwayTimeItem] = docs.compactMap { d in
                 let data = d.data()
