@@ -52,12 +52,12 @@ struct BookingsView: View {
 
                     // Role-specific rendering
                     if currentUserRole == "CLIENT" {
-                        clientBookingsSection
+                        clientPendingAcceptanceSection
                     } else if currentUserRole == "COACH" {
                         coachBookingsSection
                     } else {
                         // fallback: show both while role is unknown
-                        clientBookingsSection
+                        clientPendingAcceptanceSection
                         coachBookingsSection
                     }
                 }
@@ -144,30 +144,37 @@ struct BookingsView: View {
         }
     }
 
-    private var clientBookingsSection: some View {
+    private var clientPendingAcceptanceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("My Bookings").font(.headline)
-            if firestore.bookings.isEmpty {
-                Text("No bookings yet").foregroundColor(.secondary)
+            Text("Bookings Pending Acceptance").font(.headline)
+            let pending = firestore.bookings.filter { ($0.status ?? "").lowercased() == "pending acceptance" }
+            if pending.isEmpty {
+                Text("No pending bookings").foregroundColor(.secondary)
             } else {
-                ForEach(firestore.bookings, id: \ .id) { b in
+                ForEach(pending, id: \ .id) { b in
                     VStack(alignment: .leading, spacing: 6) {
                         BookingRowView(item: b)
-
-                        // If booking is pending acceptance, show a Review Booking button for clients
-                        if (b.status ?? "").lowercased() == "pending acceptance" {
-                            HStack {
-                                Spacer()
+                            .overlay(alignment: .trailing) {
                                 Button(action: { selectedBookingForReview = b }) {
                                     Text("Review Booking")
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.borderedProminent)
                                 .tint(.blue)
+                                .padding(.top, -4)
                             }
-                        }
                     }
-                 }
+                    .padding(.vertical, 2)
+                }
             }
+            NavigationLink(destination:
+                            ConfirmedBookingsView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)) {
+                Text("View Confirmed Bookings")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
     }
