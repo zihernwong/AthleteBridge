@@ -20,7 +20,7 @@ struct BookingsView: View {
                     // === Today’s Bookings (for both roles) ===
                     todaysBookingsSection
 
-                    // === Month Calendar === (below Today and above My/Accepted Bookings)
+                    // === Month Calendar === (below Today and above My/ Accepted Bookings)
                     monthCalendarSection
 
                     // Requested bookings section for coaches
@@ -177,17 +177,19 @@ struct BookingsView: View {
 
     private var coachBookingsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Accepted Bookings").font(.headline)
-             if firestore.coachBookings.isEmpty {
-                 Text("No coach bookings found").foregroundColor(.secondary)
-             } else {
-                 ForEach(firestore.coachBookings, id: \ .id) { b in
-                     BookingRowView(item: b)
-                 }
-             }
-         }
-         .padding(.horizontal)
-     }
+            // Removed label per request
+            NavigationLink(destination:
+                            AcceptedBookingsView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)) {
+                Text("View Accepted Bookings")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal)
+    }
 
     // === Month Calendar Section ===
     private var monthCalendarSection: some View {
@@ -201,16 +203,16 @@ struct BookingsView: View {
                 if let start = b.startAt { return isSameDay(start, selectedDate) }
                 return false
             }
-            if !dayBookings.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
-                        .font(.headline)
-                    ForEach(dayBookings, id: \ .id) { b in
-                        BookingRowView(item: b)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
+//            if !dayBookings.isEmpty {
+//                VStack(alignment: .leading, spacing: 8) {
+//                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
+//                        .font(.headline)
+//                    ForEach(dayBookings, id: \ .id) { b in
+//                        BookingRowView(item: b)
+//                    }
+//                }
+//                .padding(.vertical, 4)
+//            }
         }
         .padding(.horizontal)
     }

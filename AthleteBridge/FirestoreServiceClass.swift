@@ -1253,7 +1253,7 @@ class FirestoreManager: ObservableObject {
             if let err = err {
                 print("[FirestoreManager] debugCreateAndVerifyBooking: saveBookingAndMirror failed: \(err)")
             } else {
-                print("[FirestoreManager] debugCreateAndVerifyBooking: booking created and mirrors verified (see above)")
+                print("[FirestoreManager] debugCreateAndVerifyBooking: booking created and docs verified (see above)")
             }
         }
     }
@@ -1351,7 +1351,8 @@ class FirestoreManager: ObservableObject {
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                let clientName = (data["ClientName"] as? String)
+                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
@@ -1374,7 +1375,8 @@ class FirestoreManager: ObservableObject {
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                let coachName = (data["CoachName"] as? String)
+                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
