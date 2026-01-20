@@ -97,36 +97,30 @@ struct BookingEditorView: View {
                         }
                         .onAppear {
                             firestore.fetchCoaches()
-                            if selectedCoachId.isEmpty, let first = firestore.coaches.first {
-                                selectedCoachId = first.id
-                                coachSearchText = first.name
-                            }
                         }
                     }
                 } header: {
                     Text("Coach")
                 }
 
-                // Revert: always show Coach Calendar (defaults to first coach if none selected)
-                Section {
-                    // Resolve a coach id: prefer selectedCoachId; else use first available
-                    let activeCoachId = selectedCoachId.isEmpty ? (firestore.coaches.first?.id ?? "") : selectedCoachId
+                // Only after a coach is selected, show Coach Info and Calendar
+                if !selectedCoachId.isEmpty, let coach = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                    // Show coach calendar grid once a coach is selected; hide time pickers
+                    Section {
+                        // Calendar day controls
+                        HStack {
+                            Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.left") }
+                                .buttonStyle(.plain)
+                            Spacer()
+                            Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
+                                .font(.subheadline).bold()
+                            Spacer()
+                            Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: 1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.right") }
+                                .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 6)
 
-                    // Day controls
-                    HStack {
-                        Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.left") }
-                            .buttonStyle(.plain)
-                        Spacer()
-                        Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
-                            .font(.subheadline).bold()
-                        Spacer()
-                        Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: 1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.right") }
-                            .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 6)
-
-                    if !activeCoachId.isEmpty {
-                        CoachCalendarGridView(coachID: activeCoachId,
+                        CoachCalendarGridView(coachID: selectedCoachId,
                                               date: $calendarDate,
                                               showOnlyAvailable: false,
                                               onSlotSelected: nil,
@@ -141,41 +135,56 @@ struct BookingEditorView: View {
                             .environmentObject(firestore)
                             .environmentObject(auth)
                             .id(calendarDate)
-                    } else {
-                        Text("No coaches available").foregroundColor(.secondary)
+
+                        if let s = selectedSlotStart, let e = selectedSlotEnd {
+                            Text("Selected: \(DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)) - \(DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("Tap an Available slot to select")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } header: {
+                        Text("Coach Calendar")
                     }
 
-                    if let s = selectedSlotStart, let e = selectedSlotEnd {
-                        Text("Selected: \(DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)) - \(DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("Tap an Available slot to select")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                } header: {
-                    Text("Coach Calendar")
-                }
-
-                // Details section remains
-                Section {
-                    if firestore.locations.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("No saved locations found").foregroundColor(.secondary)
-                            Text("Location is optional; leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
-                    }
-                    } else {
-                        Picker("Location (optional)", selection: $selectedLocationId) {
-                            Text("None").tag("")
-                            ForEach(firestore.locations, id: \.id) { loc in
-                                Text(loc.name ?? "Unnamed").tag(loc.id)
+                    // Details section remains
+                    Section {
+                        if firestore.locations.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("No saved locations found").foregroundColor(.secondary)
+                                Text("Location is optional; leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
+                            }
+                        } else {
+                            Picker("Location (optional)", selection: $selectedLocationId) {
+                                Text("None").tag("")
+                                ForEach(firestore.locations, id: \.id) { loc in
+                                    Text(loc.name ?? "Unnamed").tag(loc.id)
+                                }
                             }
                         }
+                        TextEditor(text: $notes).frame(minHeight: 80)
+                    } header: {
+                        Text("Details")
                     }
-                    TextEditor(text: $notes).frame(minHeight: 80)
-                } header: {
-                    Text("Details")
+                }
+
+                // Remove the When section when using calendar; only show if no coach selected (fallback)
+                if selectedCoachId.isEmpty {
+                    Section {
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("Start")
+                            MinuteIntervalDatePicker(date: $startAt, minuteInterval: 30)
+                                .frame(height: 150)
+                                .padding(.bottom, 12)
+                            Text("End")
+                            MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
+                                .frame(height: 150)
+                        }
+                    } header: {
+                        Text("When")
+                    }
                 }
 
                 if isSaving { ProgressView().frame(maxWidth: .infinity, alignment: .center) }
@@ -185,10 +194,7 @@ struct BookingEditorView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSheet = false } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        // If a slot was tapped, use it for start/end
-                        if let s = selectedSlotStart, let e = selectedSlotEnd {
-                            startAt = s; endAt = e
-                        }
+                        if let s = selectedSlotStart, let e = selectedSlotEnd { startAt = s; endAt = e }
                         saveBooking()
                     }
                     .disabled(selectedCoachId.isEmpty || auth.user == nil || (selectedCoachId.isEmpty && !(startAt < endAt)))
@@ -200,10 +206,6 @@ struct BookingEditorView: View {
             .onAppear {
                 // ensure coaches and current client profile are available when the form appears
                 firestore.fetchCoaches()
-                if selectedCoachId.isEmpty, let first = firestore.coaches.first {
-                    selectedCoachId = first.id
-                }
-                // Do not auto-select a saved location; location remains optional.
                 if let uid = auth.user?.uid {
                     firestore.fetchCurrentProfiles(for: uid)
                     // also load bookings stored under clients/{uid}/bookings
