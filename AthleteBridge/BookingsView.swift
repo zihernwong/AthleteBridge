@@ -32,21 +32,18 @@ struct BookingsView: View {
                                 Text("No requested bookings").foregroundColor(.secondary)
                             } else {
                                 ForEach(requested, id: \ .id) { b in
-                                    VStack(alignment: .leading, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 6) {
                                         BookingRowView(item: b)
-                                        HStack {
-                                            Spacer()
-                                            Button(action: {
-                                                // set selected booking - sheet(item:) will present when non-nil
-                                                self.selectedBookingForAccept = b
-                                            }) {
-                                                Text("Accept")
+                                            .overlay(alignment: .trailing) {
+                                                Button(action: { self.selectedBookingForAccept = b }) {
+                                                    Text("Accept")
+                                                }
+                                                .buttonStyle(.borderedProminent)
+                                                .tint(.blue)
+                                                .padding(.top, -4) // nudge upward slightly
                                             }
-                                            .buttonStyle(.borderedProminent)
-                                            .tint(.blue)
-                                        }
                                     }
-                                    .padding(.vertical, 4)
+                                    .padding(.vertical, 2)
                                 }
                             }
                         }
@@ -342,7 +339,7 @@ struct BookingRowView: View {
         if role == "COACH" {
             return item.clientName ?? item.clientID
         } else {
-            return item.coachName ?? "Coach"
+            return item.coachName ?? item.coachID
         }
     }
 
