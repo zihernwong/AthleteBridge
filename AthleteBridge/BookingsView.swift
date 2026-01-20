@@ -14,51 +14,57 @@ struct BookingsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                // === Today’s Bookings (for both roles) ===
-                todaysBookingsSection
+            // Replace List with ScrollView + VStack to avoid UICollectionView feedback loop on device
+            ScrollView {
+                VStack(spacing: 16) {
+                    // === Today’s Bookings (for both roles) ===
+                    todaysBookingsSection
 
-                // === Month Calendar === (moved to be below Today's and above My/Accepted Bookings)
-                monthCalendarSection
+                    // === Month Calendar === (below Today and above My/Accepted Bookings)
+                    monthCalendarSection
 
-                // Requested bookings section for coaches
-                if currentUserRole == "COACH" {
-                    Section(header: Text("Requested Bookings")) {
-                        let requested = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "requested" }
-                        if requested.isEmpty {
-                            Text("No requested bookings").foregroundColor(.secondary)
-                        } else {
-                            ForEach(requested, id: \.id) { b in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    BookingRowView(item: b)
-                                    HStack {
-                                        Spacer()
-                                        Button(action: {
-                                            // set selected booking - sheet(item:) will present when non-nil
-                                            self.selectedBookingForAccept = b
-                                        }) {
-                                            Text("Accept")
+                    // Requested bookings section for coaches
+                    if currentUserRole == "COACH" {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Requested Bookings").font(.headline)
+                            let requested = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "requested" }
+                            if requested.isEmpty {
+                                Text("No requested bookings").foregroundColor(.secondary)
+                            } else {
+                                ForEach(requested, id: \ .id) { b in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        BookingRowView(item: b)
+                                        HStack {
+                                            Spacer()
+                                            Button(action: {
+                                                // set selected booking - sheet(item:) will present when non-nil
+                                                self.selectedBookingForAccept = b
+                                            }) {
+                                                Text("Accept")
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(.blue)
                                         }
-                                        .buttonStyle(.borderedProminent)
-                                        .tint(.blue)
                                     }
+                                    .padding(.vertical, 4)
                                 }
-                                .padding(.vertical, 4)
                             }
                         }
+                        .padding(.horizontal)
+                    }
+
+                    // Role-specific rendering
+                    if currentUserRole == "CLIENT" {
+                        clientBookingsSection
+                    } else if currentUserRole == "COACH" {
+                        coachBookingsSection
+                    } else {
+                        // fallback: show both while role is unknown
+                        clientBookingsSection
+                        coachBookingsSection
                     }
                 }
-
-                // Role-specific rendering
-                if currentUserRole == "CLIENT" {
-                    clientBookingsSection
-                } else if currentUserRole == "COACH" {
-                    coachBookingsSection
-                } else {
-                    // fallback: show both while role is unknown
-                    clientBookingsSection
-                    coachBookingsSection
-                }
+                .padding(.vertical)
             }
             .navigationTitle("Bookings")
             .toolbar {
@@ -113,15 +119,17 @@ struct BookingsView: View {
             if let start = b.startAt { return isSameDay(start, today) }
             return false
         }
-        return Section(header: Text("Today")) {
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Today").font(.headline)
             if todays.isEmpty {
                 Text("No bookings today").foregroundColor(.secondary)
             } else {
-                ForEach(todays, id: \.id) { b in
+                ForEach(todays, id: \ .id) { b in
                     BookingRowView(item: b)
                 }
             }
         }
+        .padding(.horizontal)
     }
 
     private func acceptBooking(_ b: FirestoreManager.BookingItem) {
@@ -140,11 +148,12 @@ struct BookingsView: View {
     }
 
     private var clientBookingsSection: some View {
-        Section(header: Text("My Bookings")) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("My Bookings").font(.headline)
             if firestore.bookings.isEmpty {
                 Text("No bookings yet").foregroundColor(.secondary)
             } else {
-                ForEach(firestore.bookings, id: \.id) { b in
+                ForEach(firestore.bookings, id: \ .id) { b in
                     VStack(alignment: .leading, spacing: 6) {
                         BookingRowView(item: b)
 
@@ -163,23 +172,27 @@ struct BookingsView: View {
                  }
             }
         }
+        .padding(.horizontal)
     }
 
     private var coachBookingsSection: some View {
-        Section(header: Text("Accepted Bookings")) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Accepted Bookings").font(.headline)
              if firestore.coachBookings.isEmpty {
                  Text("No coach bookings found").foregroundColor(.secondary)
              } else {
-                 ForEach(firestore.coachBookings, id: \.id) { b in
+                 ForEach(firestore.coachBookings, id: \ .id) { b in
                      BookingRowView(item: b)
                  }
              }
          }
+         .padding(.horizontal)
      }
 
     // === Month Calendar Section ===
     private var monthCalendarSection: some View {
-        Section(header: calendarHeaderView) {
+        VStack(alignment: .leading, spacing: 10) {
+            calendarHeaderView
             MonthCalendarView(monthAnchor: $currentMonthAnchor,
                               selectedDate: $selectedDate,
                               bookings: allRelevantBookings)
@@ -192,13 +205,14 @@ struct BookingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
                         .font(.headline)
-                    ForEach(dayBookings, id: \.id) { b in
+                    ForEach(dayBookings, id: \ .id) { b in
                         BookingRowView(item: b)
                     }
                 }
                 .padding(.vertical, 4)
             }
         }
+        .padding(.horizontal)
     }
 
     private var calendarHeaderView: some View {
@@ -268,13 +282,13 @@ struct MonthCalendarView: View {
             // Weekday headers
             let symbols = calendar.shortStandaloneWeekdaySymbols
             HStack {
-                ForEach(symbols, id: \.self) { s in
+                ForEach(symbols, id: \ .self) { s in
                     Text(s).font(.caption).frame(maxWidth: .infinity)
                 }
             }
             // Grid of days (7 columns)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 6) {
-                ForEach(monthDays, id: \.self) { d in
+                ForEach(monthDays, id: \ .self) { d in
                     DayCell(date: d,
                             isCurrentMonth: calendar.isDate(d, equalTo: monthAnchor, toGranularity: .month),
                             isSelected: calendar.isDate(d, inSameDayAs: selectedDate),
