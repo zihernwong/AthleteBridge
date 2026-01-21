@@ -253,6 +253,7 @@ import FirebaseAuth
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
     @State private var showConfirmOverlay: Bool = false
+    @State private var gridRefreshToken: UUID = UUID()
 
     var body: some View {
         List {
@@ -300,6 +301,7 @@ import FirebaseAuth
                     endAt = end
                     showConfirmOverlay = true
                 })
+                .id(gridRefreshToken)
                 .environmentObject(firestore)
             } header: { Text("Calendar") }
 
@@ -386,7 +388,9 @@ import FirebaseAuth
                                             if let err = err {
                                                 firestore.showToast("Failed: \(err.localizedDescription)")
                                             } else {
+                                                // refresh client list + immediately refresh the grid so the slot blocks out
                                                 firestore.fetchBookingsForCurrentClientSubcollection()
+                                                gridRefreshToken = UUID()
                                                 firestore.showToast("Booking saved")
                                                 withAnimation { showConfirmOverlay = false }
                                             }

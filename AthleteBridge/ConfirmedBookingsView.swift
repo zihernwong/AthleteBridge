@@ -12,10 +12,6 @@ struct ConfirmedBookingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Confirmed Bookings").font(.largeTitle).bold()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 8)
-
                 let confirmed = firestore.bookings.filter { isConfirmed($0.status) }
                 if confirmed.isEmpty {
                     Text("No confirmed bookings")
