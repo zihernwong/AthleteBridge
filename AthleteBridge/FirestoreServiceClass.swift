@@ -1,11 +1,11 @@
 import Foundation
-import Firebase
-import FirebaseFirestore
-import FirebaseAuth
-import FirebaseStorage
+@preconcurrency import Firebase
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseAuth
+@preconcurrency import FirebaseStorage
 import SwiftUI
 import CoreLocation
-import EventKit
+@preconcurrency import EventKit
 
 @MainActor
 class FirestoreManager: ObservableObject {
@@ -820,9 +820,18 @@ class FirestoreManager: ObservableObject {
             let city = data["city"] as? String ?? data["City"] as? String
 
             let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
+            let clientBio = data["bio"] as? String ?? data["Bio"] as? String
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city)
+                    self.currentClient = Client(id: id,
+                                                name: name,
+                                                goals: goals,
+                                                preferredAvailability: preferredArr,
+                                                meetingPreference: meetingPref,
+                                                skillLevel: data["skillLevel"] as? String,
+                                                zipCode: zip,
+                                                city: city,
+                                                bio: clientBio)
                     self.currentClientPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: client photo resolved for \(id): \(r.absoluteString)")
@@ -951,7 +960,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save client document using provided id
-    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
+    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, photoURL: String?, bio: String? = nil, completion: @escaping (Error?) -> Void) {
         let docRef = self.db.collection("clients").document(id)
 
         // Base payload for updates (always set updatedAt)
@@ -964,16 +973,15 @@ class FirestoreManager: ObservableObject {
         if let p = photoURL { updateData["photoURL"] = p }
         if let z = zipCode { updateData["zipCode"] = z }
         if let c = city { updateData["city"] = c }
+        if let b = bio { updateData["bio"] = b }
         // If caller asked to clear the meetingPreference, request deletion in a merge/update operation
         if meetingPreferenceClear {
             updateData["meetingPreference"] = FieldValue.delete()
         } else if let mp = meetingPreference {
             updateData["meetingPreference"] = mp
         }
-        // skillLevel handling: if provided as nil we don't touch it; if non-nil (including empty) we set it; caller can pass nil to leave unchanged
-        if let sl = skillLevel {
-            updateData["skillLevel"] = sl
-        }
+        // skillLevel handling
+        if let sl = skillLevel { updateData["skillLevel"] = sl }
 
         // Check whether the document exists so we only set createdAt on creation
         docRef.getDocument { snap, err in
@@ -1351,8 +1359,7 @@ class FirestoreManager: ObservableObject {
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                let clientName = (data["ClientName"] as? String)
-                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
@@ -1375,8 +1382,7 @@ class FirestoreManager: ObservableObject {
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                let coachName = (data["CoachName"] as? String)
-                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
@@ -2808,9 +2814,10 @@ class FirestoreManager: ObservableObject {
     /// - Parameter bookingId: The Firestore booking document ID, used to check for duplicates.
     /// - Parameter completion: Completion handler with the event identifier or error.
     func addBookingToAppleCalendar(title: String, start: Date, end: Date, location: String?, notes: String?, bookingId: String, completion: @escaping (Result<String, Error>) -> Void) {
-        let eventStore = EKEventStore()
-        // Request access if needed (use iOS 17+ API when available)
+        // Create the event store inside the closure to avoid capturing a non-Sendable instance
         let handleAccessResponse: (Bool, Error?) -> Void = { granted, error in
+            // Recreate eventStore here (inside Sendable closure scope)
+            let eventStore = EKEventStore()
             if let err = error {
                 print("addBookingToAppleCalendar: requestAccess error: \(err)")
                 completion(.failure(err))
@@ -2866,11 +2873,11 @@ class FirestoreManager: ObservableObject {
         }
 
         if #available(iOS 17.0, *) {
-            eventStore.requestFullAccessToEvents { granted, error in
+            EKEventStore().requestFullAccessToEvents { granted, error in
                 handleAccessResponse(granted, error)
             }
         } else {
-            eventStore.requestAccess(to: .event) { granted, error in
+            EKEventStore().requestAccess(to: .event) { granted, error in
                 handleAccessResponse(granted, error)
             }
         }

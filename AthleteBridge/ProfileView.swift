@@ -34,6 +34,8 @@ struct ProfileView: View {
     // Availability
     @State private var selectedClientAvailability: Set<String> = []
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
+    // New: client biography text
+    @State private var clientBioText: String = ""
 
     // Coach fields
     @State private var experienceYears: Int = 0
@@ -268,6 +270,13 @@ struct ProfileView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 6)
             }
+
+            // Client Biography
+            VStack(alignment: .leading) {
+                Text("Biography").font(.subheadline).foregroundColor(.secondary)
+                TextEditor(text: $clientBioText)
+                    .frame(minHeight: 120)
+            }
         }
     }
 
@@ -466,6 +475,7 @@ struct ProfileView: View {
             name = client.name
             selectedGoals = Set(client.goals)
             selectedClientAvailability = Set(client.preferredAvailability)
+            clientBioText = client.bio ?? ""
         }
         if let coach = firestore.currentCoach {
             name = coach.name
@@ -475,18 +485,17 @@ struct ProfileView: View {
         }
     }
 
-    /// Lookup a city/locality for the provided ZIP code and return it via completion on the main thread.
     private func lookupCity(forZip zip: String, completion: ((String?) -> Void)? = nil) {
-        let trimmed = zip.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { DispatchQueue.main.async { completion?(nil) }; return }
-        let geocoder = CLGeocoder()
-        geocoder.geocodeAddressString(trimmed) { placemarks, error in
-            if let _ = error { DispatchQueue.main.async { completion?(nil) }; return }
-            let city = placemarks?.first?.locality ?? placemarks?.first?.subLocality ?? placemarks?.first?.administrativeArea
-            DispatchQueue.main.async { completion?(city) }
+            let trimmed = zip.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { DispatchQueue.main.async { completion?(nil) }; return }
+            let geocoder = CLGeocoder()
+            geocoder.geocodeAddressString(trimmed) { placemarks, error in
+                if let _ = error { DispatchQueue.main.async { completion?(nil) }; return }
+                let city = placemarks?.first?.locality ?? placemarks?.first?.subLocality ?? placemarks?.first?.administrativeArea
+                DispatchQueue.main.async { completion?(city) }
+            }
         }
-    }
-
+    
     private func populateFromExisting() {
         if let client = firestore.currentClient {
             role = .client
@@ -497,6 +506,7 @@ struct ProfileView: View {
             selectedClientSkillLevel = client.skillLevel ?? "Beginner"
             clientZipCode = client.zipCode ?? ""
             clientCity = client.city ?? ""
+            clientBioText = client.bio ?? ""
             isEditMode = true
         } else if let coach = firestore.currentCoach {
             role = .coach
@@ -526,6 +536,7 @@ struct ProfileView: View {
                 selectedClientSkillLevel = client.skillLevel ?? "Beginner"
                 clientZipCode = client.zipCode ?? ""
                 clientCity = client.city ?? ""
+                clientBioText = client.bio ?? ""
             } else {
                 isEditMode = false
             }
@@ -565,7 +576,8 @@ struct ProfileView: View {
                 let preferred = Array(selectedClientAvailability)
                 let meetingPrefToSave = selectedClientMeetingPreference
                 let skillLevelToSave = selectedClientSkillLevel
-                fm.saveClient(id: uid,
+                let bioToSave = clientBioText
+                firestore.saveClient(id: uid,
                               name: name.isEmpty ? "Unnamed" : name,
                               goals: goals,
                               preferredAvailability: preferred,
@@ -574,7 +586,8 @@ struct ProfileView: View {
                               skillLevel: skillLevelToSave,
                               zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
                               city: clientCity.isEmpty ? nil : clientCity,
-                              photoURL: photoURL) { err in
+                              photoURL: photoURL,
+                              bio: bioToSave.isEmpty ? nil : bioToSave) { err in
                     DispatchQueue.main.async {
                         isSaving = false
                         if let err = err {

@@ -47,8 +47,10 @@ struct Client: Identifiable, Hashable {
     // Optional location info
     let zipCode: String?
     let city: String?
+    // Optional biography text
+    let bio: String?
 
-    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil) {
+    init(id: String = UUID().uuidString, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, bio: String? = nil) {
         self.id = id
         self.name = name
         self.goals = goals
@@ -57,5 +59,6 @@ struct Client: Identifiable, Hashable {
         self.skillLevel = skillLevel
         self.zipCode = zipCode
         self.city = city
+        self.bio = bio
     }
 }
