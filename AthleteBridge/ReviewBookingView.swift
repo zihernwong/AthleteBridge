@@ -7,6 +7,18 @@ struct ReviewBookingView: View {
 
     let booking: FirestoreManager.BookingItem
 
+    private var coachDisplayName: String {
+        booking.coachName ?? "Coach"
+    }
+
+    private var rateDisplayText: String {
+        if let rate = booking.RateUSD {
+            return String(format: "$%.2f", rate)
+        }
+
+        return "—"
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
@@ -14,18 +26,30 @@ struct ReviewBookingView: View {
                     .font(.title2)
                     .bold()
 
+                // Coach
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Coach")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(coachDisplayName)
+                        .font(.headline)
+                }
+
+                // Price
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Coach Price")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(rateDisplayText)
+                        .font(.headline)
+                }
+
                 if let start = booking.startAt {
                     Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
                 }
                 if let end = booking.endAt {
                     Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                 }
-
-                // Offer details are stored on the booking document (RateUSD / RateCents / CoachNote).
-                // The BookingItem struct does not carry these fields, so we keep this view minimal for now.
-                Text("Coach Price: (see booking details)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
 
                 if let note = booking.notes, !note.isEmpty {
                     Text("Note from coach:")

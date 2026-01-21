@@ -129,16 +129,16 @@ struct BookingsView: View {
         .padding(.horizontal)
     }
 
-    private func acceptBooking(_ b: FirestoreManager.BookingItem) {
-        firestore.updateBookingStatus(bookingId: b.id, status: "accepted") { err in
+    // NOTE: Client-side confirmation happens inside `ReviewBookingView` via `updateBookingStatus(..., status: "confirmed")`.
+    // We keep a tiny helper here in case we ever want a one-tap confirm action.
+    private func confirmBooking(_ b: FirestoreManager.BookingItem) {
+        firestore.updateBookingStatus(bookingId: b.id, status: "confirmed") { err in
             DispatchQueue.main.async {
                 if let err = err {
-                    // simple error indicator
-                    print("acceptBooking error: \(err)")
+                    print("confirmBooking error: \(err)")
                 } else {
-                    // Refresh coach bookings
-                    firestore.fetchBookingsForCurrentCoachSubcollection()
-                    firestore.showToast("Booking accepted")
+                    firestore.fetchBookingsForCurrentClientSubcollection()
+                    firestore.showToast("Booking confirmed")
                 }
             }
         }
@@ -155,7 +155,7 @@ struct BookingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         BookingRowView(item: b)
                             .overlay(alignment: .trailing) {
-                                Button(action: { acceptBooking(b) }) {
+                                Button(action: { selectedBookingForReview = b }) {
                                     Text("Review Booking")
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -181,11 +181,12 @@ struct BookingsView: View {
 
     private var coachBookingsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Removed label per request
             NavigationLink(destination:
-                            CoachConfirmedBookingsView()
+                            AcceptedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
-                Text("View Confirmed Bookings")
+                Text("View Accepted Bookings")
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)
