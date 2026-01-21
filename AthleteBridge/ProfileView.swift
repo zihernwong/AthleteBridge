@@ -46,6 +46,9 @@ struct ProfileView: View {
     @State private var selectedCoachMeetingPreference: String = "In-Person"
     // Coach availability selection (stored as array of strings)
     @State private var selectedCoachAvailability: Set<String> = []
+    // New: coach rate range (lower, upper)
+    @State private var coachRateLowerText: String = ""
+    @State private var coachRateUpperText: String = ""
 
     // Location
     @State private var clientZipCode: String = ""
@@ -382,6 +385,19 @@ struct ProfileView: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
             }
 
+            // New Rate Range inputs
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Rate Range (USD)").font(.subheadline).foregroundColor(.secondary)
+                HStack {
+                    TextField("Lower", text: $coachRateLowerText)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    TextField("Upper", text: $coachRateUpperText)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+            }
+
             VStack(alignment: .leading) {
                 Text("Biography").font(.subheadline).foregroundColor(.secondary)
                 TextEditor(text: $bioText).frame(minHeight: 120)
@@ -519,6 +535,13 @@ struct ProfileView: View {
             if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
             coachZipCode = coach.zipCode ?? ""
             coachCity = coach.city ?? ""
+            if let rr = coach.rateRange, rr.count == 2 {
+                coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
+                coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
+            } else {
+                coachRateLowerText = ""
+                coachRateUpperText = ""
+            }
             isEditMode = true
         } else {
             isEditMode = false
@@ -552,6 +575,13 @@ struct ProfileView: View {
                 if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
                 coachZipCode = coach.zipCode ?? ""
                 coachCity = coach.city ?? ""
+                if let rr = coach.rateRange, rr.count == 2 {
+                    coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
+                    coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
+                } else {
+                    coachRateLowerText = ""
+                    coachRateUpperText = ""
+                }
             } else {
                 isEditMode = false
             }
@@ -572,38 +602,36 @@ struct ProfileView: View {
 
         func finalizeSave(withPhotoURL photoURL: String?) {
             if role == .client {
-                let goals = Array(selectedGoals)
-                let preferred = Array(selectedClientAvailability)
-                let meetingPrefToSave = selectedClientMeetingPreference
-                let skillLevelToSave = selectedClientSkillLevel
-                let bioToSave = clientBioText
-                firestore.saveClient(id: uid,
-                              name: name.isEmpty ? "Unnamed" : name,
-                              goals: goals,
-                              preferredAvailability: preferred,
-                              meetingPreference: meetingPrefToSave,
-                              meetingPreferenceClear: false,
-                              skillLevel: skillLevelToSave,
-                              zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
-                              city: clientCity.isEmpty ? nil : clientCity,
-                              photoURL: photoURL,
-                              bio: bioToSave.isEmpty ? nil : bioToSave) { err in
-                    DispatchQueue.main.async {
-                        isSaving = false
-                        if let err = err {
-                            saveMessage = "Error saving client: \(err.localizedDescription)"
-                        } else {
-                            fm.fetchCurrentProfiles(for: uid)
-                            showSavedConfirmation = true
-                            fm.showToast("Client profile saved")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                showSavedConfirmation = false
-                                presentationMode.wrappedValue.dismiss()
+                            let goals = Array(selectedGoals)
+                            let preferred = Array(selectedClientAvailability)
+                            let meetingPrefToSave = selectedClientMeetingPreference
+                            let skillLevelToSave = selectedClientSkillLevel
+                            fm.saveClient(id: uid,
+                                          name: name.isEmpty ? "Unnamed" : name,
+                                          goals: goals,
+                                          preferredAvailability: preferred,
+                                          meetingPreference: meetingPrefToSave,
+                                          meetingPreferenceClear: false,
+                                          skillLevel: skillLevelToSave,
+                                          zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
+                                          city: clientCity.isEmpty ? nil : clientCity,
+                                          photoURL: photoURL) { err in
+                                DispatchQueue.main.async {
+                                    isSaving = false
+                                    if let err = err {
+                                        saveMessage = "Error saving client: \(err.localizedDescription)"
+                                    } else {
+                                        fm.fetchCurrentProfiles(for: uid)
+                                        showSavedConfirmation = true
+                                        fm.showToast("Client profile saved")
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                            showSavedConfirmation = false
+                                            presentationMode.wrappedValue.dismiss()
+                                        }
+                                    }
+                                }
                             }
-                        }
-                    }
-                }
-            } else {
+                        } else {
                 let specialties = Array(selectedSpecialties)
                 let experience = experienceYears
                 let hourlyRate = Double(hourlyRateText)
@@ -611,6 +639,15 @@ struct ProfileView: View {
                 let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
                 let lastName = parts.dropFirst().joined(separator: " ")
                 let meetingPrefToSave = selectedCoachMeetingPreference
+                // Build rateRange from text fields
+                let lower = Double(coachRateLowerText)
+                let upper = Double(coachRateUpperText)
+                let rateRangeToSave: [Double]? = {
+                    if let l = lower, let u = upper { return [l, u] }
+                    else if let l = lower { return [l] }
+                    else if let u = upper { return [u] }
+                    else { return nil }
+                }()
                 fm.saveCoachWithSchema(id: uid,
                                        firstName: firstName,
                                        lastName: lastName,
@@ -622,9 +659,11 @@ struct ProfileView: View {
                                        photoURL: photoURL,
                                        bio: bioText,
                                        zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
-                                       city: coachCity.isEmpty ? nil : coachCity,
-                                       active: true,
-                                       overwrite: true) { err in
+                                       city: coachCity.isEmpty ? nil : coachCity) { err in
+                    if err == nil, let rr = rateRangeToSave {
+                        let ref = Firestore.firestore().collection("coaches").document(uid)
+                        ref.setData(["RateRange": rr], merge: true)
+                    }
                     DispatchQueue.main.async {
                         isSaving = false
                         if let err = err {
