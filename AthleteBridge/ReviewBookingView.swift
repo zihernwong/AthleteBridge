@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct ReviewBookingView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -93,12 +94,6 @@ struct ReviewBookingView: View {
                 .padding(.top, 8)
 
                 Spacer()
-
-                Text("This is a placeholder page where the client can confirm or decline the pending booking. UI to be implemented.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Spacer()
             }
             .padding()
             .navigationTitle("Review")
@@ -120,6 +115,24 @@ struct ReviewBookingView: View {
                 if let err = err {
                     firestore.showToast("Failed to update booking: \(err.localizedDescription)")
                 } else {
+                    // Send notification to coach when client confirms
+                    if status == "confirmed", !booking.coachID.isEmpty {
+                        let clientName = firestore.currentClient?.name ?? "Client"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.coachID).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Confirmed",
+                            "body": "\(clientName) has confirmed the booking.",
+                            "bookingId": booking.id,
+                            "senderId": booking.clientID,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { nerr in
+                            if let nerr = nerr {
+                                print("[ReviewBookingView] Failed to send notification to coach: \(nerr)")
+                            }
+                        }
+                    }
                     let friendly = (status == "confirmed") ? "Booking confirmed" : "Booking declined"
                     firestore.showToast(friendly)
                     // Optionally refresh lists

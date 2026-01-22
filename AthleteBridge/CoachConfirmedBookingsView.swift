@@ -1,8 +1,12 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct CoachConfirmedBookingsView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+
+    @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
+    @State private var showCancelAlert: Bool = false
 
     private func isConfirmed(_ status: String?) -> Bool {
         return (status ?? "").lowercased() == "confirmed"
@@ -22,7 +26,19 @@ struct CoachConfirmedBookingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     ForEach(confirmed, id: \ .id) { b in
-                        BookingRowView(item: b)
+                        VStack(alignment: .leading, spacing: 8) {
+                            BookingRowView(item: b)
+                            Button(role: .destructive) {
+                                bookingToCancel = b
+                                showCancelAlert = true
+                            } label: {
+                                Text("Cancel Booking")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(.vertical, 4)
+                        Divider()
                     }
                 }
             }
@@ -32,6 +48,43 @@ struct CoachConfirmedBookingsView: View {
         .navigationTitle("Confirmed Bookings")
         .onAppear {
             firestore.fetchBookingsForCurrentCoachSubcollection()
+        }
+        .alert("Cancel Booking", isPresented: $showCancelAlert) {
+            Button("Keep Booking", role: .cancel) { }
+            Button("Cancel Booking", role: .destructive) {
+                if let booking = bookingToCancel {
+                    cancelBooking(booking)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to cancel this booking? The client will be notified.")
+        }
+    }
+
+    private func cancelBooking(_ booking: FirestoreManager.BookingItem) {
+        firestore.updateBookingStatus(bookingId: booking.id, status: "cancelled") { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    firestore.showToast("Failed to cancel: \(err.localizedDescription)")
+                } else {
+                    // Send notification to client
+                    if !booking.clientID.isEmpty {
+                        let coachName = firestore.currentCoach?.name ?? "Coach"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.clientID).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Cancelled",
+                            "body": "\(coachName) has cancelled the booking.",
+                            "bookingId": booking.id,
+                            "senderId": booking.coachID,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                    firestore.showToast("Booking cancelled")
+                    firestore.fetchBookingsForCurrentCoachSubcollection()
+                }
+            }
         }
     }
 }

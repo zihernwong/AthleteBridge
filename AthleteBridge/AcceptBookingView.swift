@@ -142,6 +142,24 @@ struct AcceptBookingView: View {
                 if let err = err {
                     self.errorMessage = err.localizedDescription
                 } else {
+                    // Send notification to client
+                    if !clientId.isEmpty {
+                        let coachName = self.firestore.currentCoach?.name ?? "Your coach"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Action Required: Confirm Booking",
+                            "body": "\(coachName) has accepted your booking. Please confirm.",
+                            "bookingId": self.booking.id,
+                            "senderId": coachId,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { nerr in
+                            if let nerr = nerr {
+                                print("[AcceptBookingView] Failed to send notification to client: \(nerr)")
+                            }
+                        }
+                    }
                     // refresh using environment object's convenience method
                     self.firestore.fetchBookingsForCurrentCoachSubcollection()
                     self.firestore.showToast("Booking pending acceptance")

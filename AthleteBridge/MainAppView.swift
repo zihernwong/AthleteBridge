@@ -334,33 +334,11 @@ struct MainAppView: View {
             .environmentObject(auth)
     }
 
-    // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
+    // Bookings tab wrapper: shows BookingsView (Input Time Away and Locations are inside BookingsView for coaches)
     private var bookingsTab: some View {
         NavigationStack {
             BookingsView()
                 .navigationTitle("Bookings")
-                .toolbar {
-                    // Coach-only Input Time Away button placed next to Locations
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        if isCoachUserComputed, let coach = firestore.currentCoach {
-                            NavigationLink(destination: AwayTimePickerView(coach: coach).environmentObject(firestore).environmentObject(auth)) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "calendar.badge.minus")
-                                    Text("Input Time Away")
-                                }
-                            }
-                        }
-                    }
-                    // Existing Locations button
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        NavigationLink(destination: LocationsView()) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "mappin.and.ellipse")
-                                Text("Locations")
-                            }
-                        }
-                    }
-                }
         }
     }
 

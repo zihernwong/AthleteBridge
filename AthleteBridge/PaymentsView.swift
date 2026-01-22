@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct PaymentsView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -71,6 +72,42 @@ struct PaymentsView: View {
     // Helper: display client name for coach-side rows
     private func clientDisplayName(for booking: FirestoreManager.BookingItem) -> String {
         (booking.clientName?.isEmpty == false ? booking.clientName! : nil) ?? "Client"
+    }
+
+    // Helper: send notification to coach that client has marked booking as paid
+    private func notifyCoachOfPayment(for booking: FirestoreManager.BookingItem) {
+        let coachId = booking.coachID
+        guard !coachId.isEmpty else {
+            self.errorMessage = "Missing coach ID for this booking."
+            return
+        }
+
+        // Get client name from current client profile or fallback
+        var clientName = "A client"
+        if let client = firestore.currentClient, !client.name.isEmpty {
+            clientName = client.name
+        }
+
+        // Send notification to coach
+        let db = Firestore.firestore()
+        let notifRef = db.collection("pendingNotifications").document(coachId).collection("notifications").document()
+        let notifPayload: [String: Any] = [
+            "title": "Payment Notification",
+            "body": "\(clientName) has marked booking as paid. Please confirm",
+            "bookingId": booking.id,
+            "senderId": auth.user?.uid ?? "",
+            "createdAt": FieldValue.serverTimestamp(),
+            "delivered": false
+        ]
+        notifRef.setData(notifPayload) { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    errorMessage = "Failed to notify coach: \(err.localizedDescription)"
+                } else {
+                    errorMessage = "Coach has been notified of your payment."
+                }
+            }
+        }
     }
 
     // Helper: trigger payment flow for an unpaid booking — now fetch and show coach payment methods
@@ -592,11 +629,10 @@ struct PaymentsView: View {
             // Show Make Payment button only for unpaid bookings
             if (b.paymentStatus ?? "").lowercased() != "paid" {
                 HStack {
-                    // Client-only: dummy notify button
+                    // Client-only: notify coach of payment button
                     if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
                         Button(action: {
-                            // Placeholder action: surface confirmation message
-                            errorMessage = "A notification to the coach will be sent (placeholder)."
+                            notifyCoachOfPayment(for: b)
                         }) {
                             Text("Notify Coach of Payment")
                         }

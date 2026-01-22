@@ -1899,7 +1899,7 @@ class FirestoreManager: ObservableObject {
         let coachBookingRef = coachRef.collection("bookings").document(bookingRef.documentID)
         let clientBookingRef = clientRef.collection("bookings").document(bookingRef.documentID)
 
-        // Fetch coach name before saving booking
+        // Fetch coach and client names before saving booking
         coachRef.getDocument { [weak self] coachSnap, coachErr in
             guard let self = self else { return }
 
@@ -1909,6 +1909,18 @@ class FirestoreManager: ObservableObject {
                 let lastName = coachData["LastName"] as? String ?? ""
                 let fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
                 if !fullName.isEmpty { coachName = fullName }
+            }
+
+            // Fetch client name for notification
+            clientRef.getDocument { [weak self] clientSnap, clientErr in
+            guard let self = self else { return }
+
+            var clientName: String? = nil
+            if let clientData = clientSnap?.data() {
+                let firstName = clientData["FirstName"] as? String ?? ""
+                let lastName = clientData["LastName"] as? String ?? ""
+                let fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
+                if !fullName.isEmpty { clientName = fullName }
             }
 
             var data: [String: Any] = [
@@ -1988,10 +2000,31 @@ class FirestoreManager: ObservableObject {
                 if let err = firstError {
                     completion(err)
                 } else {
+                    // Send notification to coach for requested bookings
+                    if status.lowercased() == "requested" {
+                        let displayName = clientName ?? "A client"
+                        let notifRef = self.db.collection("pendingNotifications").document(coachId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Requested",
+                            "body": "Booking Requested by \(displayName) Action Required",
+                            "bookingId": bookingRef.documentID,
+                            "senderId": clientId,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { nerr in
+                            if let nerr = nerr {
+                                print("[FirestoreManager] Failed to write booking notification for coach \(coachId): \(nerr)")
+                            } else {
+                                print("[FirestoreManager] Booking notification sent to coach \(coachId)")
+                            }
+                        }
+                    }
                     completion(nil)
                 }
             }
         }
+        } // end clientRef.getDocument
         } // end coachRef.getDocument
     }
 

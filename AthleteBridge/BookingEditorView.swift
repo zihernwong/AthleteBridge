@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 // Unified booking editor used by BookingsView and other places.
 struct BookingEditorView: View {
@@ -10,6 +11,13 @@ struct BookingEditorView: View {
     @State private var coachSearchText: String = ""
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
+
+    // Reviews for selected coach
+    @State private var coachReviews: [FirestoreManager.ReviewItem] = []
+
+    // For presenting chat sheet
+    private struct ChatSheetId: Identifiable { let id: String }
+    @State private var presentedChat: ChatSheetId? = nil
     // selectedLocationId references a document id in clients/{uid}/locations (firestore.locations)
     @State private var selectedLocationId: String = ""
     @State private var notes: String = ""
@@ -111,30 +119,84 @@ struct BookingEditorView: View {
                             let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
                             AvatarView(url: coachURL ?? nil, size: 72, useCurrentUser: false)
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(coach.name).font(.headline)
                                 if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(bio).font(.body).foregroundColor(.primary)
                                 } else {
                                     Text("No bio provided").font(.subheadline).foregroundColor(.secondary)
                                 }
-                                if !coach.specialties.isEmpty {
-                                    Text("Specialties: \(coach.specialties.joined(separator: ", "))")
-                                        .font(.caption).foregroundColor(.secondary)
-                                }
-                                Text("Experience: \(coach.experienceYears) years").font(.caption).foregroundColor(.secondary)
-                                if let rate = coach.hourlyRate {
-                                    Text(String(format: "Hourly Rate: $%.0f / hr", rate)).font(.caption).foregroundColor(.primary)
-                                } else {
-                                    Text("Hourly rate to be discussed").font(.caption).foregroundColor(.secondary)
-                                }
-                                if !coach.availability.isEmpty {
-                                    Text("Availability: \(coach.availability.joined(separator: ", "))")
-                                        .font(.caption).foregroundColor(.secondary)
-                                }
                             }
                         }
+                        if !coach.specialties.isEmpty {
+                            Text("Specialties: \(coach.specialties.joined(separator: ", "))")
+                        }
+                        Text("Experience: \(coach.experienceYears) years")
+                        if let range = coach.rateRange, range.count >= 2 {
+                            Text(String(format: "$%.0f - $%.0f / hr", range[0], range[1]))
+                        } else {
+                            Text("Message coach for rate").foregroundColor(.secondary)
+                        }
+                        if !coach.availability.isEmpty {
+                            Text("Availability: \(coach.availability.joined(separator: ", "))")
+                        }
+
+                        // Message Coach button
+                        Button(action: {
+                            guard Auth.auth().currentUser?.uid != nil else {
+                                firestore.showToast("Please sign in to message coaches")
+                                return
+                            }
+                            let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
+                            presentedChat = ChatSheetId(id: expectedChatId)
+                            firestore.createOrGetChat(withCoachId: coach.id) { chatId in
+                                DispatchQueue.main.async {
+                                    let target = chatId ?? expectedChatId
+                                    if target != expectedChatId {
+                                        presentedChat = ChatSheetId(id: target)
+                                    }
+                                }
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "message.fill")
+                                Text("Message Coach")
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.top, 8)
+
+                        // Reviews summary section
+                        VStack(alignment: .leading, spacing: 8) {
+                            let avgRating = coachReviews.isEmpty ? 0.0 : coachReviews.compactMap { r -> Double? in
+                                if let s = r.rating, let d = Double(s) { return d }
+                                return nil
+                            }.reduce(0, +) / Double(coachReviews.count)
+
+                            HStack(spacing: 8) {
+                                HStack(spacing: 2) {
+                                    ForEach(1...5, id: \.self) { i in
+                                        Image(systemName: Double(i) <= avgRating ? "star.fill" : (Double(i) - 0.5 <= avgRating ? "star.leadinghalf.filled" : "star"))
+                                            .foregroundColor(.yellow)
+                                            .font(.subheadline)
+                                    }
+                                }
+
+                                Text(String(format: "%.1f", avgRating))
+                                    .font(.headline)
+
+                                Text("(\(coachReviews.count) reviews)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            NavigationLink(destination: CoachReviewsListView(coach: coach, reviews: coachReviews)) {
+                                Text("View All Reviews")
+                                    .font(.subheadline)
+                            }
+                        }
+                        .padding(.top, 8)
                     } header: {
-                        Text("Coach Info")
+                        Text(coach.name)
                     }
 
                     // Show coach calendar grid once a coach is selected; hide time pickers
@@ -343,6 +405,20 @@ struct BookingEditorView: View {
             }
             .animation(.easeInOut, value: showConfirmOverlay)
         )
+        .onChange(of: selectedCoachId) { _, newCoachId in
+            // Fetch reviews when coach is selected
+            if !newCoachId.isEmpty {
+                firestore.fetchReviewsForCoach(coachId: newCoachId) { items in
+                    DispatchQueue.main.async { coachReviews = items }
+                }
+            } else {
+                coachReviews = []
+            }
+        }
+        .sheet(item: $presentedChat) { sheet in
+            ChatView(chatId: sheet.id)
+                .environmentObject(firestore)
+        }
     }
 
     private func saveBooking() {

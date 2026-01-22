@@ -17,7 +17,12 @@ struct BookingsView: View {
             // Replace List with ScrollView + VStack to avoid UICollectionView feedback loop on device
             ScrollView {
                 VStack(spacing: 16) {
-                    // === Today’s Bookings (for both roles) ===
+                    // Coach-specific header with Input Time Away and Locations links
+                    if currentUserRole == "COACH" {
+                        coachHeaderSection
+                    }
+
+                    // === Today's Bookings (for both roles) ===
                     todaysBookingsSection
 
                     // === Month Calendar === (below Today and above My/ Accepted Bookings)
@@ -109,7 +114,31 @@ struct BookingsView: View {
         return firestore.bookings + firestore.coachBookings
     }
 
-    // === Today’s Bookings Section ===
+    // === Coach Header Section with Input Time Away and Locations ===
+    private var coachHeaderSection: some View {
+        HStack(spacing: 16) {
+            if let coach = firestore.currentCoach {
+                NavigationLink(destination: AwayTimePickerView(coach: coach).environmentObject(firestore).environmentObject(auth)) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.minus")
+                        Text("Input Time Away")
+                    }
+                    .font(.subheadline)
+                }
+            }
+            NavigationLink(destination: LocationsView().environmentObject(firestore)) {
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin.and.ellipse")
+                    Text("Locations")
+                }
+                .font(.subheadline)
+            }
+            Spacer()
+        }
+        .padding(.horizontal)
+    }
+
+    // === Today's Bookings Section ===
     private var todaysBookingsSection: some View {
         let today = Date()
         let todays = allRelevantBookings.filter { b in
