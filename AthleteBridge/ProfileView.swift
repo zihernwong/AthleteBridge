@@ -92,6 +92,7 @@ struct ProfileView: View {
                     nameSection
                     if role == .client { clientSection } else { coachSection }
                     photoSection
+                    subscriptionSection
                     saveSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
@@ -189,20 +190,6 @@ struct ProfileView: View {
 
     private var clientSection: some View {
         Section("Client Details") {
-            // Manage subscription button for clients
-            VStack(alignment: .leading) {
-                Text("Subscription").font(.subheadline).foregroundColor(.secondary)
-                Button(action: { showingManageSubscription = true }) {
-                    HStack {
-                        Text("Manage My Subscription")
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(.secondary)
-                    }
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
-                }
-            }
-
             VStack(alignment: .leading) {
                 Text("Goals").font(.subheadline).foregroundColor(.secondary)
                 Button(action: { showingGoalsSheet = true }) {
@@ -328,20 +315,6 @@ struct ProfileView: View {
     
     private var coachSection: some View {
         Section("Coach Details") {
-            // Manage subscription button for coaches
-            VStack(alignment: .leading) {
-                Text("Subscription").font(.subheadline).foregroundColor(.secondary)
-                Button(action: { showingManageSubscription = true }) {
-                    HStack {
-                        Text("Manage My Subscription")
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(.secondary)
-                    }
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
-                }
-            }
-
             VStack(alignment: .leading) {
                 Text("Specialties").font(.subheadline).foregroundColor(.secondary)
                 Button(action: { showingSpecialtiesSheet = true }) {
@@ -430,6 +403,20 @@ struct ProfileView: View {
                 }
             }
             .sheet(isPresented: $showingPhotoPicker) { PhotoPicker(selectedImage: $selectedImage) }
+        }
+    }
+
+    private var subscriptionSection: some View {
+        Section("Subscription") {
+            Button(action: { showingManageSubscription = true }) {
+                HStack {
+                    Text("Manage My Subscription")
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(.secondary)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+            }
         }
     }
 
