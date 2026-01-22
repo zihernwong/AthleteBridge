@@ -1,0 +1,3 @@
+# Exclude Firebase Cloud Functions from Xcode build
+# This folder contains Node.js code, not iOS source files
+functions/

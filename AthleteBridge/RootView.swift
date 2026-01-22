@@ -11,6 +11,23 @@ struct RootView: View {
                 MainAppView()
             }
         }
+        .onAppear {
+            // Handle case where user is already authenticated on app launch
+            if auth.user != nil {
+                print("[RootView] User already authenticated on appear, registering for notifications")
+                NotificationManager.shared.registerForPushNotifications()
+                NotificationManager.shared.saveTokenIfNeeded()
+            }
+        }
+        .onChange(of: auth.user) { newUser in
+            if newUser != nil {
+                // User just authenticated - register for push notifications
+                print("[RootView] User state changed to authenticated, registering for notifications")
+                NotificationManager.shared.registerForPushNotifications()
+                // Also try to save any cached FCM token
+                NotificationManager.shared.saveTokenIfNeeded()
+            }
+        }
     }
 }
 

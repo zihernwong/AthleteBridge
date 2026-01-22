@@ -2,14 +2,43 @@ import SwiftUI
 import FirebaseCore
 import FirebaseAuth
 import FirebaseInAppMessaging
+import FirebaseMessaging
+import UserNotifications
+
+// AppDelegate to receive APNs device token and forward to FCM
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Set up UNUserNotificationCenter delegate
+        UNUserNotificationCenter.current().delegate = NotificationManager.shared
+        print("[AppDelegate] didFinishLaunchingWithOptions - UNUserNotificationCenter delegate set")
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("[AppDelegate] Received APNs device token: \(tokenString.prefix(20))...")
+        NotificationManager.shared.updateAPNSToken(deviceToken)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[AppDelegate] Failed to register for remote notifications: \(error)")
+    }
+}
 
 @main
 struct AthleteBridgeApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var auth = AuthViewModel()
     @StateObject private var firestore = FirestoreManager()
 
     init() {
         FirebaseApp.configure()
+
+        // Initialize NotificationManager early to set up MessagingDelegate
+        _ = NotificationManager.shared
         print("[AthleteBridgeApp] FirebaseApp.configure() called")
 
         // Suppress Firebase In-App Messaging automatic display/fetch until the
