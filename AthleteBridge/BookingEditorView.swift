@@ -452,6 +452,31 @@ struct BookingEditorView: View {
         }
 
         isSaving = true
+
+        // Check for overlapping bookings before saving
+        firestore.fetchBookingsForCoach(coachId: coachUid, start: startAt, end: endAt) { existingBookings in
+            DispatchQueue.main.async {
+                let overlapping = existingBookings.filter { b in
+                    guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
+                    let status = (b.status ?? "").lowercased()
+                    // Block if any booking in this range is requested, confirmed, or pending acceptance
+                    guard status == "requested" || status == "confirmed" || status == "pending acceptance" else { return false }
+                    return bStart < self.endAt && bEnd > self.startAt
+                }
+                if !overlapping.isEmpty {
+                    self.isSaving = false
+                    self.alertMessage = "This time is already requested by you or someone else. Please choose a different time."
+                    self.showAlert = true
+                    return
+                }
+
+                // No overlap — proceed with save
+                self.performSave(coachUid: coachUid, clientUid: clientUid)
+            }
+        }
+    }
+
+    private func performSave(coachUid: String, clientUid: String) {
         // UI-level timeout: ensure spinner cleared if backend callback never invoked
         var uiTimeoutItem: DispatchWorkItem? = nil
         uiTimeoutItem = DispatchWorkItem {

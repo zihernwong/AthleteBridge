@@ -689,13 +689,6 @@ class FirestoreManager: ObservableObject {
             fetchCurrentProfiles(for: uid)
         }
 
-        // Attempt a safe, idempotent migration of legacy chat docs to the newer participantRefs schema.
-        // Runs in background and is limited to a small batch to avoid heavy work on startup.
-        // Call directly here (we are already MainActor) so the migration helper runs without actor-isolation warnings.
-        self.migrateChatsToParticipantRefs(limit: 200) { err in
-            if let err = err { print("migrateChatsToParticipantRefs completed with error: \(err)") }
-            else { print("migrateChatsToParticipantRefs completed") }
-        }
     }
 
     deinit {

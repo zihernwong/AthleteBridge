@@ -21,6 +21,9 @@ struct PaymentsView: View {
     // State for coach revenue summary sheet
     @State private var showCoachSummary: Bool = false
 
+    // State for client bookings tab (Unpaid vs Paid)
+    @State private var selectedPaymentTab: Int = 0 // 0 = Unpaid, 1 = Paid
+
     // New state for summary filters
     @State private var summaryRange: SummaryRange = .last30
     @State private var customStart: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
@@ -375,58 +378,48 @@ struct PaymentsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // Previous bookings for clients — show PaymentStatus
+            // Previous bookings for clients — tabbed Unpaid / Paid
             if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Previous Bookings")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Picker("", selection: $selectedPaymentTab) {
+                        Text("Unpaid").tag(0)
+                        Text("Paid").tag(1)
+                    }
+                    .pickerStyle(.segmented)
 
                     if firestore.bookings.isEmpty {
-                        Text("No previous bookings found.")
+                        Text("No bookings found.")
                             .foregroundColor(.secondary)
+                    } else if selectedPaymentTab == 0 {
+                        if unpaidBookings.isEmpty {
+                            Text("No unpaid bookings.")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ScrollView {
+                                VStack(spacing: 12) {
+                                    ForEach(unpaidBookings, id: \.id) { b in
+                                        bookingRow(for: b)
+                                        Divider().opacity(0.15)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     } else {
-                        // Unpaid section
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Unpaid")
-                                .font(.subheadline).bold()
-                            if unpaidBookings.isEmpty {
-                                Text("No unpaid bookings.")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                ScrollView {
-                                    VStack(spacing: 12) {
-                                        ForEach(unpaidBookings, id: \.id) { b in
-                                            bookingRow(for: b)
-                                            Divider().opacity(0.15)
-                                        }
+                        if paidBookings.isEmpty {
+                            Text("No paid bookings.")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ScrollView {
+                                VStack(spacing: 12) {
+                                    ForEach(paidBookings, id: \.id) { b in
+                                        bookingRow(for: b)
+                                        Divider().opacity(0.15)
                                     }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(.top, 4)
-
-                        // Paid section
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Paid")
-                                .font(.subheadline).bold()
-                            if paidBookings.isEmpty {
-                                Text("No paid bookings.")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                ScrollView {
-                                    VStack(spacing: 12) {
-                                        ForEach(paidBookings, id: \.id) { b in
-                                            bookingRow(for: b)
-                                            Divider().opacity(0.15)
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .padding(.top, 12)
                     }
                 }
             }

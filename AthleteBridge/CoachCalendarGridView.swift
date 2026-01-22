@@ -427,16 +427,31 @@ import FirebaseAuth
                                 .buttonStyle(.bordered)
                                 Button {
                                     guard let uid = Auth.auth().currentUser?.uid else { return }
-                                    firestore.saveBooking(clientUid: uid, coachUid: coach.id, startAt: startAt, endAt: endAt, location: nil, notes: nil, status: "requested") { err in
+                                    // Check for overlapping bookings before saving
+                                    firestore.fetchBookingsForCoach(coachId: coach.id, start: startAt, end: endAt) { existingBookings in
                                         DispatchQueue.main.async {
-                                            if let err = err {
-                                                firestore.showToast("Failed: \(err.localizedDescription)")
-                                            } else {
-                                                // refresh client list + immediately refresh the grid so the slot blocks out
-                                                firestore.fetchBookingsForCurrentClientSubcollection()
-                                                gridRefreshToken = UUID()
-                                                firestore.showToast("Booking saved")
-                                                withAnimation { showConfirmOverlay = false }
+                                            let overlapping = existingBookings.filter { b in
+                                                guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
+                                                let status = (b.status ?? "").lowercased()
+                                                guard status == "requested" || status == "confirmed" || status == "pending acceptance" else { return false }
+                                                return bStart < endAt && bEnd > startAt
+                                            }
+                                            if !overlapping.isEmpty {
+                                                firestore.showToast("This time is already requested by you or someone else. Please choose a different time.")
+                                                return
+                                            }
+                                            // No overlap — proceed with save
+                                            firestore.saveBooking(clientUid: uid, coachUid: coach.id, startAt: startAt, endAt: endAt, location: nil, notes: nil, status: "requested") { err in
+                                                DispatchQueue.main.async {
+                                                    if let err = err {
+                                                        firestore.showToast("Failed: \(err.localizedDescription)")
+                                                    } else {
+                                                        firestore.fetchBookingsForCurrentClientSubcollection()
+                                                        gridRefreshToken = UUID()
+                                                        firestore.showToast("Booking saved")
+                                                        withAnimation { showConfirmOverlay = false }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
