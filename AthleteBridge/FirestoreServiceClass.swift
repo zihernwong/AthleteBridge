@@ -1895,24 +1895,37 @@ class FirestoreManager: ObservableObject {
         let coachBookingRef = coachRef.collection("bookings").document(bookingRef.documentID)
         let clientBookingRef = clientRef.collection("bookings").document(bookingRef.documentID)
 
-        var data: [String: Any] = [
-            "CoachID": coachRef,
-            "ClientID": clientRef,
-            "StartAt": Timestamp(date: startAt),
-            "EndAt": Timestamp(date: endAt),
-            "Location": location ?? "",
-            "Notes": notes ?? "",
-            "Status": status,
-            "createdAt": FieldValue.serverTimestamp()
-        ]
-        if let extra = extra { for (k,v) in extra { data[k] = v } }
+        // Fetch coach name before saving booking
+        coachRef.getDocument { [weak self] coachSnap, coachErr in
+            guard let self = self else { return }
 
-        print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId)")
+            var coachName: String? = nil
+            if let coachData = coachSnap?.data() {
+                let firstName = coachData["FirstName"] as? String ?? ""
+                let lastName = coachData["LastName"] as? String ?? ""
+                let fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
+                if !fullName.isEmpty { coachName = fullName }
+            }
 
-        let batch = self.db.batch()
-        batch.setData(data, forDocument: bookingRef)
-        batch.setData(data, forDocument: coachBookingRef)
-        batch.setData(data, forDocument: clientBookingRef)
+            var data: [String: Any] = [
+                "CoachID": coachRef,
+                "ClientID": clientRef,
+                "StartAt": Timestamp(date: startAt),
+                "EndAt": Timestamp(date: endAt),
+                "Location": location ?? "",
+                "Notes": notes ?? "",
+                "Status": status,
+                "createdAt": FieldValue.serverTimestamp()
+            ]
+            if let name = coachName { data["CoachName"] = name }
+            if let extra = extra { for (k,v) in extra { data[k] = v } }
+
+            print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId) coachName=\(coachName ?? "nil")")
+
+            let batch = self.db.batch()
+            batch.setData(data, forDocument: bookingRef)
+            batch.setData(data, forDocument: coachBookingRef)
+            batch.setData(data, forDocument: clientBookingRef)
 
         // Build a compact denormalized summary to append to coach.calendar
         let bookingSummary: [String: Any] = [
@@ -1975,6 +1988,7 @@ class FirestoreManager: ObservableObject {
                 }
             }
         }
+        } // end coachRef.getDocument
     }
 
     /// Convenience wrapper used by UI to save a booking. Calls the internal saveBookingAndMirror implementation.
