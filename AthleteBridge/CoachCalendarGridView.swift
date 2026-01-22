@@ -195,8 +195,8 @@ import FirebaseAuth
                     }
                 }) {
                     Image(systemName: "message.fill")
-                        .font(.body)
-                        .padding(8)
+                        .font(.title2)
+                        .padding(12)
                         .background(Color.blue.opacity(0.1))
                         .clipShape(Circle())
                 }
@@ -276,13 +276,13 @@ import FirebaseAuth
                 }
                 if !coach.specialties.isEmpty { Text("Specialties: \(coach.specialties.joined(separator: ", "))") }
                 Text("Experience: \(coach.experienceYears) years")
-                if let rate = coach.hourlyRate {
-                    Text(String(format: "Hourly Rate: $%.0f / hr", rate)).font(.subheadline)
+                if let range = coach.rateRange, range.count >= 2 {
+                    Text(String(format: "$%.0f - $%.0f / hr", range[0], range[1]))
                 } else {
-                    Text("HourlyRate to be discussed").font(.subheadline).foregroundColor(.secondary)
+                    Text("Message coach for rate").foregroundColor(.secondary)
                 }
                 if !coach.availability.isEmpty {
-                    Text("Availability: \(coach.availability.joined(separator: ", "))").font(.caption).foregroundColor(.secondary)
+                    Text("Availability: \(coach.availability.joined(separator: ", "))")
                 }
 
                 // Message Coach button
@@ -311,6 +311,37 @@ import FirebaseAuth
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .padding(.top, 8)
+
+                // Reviews summary section
+                VStack(alignment: .leading, spacing: 8) {
+                    let avgRating = reviews.isEmpty ? 0.0 : reviews.compactMap { r -> Double? in
+                        if let s = r.rating, let d = Double(s) { return d }
+                        return nil
+                    }.reduce(0, +) / Double(reviews.count)
+
+                    HStack(spacing: 8) {
+                        HStack(spacing: 2) {
+                            ForEach(1...5, id: \.self) { i in
+                                Image(systemName: Double(i) <= avgRating ? "star.fill" : (Double(i) - 0.5 <= avgRating ? "star.leadinghalf.filled" : "star"))
+                                    .foregroundColor(.yellow)
+                                    .font(.subheadline)
+                            }
+                        }
+
+                        Text(String(format: "%.1f", avgRating))
+                            .font(.headline)
+
+                        Text("(\(reviews.count) reviews)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+
+                    NavigationLink(destination: CoachReviewsListView(coach: coach, reviews: reviews)) {
+                        Text("View All Reviews")
+                            .font(.subheadline)
+                    }
+                }
                 .padding(.top, 8)
             } header: { Text(coach.name).font(.title2) }
 
@@ -651,3 +682,53 @@ import FirebaseAuth
      }
 
  }
+
+// View to display all reviews for a specific coach
+struct CoachReviewsListView: View {
+    let coach: Coach
+    let reviews: [FirestoreManager.ReviewItem]
+
+    var body: some View {
+        List {
+            if reviews.isEmpty {
+                Text("No reviews yet")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ForEach(reviews) { review in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(review.clientName ?? "Client")
+                                .font(.headline)
+                            Spacer()
+                            if let date = review.createdAt {
+                                Text(date, style: .date)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        // Star rating
+                        HStack(spacing: 4) {
+                            let stars = Int(review.rating ?? "0") ?? 0
+                            ForEach(1...5, id: \.self) { i in
+                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                    .foregroundColor(i <= stars ? .yellow : .secondary)
+                            }
+                        }
+
+                        // Review message
+                        if let message = review.ratingMessage, !message.isEmpty {
+                            Text(message)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+        .navigationTitle("\(coach.name)'s Reviews")
+    }
+}

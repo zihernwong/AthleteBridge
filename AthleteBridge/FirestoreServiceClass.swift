@@ -723,8 +723,9 @@ class FirestoreManager: ObservableObject {
                 let availability = data["Availability"] as? [String] ?? []
                 let bio = data["Bio"] as? String
                 let hourlyRate = data["HourlyRate"] as? Double
+                let rateRange = data["RateRange"] as? [Double]
 
-                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate))
+                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange))
 
                 // resolve coach photo if provided and cache into coachPhotoURLs
                 let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
@@ -818,11 +819,12 @@ class FirestoreManager: ObservableObject {
             let meetingPref = data["meetingPreference"] as? String
             let zip = data["zipCode"] as? String ?? data["ZipCode"] as? String
             let city = data["city"] as? String ?? data["City"] as? String
+            let bio = data["bio"] as? String
 
             let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city)
+                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city, bio: bio)
                     self.currentClientPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: client photo resolved for \(id): \(r.absoluteString)")
@@ -859,6 +861,7 @@ class FirestoreManager: ObservableObject {
             let bio = data["Bio"] as? String
             let meetingPref = data["meetingPreference"] as? String
             let hourlyRate = data["HourlyRate"] as? Double
+            let rateRange = data["RateRange"] as? [Double]
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
@@ -872,7 +875,7 @@ class FirestoreManager: ObservableObject {
                         paymentsMap = tmp.isEmpty ? nil : tmp
                     }
 
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -951,7 +954,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save client document using provided id
-    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
+    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, bio: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
         let docRef = self.db.collection("clients").document(id)
 
         // Base payload for updates (always set updatedAt)
@@ -964,6 +967,7 @@ class FirestoreManager: ObservableObject {
         if let p = photoURL { updateData["photoURL"] = p }
         if let z = zipCode { updateData["zipCode"] = z }
         if let c = city { updateData["city"] = c }
+        if let b = bio { updateData["bio"] = b }
         // If caller asked to clear the meetingPreference, request deletion in a merge/update operation
         if meetingPreferenceClear {
             updateData["meetingPreference"] = FieldValue.delete()

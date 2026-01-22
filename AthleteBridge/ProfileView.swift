@@ -602,6 +602,7 @@ struct ProfileView: View {
                                           skillLevel: skillLevelToSave,
                                           zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
                                           city: clientCity.isEmpty ? nil : clientCity,
+                                          bio: clientBioText.isEmpty ? nil : clientBioText,
                                           photoURL: photoURL) { err in
                                 DispatchQueue.main.async {
                                     isSaving = false
@@ -647,23 +648,30 @@ struct ProfileView: View {
                                        bio: bioText,
                                        zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
                                        city: coachCity.isEmpty ? nil : coachCity) { err in
-                    if err == nil, let rr = rateRangeToSave {
-                        let ref = Firestore.firestore().collection("coaches").document(uid)
-                        ref.setData(["RateRange": rr], merge: true)
-                    }
-                    DispatchQueue.main.async {
-                        isSaving = false
-                        if let err = err {
-                            saveMessage = "Error saving coach: \(err.localizedDescription)"
-                        } else {
-                            fm.fetchCurrentProfiles(for: uid)
-                            showSavedConfirmation = true
-                            fm.showToast("Coach profile saved")
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                showSavedConfirmation = false
-                                presentationMode.wrappedValue.dismiss()
+                    let finishSave = {
+                        DispatchQueue.main.async {
+                            isSaving = false
+                            if let err = err {
+                                saveMessage = "Error saving coach: \(err.localizedDescription)"
+                            } else {
+                                fm.fetchCurrentProfiles(for: uid)
+                                showSavedConfirmation = true
+                                fm.showToast("Coach profile saved")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                    showSavedConfirmation = false
+                                    presentationMode.wrappedValue.dismiss()
+                                }
                             }
                         }
+                    }
+
+                    if err == nil, let rr = rateRangeToSave {
+                        let ref = Firestore.firestore().collection("coaches").document(uid)
+                        ref.setData(["RateRange": rr], merge: true) { _ in
+                            finishSave()
+                        }
+                    } else {
+                        finishSave()
                     }
                 }
             }
