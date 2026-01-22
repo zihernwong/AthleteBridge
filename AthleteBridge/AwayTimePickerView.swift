@@ -51,6 +51,7 @@ struct AwayTimePickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var isValidRange: Bool { endAt > startAt }
+    private var isReasonProvided: Bool { !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     // Snap to the nearest lower 30-min mark (picker changes), but keep consistency
     private func snappedTo30Floor(_ date: Date) -> Date {
@@ -68,8 +69,11 @@ struct AwayTimePickerView: View {
             Section(header: Text("Select Time Away")) {
                 DatePicker("Start", selection: $startAt, displayedComponents: [.date, .hourAndMinute])
                 DatePicker("End", selection: $endAt, in: startAt...Date.distantFuture, displayedComponents: [.date, .hourAndMinute])
-                TextField("Reason (optional)", text: $reason)
+                TextField("Reason", text: $reason)
                     .textInputAutocapitalization(.sentences)
+                if reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Reason is required").font(.caption).foregroundColor(.red)
+                }
             }
 
             if let err = errorMessage { Text(err).foregroundColor(.red) }
@@ -79,7 +83,7 @@ struct AwayTimePickerView: View {
                     if isSaving { ProgressView() }
                     Text(isSaving ? "Saving…" : "Block Time").bold().frame(maxWidth: .infinity)
                 }
-                .disabled(!isValidRange || isSaving)
+                .disabled(!isValidRange || !isReasonProvided || isSaving)
             }
         }
         .navigationTitle("Input Time Away")
@@ -112,7 +116,7 @@ struct AwayTimePickerView: View {
             "createdBy": auth.user?.uid ?? coach.id
         ]
         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { payload["notes"] = trimmed }
+        payload["notes"] = trimmed
         coll.addDocument(data: payload) { err in
             DispatchQueue.main.async {
                 isSaving = false

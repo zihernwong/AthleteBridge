@@ -2346,6 +2346,65 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Update the PaymentStatus field for a booking across root and mirrored subcollections.
+    func updateBookingPaymentStatus(bookingId: String, paymentStatus: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("updateBookingPaymentStatus: failed to read booking \(bookingId): \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                print("updateBookingPaymentStatus: booking \(bookingId) not found")
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            func extractId(from field: Any?) -> String? {
+                if let ref = field as? DocumentReference { return ref.documentID }
+                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
+                if let dict = field as? [String: Any] {
+                    if let id = dict["id"] as? String { return id }
+                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
+                }
+                return nil
+            }
+
+            let coachId = extractId(from: data["CoachID"])
+            let clientId = extractId(from: data["ClientID"])
+
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(["PaymentStatus": paymentStatus], forDocument: bookingRef)
+
+            // Update coach mirror if possible
+            if let cId = coachId {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(["PaymentStatus": paymentStatus], forDocument: coachBookingRef)
+            }
+
+            // Update client mirror if possible
+            if let clId = clientId {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(["PaymentStatus": paymentStatus], forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("updateBookingPaymentStatus: batch commit failed: \(err)")
+                    completion(err)
+                } else {
+                    print("updateBookingPaymentStatus: booking \(bookingId) payment status updated to \(paymentStatus)")
+                    completion(nil)
+                }
+            }
+        }
+    }
+
     /// Fetch bookings from the root `bookings` collection for a specific coach within an optional date range.
     /// This is a fallback for projects that don't mirror bookings into coaches/{id}/bookings.
     func fetchRootBookingsForCoach(coachId: String, start: Date? = nil, end: Date? = nil, completion: @escaping ([BookingItem]) -> Void) {
@@ -2982,6 +3041,7 @@ extension FirestoreManager {
         let id: String
         let startAt: Date
         let endAt: Date
+        let notes: String?
     }
 
     /// Fetch away time blocks for a coach from coaches/{coachId}/awayTimes within an optional date range.
@@ -2999,7 +3059,8 @@ extension FirestoreManager {
             let items: [AwayTimeItem] = docs.compactMap { d in
                 let data = d.data()
                 guard let s = (data["startAt"] as? Timestamp)?.dateValue(), let e = (data["endAt"] as? Timestamp)?.dateValue() else { return nil }
-                return AwayTimeItem(id: d.documentID, startAt: s, endAt: e)
+                let notes = data["notes"] as? String
+                return AwayTimeItem(id: d.documentID, startAt: s, endAt: e, notes: notes)
             }
             completion(items)
         }

@@ -186,7 +186,7 @@ struct BookingsView: View {
                             AcceptedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
-                Text("View Accepted Bookings")
+                Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
             .tint(.blue)

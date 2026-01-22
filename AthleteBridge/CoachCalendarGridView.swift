@@ -367,25 +367,6 @@ import FirebaseAuth
                 .id(gridRefreshToken)
                 .environmentObject(firestore)
             } header: { Text("Calendar") }
-
-            Section {
-                if reviews.isEmpty {
-                    Text("No reviews yet").foregroundColor(.secondary)
-                } else {
-                    ForEach(reviews) { r in
-                        VStack(alignment: .leading) {
-                            HStack {
-                                Text(r.clientName ?? "Client").font(.headline)
-                                Spacer()
-                                Text(r.rating ?? "-").font(.subheadline).foregroundColor(.secondary)
-                            }
-                            if let msg = r.ratingMessage { Text(msg).font(.body) }
-                            if let date = r.createdAt { Text(DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)).font(.caption).foregroundColor(.secondary) }
-                        }
-                        .padding(.vertical, 6)
-                    }
-                }
-            } header: { Text("Reviews") }
         }
         .navigationTitle("Coach")
         .onAppear {
@@ -559,9 +540,9 @@ import FirebaseAuth
                                     .foregroundColor(.white.opacity(0.9))
                                     .padding(.trailing, 10)
                             }
-                        } else {
-                            // AwayTimeItem has no notes; show generic label
-                            Text("Away")
+                        } else if let away = overlappingAway {
+                            // Display the reason from the away time
+                            Text(away.notes ?? "Away")
                                 .font(.subheadline)
                                 .foregroundColor(.white)
                                 .padding(.leading, 10)
