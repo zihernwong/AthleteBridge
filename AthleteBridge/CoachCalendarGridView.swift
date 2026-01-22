@@ -255,6 +255,10 @@ import FirebaseAuth
     @State private var showConfirmOverlay: Bool = false
     @State private var gridRefreshToken: UUID = UUID()
 
+    // For presenting chat sheet
+    private struct ChatSheetId: Identifiable { let id: String }
+    @State private var presentedChat: ChatSheetId? = nil
+
     var body: some View {
         List {
             Section {
@@ -280,6 +284,34 @@ import FirebaseAuth
                 if !coach.availability.isEmpty {
                     Text("Availability: \(coach.availability.joined(separator: ", "))").font(.caption).foregroundColor(.secondary)
                 }
+
+                // Message Coach button
+                Button(action: {
+                    guard Auth.auth().currentUser?.uid != nil else {
+                        firestore.showToast("Please sign in to message coaches")
+                        return
+                    }
+                    // Compute deterministic chat ID and present chat view
+                    let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
+                    presentedChat = ChatSheetId(id: expectedChatId)
+                    // Ensure chat doc exists on server in the background
+                    firestore.createOrGetChat(withCoachId: coach.id) { chatId in
+                        DispatchQueue.main.async {
+                            let target = chatId ?? expectedChatId
+                            if target != expectedChatId {
+                                presentedChat = ChatSheetId(id: target)
+                            }
+                        }
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "message.fill")
+                        Text("Message Coach")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 8)
             } header: { Text(coach.name).font(.title2) }
 
             Section {
@@ -412,6 +444,10 @@ import FirebaseAuth
             }
             .animation(.easeInOut, value: showConfirmOverlay)
         )
+        .sheet(item: $presentedChat) { sheet in
+            ChatView(chatId: sheet.id)
+                .environmentObject(firestore)
+        }
     }
  }
 
