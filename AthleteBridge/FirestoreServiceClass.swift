@@ -404,13 +404,18 @@ class FirestoreManager: ObservableObject {
             return
         }
 
+        // If user type hasn't loaded yet, defer until it does
+        if !userTypeLoaded {
+            print("listenForChatsForCurrentUser: userType not loaded yet, deferring")
+            return
+        }
+
         // Stop previous listener if any
         chatsListener?.remove()
         chatsListener = nil
 
-        print("listenForChatsForCurrentUser: registering listener for uid=\(uid)")
+        print("listenForChatsForCurrentUser: registering listener for uid=\(uid) userType=\(self.currentUserType ?? "nil")")
 
-        // Prefer per-user pointer docs under coaches/{id}/chats or clients/{id}/chats for efficient listing.
         let userTypeUpper = (self.currentUserType ?? "").uppercased()
         let userCollName = (userTypeUpper == "COACH") ? "coaches" : "clients"
         let userRef = db.collection(userCollName).document(uid)
@@ -660,10 +665,10 @@ class FirestoreManager: ObservableObject {
              if let uid = user?.uid {
                  print("[FirestoreManager] auth state changed - user signed in: \(uid). Fetching profiles.")
                  self.fetchCurrentProfiles(for: uid)
-                 // Also load the userType document for quick role checks
-                 self.fetchUserType(for: uid)
-                 // Start listening for user's chats
-                 self.listenForChatsForCurrentUser()
+                 // Load userType first, then start chat listener with correct collection reference
+                 self.fetchUserType(for: uid) {
+                     self.listenForChatsForCurrentUser()
+                 }
                  // Fetch user settings
                  self.fetchUserSettings(for: uid)
               } else {
@@ -2266,21 +2271,21 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Reads the `userType/{uid}` document and publishes the `type` field.
-    func fetchUserType(for uid: String) {
+    func fetchUserType(for uid: String, completion: (() -> Void)? = nil) {
         let docRef = db.collection("userType").document(uid)
         DispatchQueue.main.async { self.userTypeLoaded = false }
         docRef.getDocument { snap, err in
             if let err = err {
                 print("fetchUserType error: \(err)")
-                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true }
+                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true; completion?() }
                 return
             }
             guard let data = snap?.data() else {
-                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true }
+                DispatchQueue.main.async { self.currentUserType = nil; self.userTypeLoaded = true; completion?() }
                 return
             }
             let t = (data["type"] as? String)?.uppercased()
-            DispatchQueue.main.async { self.currentUserType = t; self.userTypeLoaded = true }
+            DispatchQueue.main.async { self.currentUserType = t; self.userTypeLoaded = true; completion?() }
         }
     }
 
