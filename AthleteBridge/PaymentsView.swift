@@ -43,21 +43,31 @@ struct PaymentsView: View {
         return (firestore.currentUserType ?? "").uppercased() == "COACH"
     }
 
-    // Split bookings by payment status for clients
-    private var paidBookings: [FirestoreManager.BookingItem] {
-        firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
+    // Partition client bookings by payment status in a single pass
+    private var clientBookingsPartitioned: (paid: [FirestoreManager.BookingItem], unpaid: [FirestoreManager.BookingItem]) {
+        var paid: [FirestoreManager.BookingItem] = []
+        var unpaid: [FirestoreManager.BookingItem] = []
+        for b in firestore.bookings {
+            if (b.paymentStatus ?? "").lowercased() == "paid" { paid.append(b) }
+            else { unpaid.append(b) }
+        }
+        return (paid, unpaid)
     }
-    private var unpaidBookings: [FirestoreManager.BookingItem] {
-        firestore.bookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
-    }
+    private var paidBookings: [FirestoreManager.BookingItem] { clientBookingsPartitioned.paid }
+    private var unpaidBookings: [FirestoreManager.BookingItem] { clientBookingsPartitioned.unpaid }
 
-    // Coach-side bookings split (used for coach summary/revenue calculations)
-    private var coachPaidBookings: [FirestoreManager.BookingItem] {
-        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() == "paid" }
+    // Partition coach bookings in a single pass
+    private var coachBookingsPartitioned: (paid: [FirestoreManager.BookingItem], unpaid: [FirestoreManager.BookingItem]) {
+        var paid: [FirestoreManager.BookingItem] = []
+        var unpaid: [FirestoreManager.BookingItem] = []
+        for b in firestore.coachBookings {
+            if (b.paymentStatus ?? "").lowercased() == "paid" { paid.append(b) }
+            else { unpaid.append(b) }
+        }
+        return (paid, unpaid)
     }
-    private var coachUnpaidBookings: [FirestoreManager.BookingItem] {
-        firestore.coachBookings.filter { ($0.paymentStatus ?? "").lowercased() != "paid" }
-    }
+    private var coachPaidBookings: [FirestoreManager.BookingItem] { coachBookingsPartitioned.paid }
+    private var coachUnpaidBookings: [FirestoreManager.BookingItem] { coachBookingsPartitioned.unpaid }
 
     // Helper: resolve coach name from a booking's coachID, falling back to booking.coachName
     private func nameForCoachId(_ coachId: String?) -> String? {

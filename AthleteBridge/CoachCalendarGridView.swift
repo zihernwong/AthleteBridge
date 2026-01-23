@@ -20,8 +20,7 @@ import FirebaseAuth
         guard typed.count >= 1 else { return [] }
         return firestore.coaches.filter { coach in
             if coach.name.lowercased().contains(typed) { return true }
-            let specs = coach.specialties.map { $0.lowercased() }
-            if specs.contains(where: { $0.contains(typed) }) { return true }
+            if coach.specialties.contains(where: { $0.lowercased().contains(typed) }) { return true }
             return false
         }
     }
@@ -32,37 +31,36 @@ import FirebaseAuth
      }
 
      private func filteredCoaches() -> [Coach] {
-         // Start with all coaches
          var candidates = firestore.coaches
-        let availPrefs = client.preferredAvailability.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+
+        // Pre-compute availability preferences once
+        let availPrefs = client.preferredAvailability.compactMap { pref -> String? in
+            let trimmed = pref.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return trimmed.isEmpty ? nil : trimmed
+        }
         if !availPrefs.isEmpty {
            candidates = candidates.filter { coach in
-              let coachAvails = coach.availability.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                return availPrefs.contains { pref in coachAvails.contains { avail in avail.contains(pref) } }
+               coach.availability.contains { avail in
+                   let lower = avail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                   return availPrefs.contains { pref in lower.contains(pref) }
+               }
            }
         }
 
-        // Then apply search tokens (if any). If no search token, return availability-filtered candidates.
+        // Resolve search query once
         let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
         guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return candidates }
 
-        // Tokenize query by commas and whitespace so multi-term searches work: "tennis, confidence" or "tennis confidence"
         let separators = CharacterSet(charactersIn: ",").union(.whitespacesAndNewlines)
-       let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
+        let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
+        guard !tokens.isEmpty else { return candidates }
 
         return candidates.filter { coach in
             let nameLower = coach.name.lowercased()
-            // Match if any token appears in the coach name
-           if tokens.contains(where: { nameLower.contains($0) }) { return true }
-
-            // Match if any token appears in any specialty
-            let specialtiesLower = coach.specialties.map { $0.lowercased() }
-            if tokens.contains(where: { token in specialtiesLower.contains(where: { $0.contains(token) }) }) { return true }
-
-           // Also match against combined specialties string (helps multi-word specialties)
-           let combinedSpecs = specialtiesLower.joined(separator: " ")
-           if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
-
+            if tokens.contains(where: { nameLower.contains($0) }) { return true }
+            // Combine specialties into one lowercased string for single-pass matching
+            let combinedSpecs = coach.specialties.joined(separator: " ").lowercased()
+            if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
             return false
        }
      }
@@ -254,6 +252,7 @@ import FirebaseAuth
     @State private var endAt: Date = Date().addingTimeInterval(60*30)
     @State private var showConfirmOverlay: Bool = false
     @State private var gridRefreshToken: UUID = UUID()
+    @State private var showOverlapAlert: Bool = false
 
     // For presenting chat sheet
     private struct ChatSheetId: Identifiable { let id: String }
@@ -427,8 +426,10 @@ import FirebaseAuth
                                 .buttonStyle(.bordered)
                                 Button {
                                     guard let uid = Auth.auth().currentUser?.uid else { return }
-                                    // Check for overlapping bookings before saving
-                                    firestore.fetchBookingsForCoach(coachId: coach.id, start: startAt, end: endAt) { existingBookings in
+                                    // Check for overlapping bookings — fetch full day to catch all overlaps
+                                    let dayStart = Calendar.current.startOfDay(for: startAt)
+                                    let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? startAt
+                                    firestore.fetchBookingsForCoach(coachId: coach.id, start: dayStart, end: dayEnd) { existingBookings in
                                         DispatchQueue.main.async {
                                             let overlapping = existingBookings.filter { b in
                                                 guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
@@ -437,7 +438,7 @@ import FirebaseAuth
                                                 return bStart < endAt && bEnd > startAt
                                             }
                                             if !overlapping.isEmpty {
-                                                firestore.showToast("This time is already requested by you or someone else. Please choose a different time.")
+                                                showOverlapAlert = true
                                                 return
                                             }
                                             // No overlap — proceed with save
@@ -474,6 +475,11 @@ import FirebaseAuth
         .sheet(item: $presentedChat) { sheet in
             ChatView(chatId: sheet.id)
                 .environmentObject(firestore)
+        }
+        .alert("Time Unavailable", isPresented: $showOverlapAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("This time is already requested by you or someone else. Please choose a different time.")
         }
     }
  }

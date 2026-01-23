@@ -32,6 +32,11 @@ struct BookingEditorView: View {
 
     @State private var showConfirmOverlay: Bool = false
 
+    // Cache the selected coach lookup
+    private var selectedCoach: Coach? {
+        selectedCoachId.isEmpty ? nil : firestore.coaches.first(where: { $0.id == selectedCoachId })
+    }
+
     // Inline suggestions for coach names (prefix match)
     private var coachSuggestions: [Coach] {
         let typed = coachSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -95,7 +100,7 @@ struct BookingEditorView: View {
                                 }
                             }
 
-                            if let selected = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                            if let selected = selectedCoach {
                                 Text("Selected: \(selected.name)")
                                     .font(.subheadline)
                             } else if !selectedCoachId.isEmpty {
@@ -103,16 +108,13 @@ struct BookingEditorView: View {
                                     .font(.subheadline)
                             }
                         }
-                        .onAppear {
-                            firestore.fetchCoaches()
-                        }
                     }
                 } header: {
                     Text("Coach")
                 }
 
                 // Only after a coach is selected, show Coach Info and Calendar
-                if !selectedCoachId.isEmpty, let coach = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                if let coach = selectedCoach {
                     // Coach Info section (above the calendar)
                     Section {
                         HStack(alignment: .top, spacing: 12) {
@@ -334,7 +336,7 @@ struct BookingEditorView: View {
                         VStack(spacing: 0) {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Confirm Date & Time").font(.headline)
-                                if let coach = firestore.coaches.first(where: { $0.id == selectedCoachId }) {
+                                if let coach = selectedCoach {
                                     Text("Coach: \(coach.name)")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
@@ -453,8 +455,10 @@ struct BookingEditorView: View {
 
         isSaving = true
 
-        // Check for overlapping bookings before saving
-        firestore.fetchBookingsForCoach(coachId: coachUid, start: startAt, end: endAt) { existingBookings in
+        // Check for overlapping bookings — fetch the full day to catch all possible overlaps
+        let dayStart = Calendar.current.startOfDay(for: startAt)
+        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? startAt
+        firestore.fetchBookingsForCoach(coachId: coachUid, start: dayStart, end: dayEnd) { existingBookings in
             DispatchQueue.main.async {
                 let overlapping = existingBookings.filter { b in
                     guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
@@ -491,7 +495,7 @@ struct BookingEditorView: View {
         let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
         // Always create bookings with default status "requested"
         let clientNameExtra = firestore.currentClient?.name ?? ""
-        let coachNameExtra = firestore.coaches.first(where: { $0.id == coachUid })?.name ?? ""
+        let coachNameExtra = selectedCoach?.name ?? ""
         let extra: [String: Any] = {
             var m: [String: Any] = [:]
             if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }

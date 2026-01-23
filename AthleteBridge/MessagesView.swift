@@ -7,6 +7,7 @@ struct MessagesView: View {
     @State private var navPath = NavigationPath()
     @State private var newConvSearch: String = ""
     @State private var isCreatingChat: Bool = false
+    @State private var lastKnownChatIds: [String] = []
 
     var body: some View {
         NavigationStack(path: $navPath) {
@@ -61,9 +62,14 @@ struct MessagesView: View {
                 firestore.listenForChatsForCurrentUser()
                 let ids = firestore.chats.map { $0.id }
                 if !ids.isEmpty { firestore.loadPreviewsForChats(chatIds: ids) }
+                lastKnownChatIds = ids
             }
-            .onChange(of: firestore.chats.map { $0.id }) { oldIds, newIds in
-                if !newIds.isEmpty { firestore.loadPreviewsForChats(chatIds: newIds) }
+            .onChange(of: firestore.chats.count) { _, _ in
+                let ids = firestore.chats.map { $0.id }
+                if ids != lastKnownChatIds {
+                    lastKnownChatIds = ids
+                    if !ids.isEmpty { firestore.loadPreviewsForChats(chatIds: ids) }
+                }
             }
             .navigationDestination(for: String.self) { chatId in
                 ChatView(chatId: chatId).environmentObject(firestore)
@@ -168,8 +174,6 @@ fileprivate struct ChatRow: View {
 
     private func displayName(for uid: String) -> String {
         if let name = firestore.participantNames[uid], !name.isEmpty { return name }
-        if let c = firestore.coaches.first(where: { $0.id == uid }) { return c.name }
-        if let cl = firestore.clients.first(where: { $0.id == uid }) { return cl.name }
         return uid
     }
 }

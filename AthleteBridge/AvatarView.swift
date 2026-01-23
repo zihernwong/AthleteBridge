@@ -1,23 +1,52 @@
 import SwiftUI
 import UIKit
 
+/// In-memory image cache shared across all AvatarView instances to avoid re-downloading.
+final class AvatarImageCache {
+    static let shared = AvatarImageCache()
+    private let cache = NSCache<NSURL, UIImage>()
+    private var inFlight: Set<URL> = []
+    private let lock = NSLock()
+
+    private init() {
+        cache.countLimit = 150
+    }
+
+    func image(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    func set(_ image: UIImage, for url: URL) {
+        cache.setObject(image, forKey: url as NSURL)
+    }
+
+    /// Returns true if this call claimed the in-flight slot (caller should fetch).
+    func claimFetch(for url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if inFlight.contains(url) { return false }
+        inFlight.insert(url)
+        return true
+    }
+
+    func releaseFetch(for url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        inFlight.remove(url)
+    }
+}
+
 /// AvatarView: shows a profile image using an explicit URL, or optionally falls back to
 /// the currently-signed-in client/coach photo stored in FirestoreManager.
 struct AvatarView: View {
     @EnvironmentObject var firestore: FirestoreManager
 
-    // Optional explicit URL to show (when listing many coaches we pass their URL)
     private let explicitURL: URL?
-    // Optional display name (used to generate initials fallback)
     private let displayName: String?
-    // Whether to fall back to the currently-signed-in user's client/coach photo when explicitURL is nil
     private let useCurrentUser: Bool
-
-    @State private var fallbackImage: UIImage? = nil
-    @State private var isDownloadingFallback: Bool = false
-    @State private var lastURLString: String? = nil
-
     private let size: CGFloat
+
+    @State private var loadedImage: UIImage? = nil
 
     init(url: URL? = nil, name: String? = nil, size: CGFloat = 44, useCurrentUser: Bool = true) {
         self.explicitURL = url
@@ -26,25 +55,30 @@ struct AvatarView: View {
         self.useCurrentUser = useCurrentUser
     }
 
+    private var resolvedURL: URL? {
+        if let url = explicitURL { return url }
+        if useCurrentUser, let clientURL = firestore.currentClientPhotoURL { return clientURL }
+        if useCurrentUser, let coachURL = firestore.currentCoachPhotoURL { return coachURL }
+        return nil
+    }
+
     var body: some View {
         Group {
-            if let url = explicitURL {
-                imageFor(url: url).onAppear { prepare(url: url) }
-            } else if useCurrentUser, let clientURL = firestore.currentClientPhotoURL {
-                imageFor(url: clientURL).onAppear { prepare(url: clientURL) }
-            } else if useCurrentUser, let coachURL = firestore.currentCoachPhotoURL {
-                imageFor(url: coachURL).onAppear { prepare(url: coachURL) }
+            if let img = loadedImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .shadow(radius: 4)
+            } else if resolvedURL != nil {
+                ProgressView().frame(width: size, height: size)
             } else {
                 initialsView
             }
         }
-    }
-
-    private var placeholder: some View {
-        Image(systemName: "person.circle.fill")
-            .resizable()
-            .frame(width: size, height: size)
-            .foregroundColor(.secondary)
+        .onAppear { loadImageIfNeeded() }
+        .onChange(of: resolvedURL) { _, _ in loadImageIfNeeded() }
     }
 
     private var initialsView: some View {
@@ -59,65 +93,26 @@ struct AvatarView: View {
         .frame(width: size, height: size)
     }
 
-    @ViewBuilder
-    private func imageFor(url: URL) -> some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
-                ProgressView().frame(width: size, height: size)
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(Circle())
-                    .shadow(radius: 4)
-            case .failure(_):
-                if let ui = fallbackImage {
-                    Image(uiImage: ui)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: size, height: size)
-                        .clipShape(Circle())
-                        .shadow(radius: 4)
-                } else {
-                    ZStack {
-                        Circle().fill(Color.gray.opacity(0.25))
-                        Text(initialsFrom(name: displayName ?? ""))
-                            .font(.system(size: size * 0.36, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    .frame(width: size, height: size)
-                    .onAppear { tryFallbackDownload(url: url) }
-                }
-            @unknown default:
-                placeholder
-            }
+    private func loadImageIfNeeded() {
+        guard let url = resolvedURL else { loadedImage = nil; return }
+        // Check cache first
+        if let cached = AvatarImageCache.shared.image(for: url) {
+            if loadedImage !== cached { loadedImage = cached }
+            return
         }
-    }
-
-    private func prepare(url: URL) {
-        lastURLString = url.absoluteString
-        tryFallbackDownload(url: url)
-    }
-
-    private func tryFallbackDownload(url: URL) {
-        guard !isDownloadingFallback && fallbackImage == nil else { return }
-        isDownloadingFallback = true
-
-        Task.detached { @MainActor in
+        // Fetch if not already in-flight
+        guard AvatarImageCache.shared.claimFetch(for: url) else { return }
+        Task.detached {
+            defer { AvatarImageCache.shared.releaseFetch(for: url) }
             do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                if let http = response as? HTTPURLResponse {
-                    print("AvatarView: manual download response: \(http.statusCode) for \(url.absoluteString)")
-                }
+                let (data, _) = try await URLSession.shared.data(from: url)
                 if let ui = UIImage(data: data) {
-                    self.fallbackImage = ui
+                    AvatarImageCache.shared.set(ui, for: url)
+                    await MainActor.run { self.loadedImage = ui }
                 }
             } catch {
-                print("AvatarView fallback download failed: \(error) for \(url.absoluteString)")
+                // silently fail; initials view will show
             }
-            self.isDownloadingFallback = false
         }
     }
 

@@ -54,86 +54,19 @@ struct ReviewsView: View {
             List {
                 let userType = firestore.currentUserType?.uppercased()
 
-                // If the user is a coach, show only reviews about them
-                if userType == "COACH" {
+                if userType == "COACH" || userType == nil {
                     Section(header: Text("Reviews About You")) {
                         if reviewsAboutUser.isEmpty {
                             Text("No reviews about you yet").foregroundColor(.secondary)
                         } else {
                             ForEach(reviewsAboutUser) { item in
-                                HStack(alignment: .top, spacing: 12) {
-                                    Circle()
-                                        .fill(Color.accentColor.opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                        .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(item.clientName ?? "Client").font(.headline)
-                                            Spacer()
-                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                        }
-
-                                        HStack(spacing: 4) {
-                                            let stars = Int(item.rating ?? "0") ?? 0
-                                            ForEach(1...5, id: \.self) { i in
-                                                Image(systemName: i <= stars ? "star.fill" : "star")
-                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
-                                            }
-                                        }
-                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
-                                    }
-                                }
-                                .padding(.vertical, 6)
+                                ReviewRowView(item: item)
                             }
                         }
                     }
-                } else if userType == "CLIENT" {
-                    // If the user is a client, provide a navigation link to a dedicated screen
-                    Section(header: Text("Your Reviews")) {
-                        NavigationLink(destination: ReviewsByUserView().environmentObject(firestore).environmentObject(auth)) {
-                            Text("View My Reviews")
-                                .padding(.vertical, 8)
-                        }
-                    }
-                } else {
-                    // Fallback (unknown userType): show both sections as before
+                }
 
-                    // Reviews about the current user (if they are a coach)
-                    Section(header: Text("Reviews About You")) {
-                        if reviewsAboutUser.isEmpty {
-                            Text("No reviews about you yet").foregroundColor(.secondary)
-                        } else {
-                            ForEach(reviewsAboutUser) { item in
-                                HStack(alignment: .top, spacing: 12) {
-                                    Circle()
-                                        .fill(Color.accentColor.opacity(0.15))
-                                        .frame(width: 44, height: 44)
-                                        .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(item.clientName ?? "Client").font(.headline)
-                                            Spacer()
-                                            Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
-                                        }
-
-                                        HStack(spacing: 4) {
-                                            let stars = Int(item.rating ?? "0") ?? 0
-                                            ForEach(1...5, id: \.self) { i in
-                                                Image(systemName: i <= stars ? "star.fill" : "star")
-                                                    .foregroundColor(i <= stars ? .yellow : .secondary)
-                                            }
-                                        }
-                                        Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
-                                    }
-                                }
-                                .padding(.vertical, 6)
-                            }
-                        }
-                    }
-
-                    // Reviews written by the current user (fallback view) - link to dedicated screen
+                if userType == "CLIENT" || userType == nil {
                     Section(header: Text("Your Reviews")) {
                         NavigationLink(destination: ReviewsByUserView().environmentObject(firestore).environmentObject(auth)) {
                             Text("View My Reviews")
@@ -286,6 +219,37 @@ struct ReviewsView: View {
                 }
             }
         }
+    }
+}
+
+private struct ReviewRowView: View {
+    let item: FirestoreManager.ReviewItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(Color.accentColor.opacity(0.15))
+                .frame(width: 44, height: 44)
+                .overlay(Text(String((item.clientName ?? "").prefix(1))).font(.headline))
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(item.clientName ?? "Client").font(.headline)
+                    Spacer()
+                    Text(item.createdAt ?? Date(), style: .date).font(.caption).foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 4) {
+                    let stars = Int(item.rating ?? "0") ?? 0
+                    ForEach(1...5, id: \.self) { i in
+                        Image(systemName: i <= stars ? "star.fill" : "star")
+                            .foregroundColor(i <= stars ? .yellow : .secondary)
+                    }
+                }
+                Text(item.ratingMessage ?? "").font(.subheadline).foregroundColor(.primary)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 

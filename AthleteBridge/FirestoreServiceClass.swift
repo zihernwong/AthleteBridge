@@ -18,6 +18,8 @@ class FirestoreManager: ObservableObject {
 
     @Published var coaches: [Coach] = []
     @Published var coachPhotoURLs: [String: URL?] = [:]
+    private var isFetchingCoaches: Bool = false
+    private var lastCoachesFetchTime: Date? = nil
     // Lightweight client summaries used for new-conversation picker
     struct UserSummary: Identifiable {
         let id: String
@@ -515,19 +517,18 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Ensure the provided participant UIDs have display names cached in `participantNames`.
-    /// This uses the local `coaches` cache and current profiles first to avoid extra reads,
-    /// and falls back to fetching the `coaches/{uid}` then `clients/{uid}` documents in batch (up to 10 per query) for efficiency.
+    /// Uses dictionary lookups from in-memory caches first, then batch-fetches remaining UIDs.
     func ensureParticipantNames(_ uids: [String]) {
-        // Determine which uids are missing from the cache
         let missing = uids.filter { self.participantNames[$0] == nil }
         guard !missing.isEmpty else { return }
 
-        // First satisfy from in-memory caches
+        // Build dictionary for O(1) coach lookups instead of linear search per UID
+        let coachDict = Dictionary(uniqueKeysWithValues: self.coaches.map { ($0.id, $0.name) })
+
         var toFetch = Set<String>()
         for uid in missing {
-            if let c = self.coaches.first(where: { $0.id == uid }) {
-                DispatchQueue.main.async { self.participantNames[uid] = c.name }
-                // coachPhotoURLs likely already populated by fetchCoaches
+            if let name = coachDict[uid] {
+                DispatchQueue.main.async { self.participantNames[uid] = name }
             } else if let cur = self.currentCoach, cur.id == uid {
                 DispatchQueue.main.async { self.participantNames[uid] = cur.name }
             } else if let curc = self.currentClient, curc.id == uid {
@@ -698,7 +699,12 @@ class FirestoreManager: ObservableObject {
     }
 
     func fetchCoaches() {
+        // Skip if already fetching or fetched recently (within 30s)
+        if isFetchingCoaches { return }
+        if let last = lastCoachesFetchTime, Date().timeIntervalSince(last) < 30 { return }
+        isFetchingCoaches = true
         self.db.collection("coaches").getDocuments { snapshot, error in
+            DispatchQueue.main.async { self.isFetchingCoaches = false; self.lastCoachesFetchTime = Date() }
             if let error = error {
                 print("FirestoreManager: fetchCoaches error: \(error)")
                 return

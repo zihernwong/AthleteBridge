@@ -81,7 +81,8 @@ struct MainAppView: View {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            setupTabAvatarObservers()
+            if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
+            else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
             navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         .onChange(of: auth.user?.uid) { _old, _new in
@@ -91,42 +92,12 @@ struct MainAppView: View {
             }
             navigateToClientForm = (_new != nil) && !isCoachUserComputed
         }
-        .onChange(of: firestore.currentUserType) { _old, newType in
-            if let t = newType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" {
-                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
-                    selectedTab = 1
-                    didAutoSelectCoachHome = true
-                }
+        .onChange(of: isCoachUserComputed) { _old, isCoach in
+            if isCoach && selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
+                selectedTab = 1
+                didAutoSelectCoachHome = true
             }
-            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
-        }
-        .onChange(of: firestore.userTypeLoaded) { _old, newLoaded in
-            guard newLoaded else { return }
-            if (firestore.currentUserType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH" {
-                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
-                    selectedTab = 1
-                    didAutoSelectCoachHome = true
-                }
-            }
-            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
-        }
-        .onChange(of: firestore.currentCoach?.id) { _old, newId in
-            if let uid = auth.user?.uid, newId == uid {
-                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
-                    selectedTab = 1
-                    didAutoSelectCoachHome = true
-                }
-            }
-            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
-        }
-        .onChange(of: firestore.coaches.count) { _old, _new in
-            if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) {
-                if selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
-                    selectedTab = 1
-                    didAutoSelectCoachHome = true
-                }
-            }
-            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
+            navigateToClientForm = (auth.user != nil) && !isCoach
         }
         .onChange(of: firestore.currentClientPhotoURL) { _old, new in
             if let u = new { loadTabAvatar(from: u) } else { tabAvatarImage = nil }
@@ -143,15 +114,7 @@ struct MainAppView: View {
                     bg.resizable().scaledToFit().opacity(0.08).frame(maxWidth: 400).allowsHitTesting(false)
                 }
 
-                let isCoachUser: Bool = {
-                    var res = false
-                    if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { res = true }
-                    else if let coach = firestore.currentCoach, coach.id == auth.user?.uid { res = true }
-                    else if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { res = true }
-                    return res
-                }()
-
-                if isCoachUser {
+                if isCoachUserComputed {
                     VStack {
                         Spacer()
                         if let img = appLogoImageSwiftUI() {
@@ -278,22 +241,9 @@ struct MainAppView: View {
         }.resume()
     }
 
-    // Watch for changes in photo URLs and load the tab avatar accordingly
-    private func setupTabAvatarObservers() {
-        // initial load
-        if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
-        else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
-    }
 
     @ViewBuilder
     private func RequiresProfile<Content: View>(content: @escaping () -> Content, selectedTab: Binding<Int>) -> some View {
-        let isCoachUser = {
-            if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
-            if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
-            if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
-            return false
-        }()
-
         let needsProfile: Bool = {
             guard auth.user != nil else { return false }
             // If we haven't finished loading the user's type/profile yet, avoid blocking the UI.
@@ -304,7 +254,7 @@ struct MainAppView: View {
             }
 
             // Otherwise evaluate normally: non-coach users without either profile need to create one.
-            return !isCoachUser && (firestore.currentClient == nil && firestore.currentCoach == nil)
+            return !isCoachUserComputed && (firestore.currentClient == nil && firestore.currentCoach == nil)
         }()
 
         ZStack {
