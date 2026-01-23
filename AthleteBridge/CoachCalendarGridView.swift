@@ -249,10 +249,11 @@ import FirebaseAuth
     @State private var selectedSlotStart: Date? = nil
     @State private var selectedSlotEnd: Date? = nil
     @State private var startAt: Date = Date()
-    @State private var endAt: Date = Date().addingTimeInterval(60*30)
+    @State private var endAt: Date = Date().addingTimeInterval(60*60)
     @State private var showConfirmOverlay: Bool = false
     @State private var gridRefreshToken: UUID = UUID()
     @State private var showOverlapAlert: Bool = false
+    @State private var showMinDurationAlert: Bool = false
 
     // For presenting chat sheet
     private struct ChatSheetId: Identifiable { let id: String }
@@ -358,9 +359,11 @@ import FirebaseAuth
 
                 CoachCalendarGridView(coachID: coach.id, date: $selectedDate, showOnlyAvailable: false, onSlotSelected: nil, embedMode: true, onAvailableSlot: { start, end in
                     selectedSlotStart = start
-                    selectedSlotEnd = end
+                    // Enforce minimum 1-hour booking from selected slot
+                    let minEnd = start.addingTimeInterval(3600)
+                    selectedSlotEnd = max(end, minEnd)
                     startAt = start
-                    endAt = end
+                    endAt = max(end, minEnd)
                     showConfirmOverlay = true
                 })
                 .id(gridRefreshToken)
@@ -426,6 +429,11 @@ import FirebaseAuth
                                 .buttonStyle(.bordered)
                                 Button {
                                     guard let uid = Auth.auth().currentUser?.uid else { return }
+                                    // Enforce minimum 1-hour booking
+                                    if endAt.timeIntervalSince(startAt) < 3600 {
+                                        showMinDurationAlert = true
+                                        return
+                                    }
                                     // Check for overlapping bookings — fetch full day to catch all overlaps
                                     let dayStart = Calendar.current.startOfDay(for: startAt)
                                     let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? startAt
@@ -458,7 +466,7 @@ import FirebaseAuth
                                     }
                                 } label: { Text("Confirm Booking Time").frame(maxWidth: .infinity) }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(!(startAt < endAt))
+                                .disabled(!(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600)
                             }
                             .padding()
                         }
@@ -481,6 +489,11 @@ import FirebaseAuth
         } message: {
             Text("This time is already requested by you or someone else. Please choose a different time.")
         }
+        .alert("Minimum Duration", isPresented: $showMinDurationAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Minimum booking length is 1 hour. Please select a longer time range.")
+        }
     }
  }
 
@@ -499,7 +512,7 @@ import FirebaseAuth
      @State private var loading: Bool = true
      @State private var showBookingSheet: Bool = false
      @State private var selectedSlotStart: Date = Date()
-     @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*30)
+     @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*60)
      @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
 
      // Configuration: generate slots between these hours
@@ -585,9 +598,11 @@ import FirebaseAuth
                     // do nothing on away blocks
                 } else {
                     selectedSlotStart = slot.start
-                    selectedSlotEnd = slot.end
+                    // Enforce minimum 1-hour end time from slot start
+                    let minEnd = slot.start.addingTimeInterval(3600)
+                    selectedSlotEnd = max(slot.end, minEnd)
                     if embedMode {
-                        onAvailableSlot?(slot.start, slot.end)
+                        onAvailableSlot?(slot.start, max(slot.end, minEnd))
                     } else {
                         showBookingSheet = true
                     }

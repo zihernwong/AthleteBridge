@@ -10,7 +10,7 @@ struct BookingEditorView: View {
     @State private var selectedCoachId: String = ""
     @State private var coachSearchText: String = ""
     @State private var startAt: Date = Date()
-    @State private var endAt: Date = Date().addingTimeInterval(60*30)
+    @State private var endAt: Date = Date().addingTimeInterval(60*60)
 
     // Reviews for selected coach
     @State private var coachReviews: [FirestoreManager.ReviewItem] = []
@@ -49,7 +49,7 @@ struct BookingEditorView: View {
         self._showSheet = showSheet
         self._selectedCoachId = State(initialValue: initialCoachId ?? "")
         self._startAt = State(initialValue: initialStart ?? Date())
-        self._endAt = State(initialValue: initialEnd ?? (initialStart ?? Date()).addingTimeInterval(60*30))
+        self._endAt = State(initialValue: initialEnd ?? (initialStart ?? Date()).addingTimeInterval(60*60))
         self._selectedLocationId = State(initialValue: initialLocationId ?? "")
         self._notes = State(initialValue: initialNotes ?? "")
     }
@@ -223,9 +223,11 @@ struct BookingEditorView: View {
                                               embedMode: true,
                                               onAvailableSlot: { start, end in
                                                   selectedSlotStart = start
-                                                  selectedSlotEnd = end
+                                                  // Enforce minimum 1-hour booking from selected slot
+                                                  let minEnd = start.addingTimeInterval(3600)
+                                                  selectedSlotEnd = max(end, minEnd)
                                                   startAt = start
-                                                  endAt = end
+                                                  endAt = max(end, minEnd)
                                                   showConfirmOverlay = true
                                               })
                             .environmentObject(firestore)
@@ -358,7 +360,8 @@ struct BookingEditorView: View {
                                         let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
                                         let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
                                         if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 { startAt = snappedDate }
-                                        if startAt >= endAt { endAt = Calendar.current.date(byAdding: .minute, value: 30, to: startAt) ?? startAt.addingTimeInterval(60*30) }
+                                        // Enforce minimum 1-hour booking
+                                        if endAt.timeIntervalSince(startAt) < 3600 { endAt = Calendar.current.date(byAdding: .hour, value: 1, to: startAt) ?? startAt.addingTimeInterval(3600) }
                                     }
 
                                 Text("End")
@@ -370,7 +373,8 @@ struct BookingEditorView: View {
                                         let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
                                         let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
                                         if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 { endAt = snappedDate }
-                                        if endAt <= startAt { startAt = Calendar.current.date(byAdding: .minute, value: -30, to: endAt) ?? endAt.addingTimeInterval(-60*30) }
+                                        // Enforce minimum 1-hour booking
+                                        if endAt.timeIntervalSince(startAt) < 3600 { startAt = Calendar.current.date(byAdding: .hour, value: -1, to: endAt) ?? endAt.addingTimeInterval(-3600) }
                                     }
                             }
                             .padding([.horizontal, .bottom])
@@ -390,7 +394,7 @@ struct BookingEditorView: View {
                                     Text("Confirm Booking Time").frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt))
+                                .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600)
                             }
                             .padding()
                         }
@@ -449,6 +453,12 @@ struct BookingEditorView: View {
         // Validate times before saving
         if !(startAt < endAt) {
             alertMessage = "Start time must be before end time"
+            showAlert = true
+            return
+        }
+        // Enforce minimum 1-hour booking
+        if endAt.timeIntervalSince(startAt) < 3600 {
+            alertMessage = "Minimum booking length is 1 hour"
             showAlert = true
             return
         }
@@ -527,7 +537,7 @@ struct BookingEditorView: View {
 
 struct BookingEditorView_Previews: PreviewProvider {
     static var previews: some View {
-        BookingEditorView(showSheet: .constant(true), initialCoachId: "", initialStart: Date(), initialEnd: Date().addingTimeInterval(1800))
+        BookingEditorView(showSheet: .constant(true), initialCoachId: "", initialStart: Date(), initialEnd: Date().addingTimeInterval(3600))
             .environmentObject(FirestoreManager())
             .environmentObject(AuthViewModel())
     }
