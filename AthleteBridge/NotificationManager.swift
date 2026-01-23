@@ -11,6 +11,8 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
     /// Cached FCM token - stored here in case it arrives before user authenticates
     private var cachedFCMToken: String?
+    /// Previously saved token so we can remove it when a new one arrives
+    private var previouslySavedToken: String?
 
     private override init() {
         super.init()
@@ -41,6 +43,21 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         print("NotificationManager: updateAPNSToken called with token: \(tokenString.prefix(20))...")
         Messaging.messaging().apnsToken = deviceToken
         print("NotificationManager: APNs token passed to FCM Messaging")
+
+        // Force FCM to fetch a fresh token now that APNs token is set.
+        // This ensures the FCM token is properly mapped to this APNs token,
+        // fixing cases where FCM generated a token before APNs was ready.
+        Messaging.messaging().token { [weak self] token, error in
+            if let error = error {
+                print("NotificationManager: FCM token refresh after APNs failed: \(error)")
+                return
+            }
+            if let token = token {
+                print("NotificationManager: FCM token after APNs set: \(token.prefix(20))...")
+                self?.cachedFCMToken = token
+                self?.saveTokenToFirestore(token)
+            }
+        }
     }
 
     // MessagingDelegate - receives new FCM token
@@ -64,7 +81,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         saveTokenToFirestore(token)
     }
 
-    /// Internal method to persist token to Firestore
+    /// Internal method to persist token to Firestore, replacing any previously saved token from this device
     private func saveTokenToFirestore(_ token: String) {
         guard let uid = Auth.auth().currentUser?.uid else {
             print("NotificationManager: no authenticated user to save token (will retry when authenticated)")
@@ -72,47 +89,64 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         }
 
         let db = Firestore.firestore()
+        let oldToken = previouslySavedToken
+
         // Try userType document first
         let userTypeRef = db.collection("userType").document(uid)
         userTypeRef.getDocument { [weak self] snap, err in
             if let err = err {
                 print("NotificationManager: userType lookup error: \(err). Falling back to coaches check.")
-                // fallback to existence check
                 let coachRef = db.collection("coaches").document(uid)
                 coachRef.getDocument { csnap, _ in
                     let collection = (csnap?.exists == true) ? "coaches" : "clients"
-                    db.collection(collection).document(uid).setData(["deviceTokens": FieldValue.arrayUnion([token])], merge: true) { err in
-                        if let err = err {
-                            print("NotificationManager: failed to save device token to \(collection): \(err)")
-                        } else {
-                            print("NotificationManager: saved device token to \(collection)/\(uid)")
-                        }
-                    }
+                    self?.replaceToken(db: db, collection: collection, uid: uid, oldToken: oldToken, newToken: token)
                 }
                 return
             }
 
             if let data = snap?.data(), let t = (data["type"] as? String)?.uppercased() {
                 let coll = (t == "COACH") ? "coaches" : "clients"
-                db.collection(coll).document(uid).setData(["deviceTokens": FieldValue.arrayUnion([token])], merge: true) { err in
-                    if let err = err {
-                        print("NotificationManager: failed to save device token to \(coll): \(err)")
-                    } else {
-                        print("NotificationManager: saved device token to \(coll)/\(uid)")
-                    }
-                }
+                self?.replaceToken(db: db, collection: coll, uid: uid, oldToken: oldToken, newToken: token)
             } else {
-                // userType doc missing - check coaches collection as fallback
                 let coachRef = db.collection("coaches").document(uid)
                 coachRef.getDocument { csnap, _ in
                     let collection = (csnap?.exists == true) ? "coaches" : "clients"
-                    db.collection(collection).document(uid).setData(["deviceTokens": FieldValue.arrayUnion([token])], merge: true) { err in
-                        if let err = err {
-                            print("NotificationManager: failed to save device token to \(collection): \(err)")
-                        } else {
-                            print("NotificationManager: saved device token to \(collection)/\(uid)")
-                        }
+                    self?.replaceToken(db: db, collection: collection, uid: uid, oldToken: oldToken, newToken: token)
+                }
+            }
+        }
+    }
+
+    /// Replace old token with new token in the user's deviceTokens array
+    private func replaceToken(db: Firestore, collection: String, uid: String, oldToken: String?, newToken: String) {
+        let docRef = db.collection(collection).document(uid)
+
+        // If there's an old token different from the new one, remove it first
+        if let old = oldToken, old != newToken {
+            docRef.updateData(["deviceTokens": FieldValue.arrayRemove([old])]) { err in
+                if let err = err {
+                    print("NotificationManager: failed to remove old token: \(err)")
+                } else {
+                    print("NotificationManager: removed old token from \(collection)/\(uid)")
+                }
+                // Add new token regardless of whether removal succeeded
+                docRef.setData(["deviceTokens": FieldValue.arrayUnion([newToken])], merge: true) { err in
+                    if let err = err {
+                        print("NotificationManager: failed to save device token to \(collection): \(err)")
+                    } else {
+                        print("NotificationManager: saved device token to \(collection)/\(uid)")
+                        self.previouslySavedToken = newToken
                     }
+                }
+            }
+        } else {
+            // No old token or same token - just add
+            docRef.setData(["deviceTokens": FieldValue.arrayUnion([newToken])], merge: true) { err in
+                if let err = err {
+                    print("NotificationManager: failed to save device token to \(collection): \(err)")
+                } else {
+                    print("NotificationManager: saved device token to \(collection)/\(uid)")
+                    self.previouslySavedToken = newToken
                 }
             }
         }
