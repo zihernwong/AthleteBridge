@@ -2383,6 +2383,67 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Reschedule a booking by updating StartAt, EndAt, and Status across root and mirrored subcollections.
+    func rescheduleBooking(bookingId: String, newStart: Date, newEnd: Date, newStatus: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("rescheduleBooking: failed to read booking \(bookingId): \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                print("rescheduleBooking: booking \(bookingId) not found")
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            func extractId(from field: Any?) -> String? {
+                if let ref = field as? DocumentReference { return ref.documentID }
+                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
+                if let dict = field as? [String: Any] {
+                    if let id = dict["id"] as? String { return id }
+                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
+                }
+                return nil
+            }
+
+            let coachId = extractId(from: data["CoachID"])
+            let clientId = extractId(from: data["ClientID"])
+
+            let batch = self.db.batch()
+            let updateFields: [String: Any] = [
+                "StartAt": Timestamp(date: newStart),
+                "EndAt": Timestamp(date: newEnd),
+                "Status": newStatus
+            ]
+
+            batch.updateData(updateFields, forDocument: bookingRef)
+
+            if let cId = coachId {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(updateFields, forDocument: coachBookingRef)
+            }
+
+            if let clId = clientId {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(updateFields, forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("rescheduleBooking: batch commit failed: \(err)")
+                    completion(err)
+                } else {
+                    print("rescheduleBooking: booking \(bookingId) rescheduled to \(newStart)-\(newEnd), status=\(newStatus)")
+                    completion(nil)
+                }
+            }
+        }
+    }
+
     /// Update the PaymentStatus field for a booking across root and mirrored subcollections.
     func updateBookingPaymentStatus(bookingId: String, paymentStatus: String, completion: @escaping (Error?) -> Void) {
         let bookingRef = self.db.collection("bookings").document(bookingId)

@@ -8,6 +8,8 @@ struct AcceptedBookingsView: View {
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
 
+    @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -55,6 +57,16 @@ struct AcceptedBookingsView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+
+                            // Reschedule booking button
+                            Button {
+                                bookingToReschedule = b
+                            } label: {
+                                Text("Reschedule Booking")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                         }
                         .padding(.vertical, 4)
                         Divider()
@@ -77,6 +89,14 @@ struct AcceptedBookingsView: View {
             }
         } message: {
             Text("Are you sure you want to cancel this booking? The client will be notified.")
+        }
+        .sheet(item: $bookingToReschedule) { booking in
+            CoachRescheduleView(booking: booking) {
+                bookingToReschedule = nil
+                firestore.fetchBookingsForCurrentCoachSubcollection()
+            }
+            .environmentObject(firestore)
+            .environmentObject(auth)
         }
     }
 
@@ -102,6 +122,122 @@ struct AcceptedBookingsView: View {
                     }
                     firestore.showToast("Booking cancelled")
                     firestore.fetchBookingsForCurrentCoachSubcollection()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Coach Reschedule View (propose new time with date/time picker)
+struct CoachRescheduleView: View {
+    let booking: FirestoreManager.BookingItem
+    let onComplete: () -> Void
+
+    @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var auth: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var newStart: Date = Date()
+    @State private var newEnd: Date = Date().addingTimeInterval(3600)
+    @State private var isSaving: Bool = false
+    @State private var showMinDurationAlert: Bool = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Start")
+                        MinuteIntervalDatePicker(date: $newStart, minuteInterval: 30)
+                            .frame(height: 150)
+                            .padding(.bottom, 12)
+                            .onChange(of: newStart) { _, val in
+                                let intervalSeconds = 30 * 60
+                                let t = val.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(val)) > 0.1 { newStart = snappedDate }
+                                if newEnd.timeIntervalSince(newStart) < 3600 {
+                                    newEnd = Calendar.current.date(byAdding: .hour, value: 1, to: newStart) ?? newStart.addingTimeInterval(3600)
+                                }
+                            }
+                        Text("End")
+                        MinuteIntervalDatePicker(date: $newEnd, minuteInterval: 30)
+                            .frame(height: 150)
+                            .onChange(of: newEnd) { _, val in
+                                let intervalSeconds = 30 * 60
+                                let t = val.timeIntervalSinceReferenceDate
+                                let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
+                                let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                if abs(snappedDate.timeIntervalSince(val)) > 0.1 { newEnd = snappedDate }
+                                if newEnd.timeIntervalSince(newStart) < 3600 {
+                                    newStart = Calendar.current.date(byAdding: .hour, value: -1, to: newEnd) ?? newEnd.addingTimeInterval(-3600)
+                                }
+                            }
+                    }
+                } header: {
+                    Text("Propose New Time")
+                }
+
+                if isSaving {
+                    Section {
+                        HStack { Spacer(); ProgressView(); Spacer() }
+                    }
+                }
+            }
+            .navigationTitle("Reschedule Booking")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Propose") {
+                        confirmReschedule()
+                    }
+                    .disabled(isSaving || !(newStart < newEnd) || newEnd.timeIntervalSince(newStart) < 3600)
+                }
+            }
+            .onAppear {
+                // Initialize pickers with the booking's current times
+                newStart = booking.startAt ?? Date()
+                newEnd = booking.endAt ?? Date().addingTimeInterval(3600)
+            }
+            .alert("Minimum Duration", isPresented: $showMinDurationAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Minimum booking length is 1 hour. Please select a longer time range.")
+            }
+        }
+    }
+
+    private func confirmReschedule() {
+        if newEnd.timeIntervalSince(newStart) < 3600 {
+            showMinDurationAlert = true
+            return
+        }
+        isSaving = true
+        firestore.rescheduleBooking(bookingId: booking.id, newStart: newStart, newEnd: newEnd, newStatus: "Pending Acceptance") { err in
+            DispatchQueue.main.async {
+                isSaving = false
+                if let err = err {
+                    firestore.showToast("Failed to reschedule: \(err.localizedDescription)")
+                } else {
+                    // Send notification to client
+                    if !booking.clientID.isEmpty {
+                        let coachName = firestore.currentCoach?.name ?? "Coach"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.clientID).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Reschedule Proposed",
+                            "body": "\(coachName) has proposed a new time for your booking.",
+                            "bookingId": booking.id,
+                            "senderId": booking.coachID,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                    firestore.showToast("Reschedule proposed")
+                    onComplete()
                 }
             }
         }

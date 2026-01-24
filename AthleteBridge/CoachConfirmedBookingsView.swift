@@ -8,6 +8,8 @@ struct CoachConfirmedBookingsView: View {
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
 
+    @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
+
     private func isConfirmed(_ status: String?) -> Bool {
         return (status ?? "").lowercased() == "confirmed"
     }
@@ -36,6 +38,15 @@ struct CoachConfirmedBookingsView: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
+
+                            Button {
+                                bookingToReschedule = b
+                            } label: {
+                                Text("Reschedule Booking")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                         }
                         .padding(.vertical, 4)
                         Divider()
@@ -58,6 +69,14 @@ struct CoachConfirmedBookingsView: View {
             }
         } message: {
             Text("Are you sure you want to cancel this booking? The client will be notified.")
+        }
+        .sheet(item: $bookingToReschedule) { booking in
+            CoachRescheduleView(booking: booking) {
+                bookingToReschedule = nil
+                firestore.fetchBookingsForCurrentCoachSubcollection()
+            }
+            .environmentObject(firestore)
+            .environmentObject(auth)
         }
     }
 
