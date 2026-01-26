@@ -27,23 +27,26 @@ struct ConfirmedBookingsView: View {
                     ForEach(confirmed, id: \ .id) { b in
                         VStack(alignment: .leading, spacing: 8) {
                             BookingRowView(item: b)
-                            Button(role: .destructive) {
-                                bookingToCancel = b
-                                showCancelAlert = true
-                            } label: {
-                                Text("Cancel Booking")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
+                            // Hide Cancel and Reschedule buttons once payment is acknowledged
+                            if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                Button(role: .destructive) {
+                                    bookingToCancel = b
+                                    showCancelAlert = true
+                                } label: {
+                                    Text("Cancel Booking")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
 
-                            Button {
-                                bookingToReschedule = b
-                            } label: {
-                                Text("Reschedule Booking")
-                                    .frame(maxWidth: .infinity)
+                                Button {
+                                    bookingToReschedule = b
+                                } label: {
+                                    Text("Reschedule Booking")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.blue)
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.blue)
                         }
                         .padding(.vertical, 4)
                         Divider()

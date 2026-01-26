@@ -33,7 +33,7 @@ import FirebaseAuth
      private func filteredCoaches() -> [Coach] {
          var candidates = firestore.coaches
 
-        // Pre-compute availability preferences once
+        // Filter by availability preferences
         let availPrefs = client.preferredAvailability.compactMap { pref -> String? in
             let trimmed = pref.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             return trimmed.isEmpty ? nil : trimmed
@@ -47,7 +47,22 @@ import FirebaseAuth
            }
         }
 
-        // Resolve search query once
+        // Filter by client's desired improvement areas (goals) - match against coach specialties
+        let goalPrefs = client.goals.compactMap { goal -> String? in
+            let trimmed = goal.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if !goalPrefs.isEmpty {
+            candidates = candidates.filter { coach in
+                let coachSpecs = coach.specialties.map { $0.lowercased() }
+                // Coach must have at least one specialty matching a client goal
+                return goalPrefs.contains { goal in
+                    coachSpecs.contains { spec in spec.contains(goal) || goal.contains(spec) }
+                }
+            }
+        }
+
+        // Filter by search query (coach name or specialties)
         let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
         guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return candidates }
 
@@ -100,17 +115,25 @@ import FirebaseAuth
                          }
                      }
 
-                     List(items) { coach in
-                         coachRow(for: coach)
-                             .onAppear {
-                                 lazyLoadForCoach(coach)
-                             }
+                     if items.isEmpty {
+                         noMatchesView
+                     } else {
+                         List(items) { coach in
+                             coachRow(for: coach)
+                                 .onAppear {
+                                     lazyLoadForCoach(coach)
+                                 }
+                         }
                      }
                  }
              } else {
-                 List(items) { coach in
-                     coachRow(for: coach)
-                         .onAppear { lazyLoadForCoach(coach) }
+                 if items.isEmpty {
+                     noMatchesView
+                 } else {
+                     List(items) { coach in
+                         coachRow(for: coach)
+                             .onAppear { lazyLoadForCoach(coach) }
+                     }
                  }
              }
          }
@@ -122,6 +145,35 @@ import FirebaseAuth
                  .environmentObject(firestore)
          }
      }
+
+    // Empty state view when no coaches match the filters
+    private var noMatchesView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            if let logo = appLogoImageSwiftUI() {
+                logo
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200)
+                    .opacity(0.6)
+            } else {
+                Image("AthleteBridgeLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200)
+                    .opacity(0.6)
+            }
+            Text("No Matches Found")
+                .font(.title2)
+                .fontWeight(.semibold)
+            Text("Refine your filters to find coaches")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
 
     // Small helper to render a coach row
     // Modal fallback when programmatic navigation doesn't trigger; small Identifiable wrapper

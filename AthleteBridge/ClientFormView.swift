@@ -19,6 +19,29 @@ struct ClientFormView: View {
         return Array(filtered.prefix(6))
     }
 
+    // Computed suggestions for improvement areas based on coaches' specialties
+    private var goalSuggestions: [String] {
+        // Get the last item being typed (after the last comma)
+        let components = goals.split(separator: ",", omittingEmptySubsequences: false)
+        guard let lastComponent = components.last else { return [] }
+        let typed = lastComponent.trimmingCharacters(in: .whitespaces).lowercased()
+        guard typed.count >= 1 else { return [] }
+
+        // Get already selected goals to exclude from suggestions
+        let alreadySelected = Set(components.dropLast().map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+
+        // Collect all unique specialties from coaches
+        let allSpecialties = Set(firestore.coaches.flatMap { $0.specialties })
+
+        // Filter specialties that match the typed text and aren't already selected
+        let filtered = allSpecialties.filter { specialty in
+            let lowercased = specialty.lowercased()
+            return lowercased.contains(typed) && !alreadySelected.contains(lowercased)
+        }
+
+        return Array(filtered.sorted().prefix(6))
+    }
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -63,7 +86,42 @@ struct ClientFormView: View {
                     }
 
                     Section(header: Text("Desired Improvement Areas")) {
-                        TextField("e.g. Confidence, Leadership", text: $goals)
+                        VStack(spacing: 6) {
+                            TextField("e.g. Confidence, Leadership", text: $goals)
+                                .textFieldStyle(.roundedBorder)
+
+                            if !goalSuggestions.isEmpty {
+                                // suggestion chips for improvement areas
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(goalSuggestions, id: \.self) { suggestion in
+                                            Button(action: {
+                                                // Replace the last partial entry with the selected suggestion
+                                                var components = goals.split(separator: ",", omittingEmptySubsequences: false).map { String($0) }
+                                                if components.isEmpty {
+                                                    goals = suggestion
+                                                } else {
+                                                    components[components.count - 1] = " " + suggestion
+                                                    goals = components.joined(separator: ",")
+                                                }
+                                                // Add comma for next entry
+                                                goals += ", "
+                                                // dismiss keyboard
+                                                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                            }) {
+                                                Text(suggestion)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(Color(UIColor.secondarySystemBackground))
+                                                    .cornerRadius(16)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                        }
                     }
                     
                     Section(header: Text("Preferred Availability")) {
@@ -76,8 +134,8 @@ struct ClientFormView: View {
                     
                     NavigationLink("Find Coaches") {
                         LazyView {
-                            // Fallback to Morning if user didn't select any availability
-                            let prefs = selectedAvailability.isEmpty ? ["Morning"] : Array(selectedAvailability)
+                            // Only filter by availability if user explicitly selected preferences
+                            let prefs = Array(selectedAvailability)
                             let client = Client(name: "You",
                                                 goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
                                                 preferredAvailability: prefs)

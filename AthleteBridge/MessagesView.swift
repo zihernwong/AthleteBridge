@@ -64,6 +64,12 @@ struct MessagesView: View {
                 if !ids.isEmpty { firestore.loadPreviewsForChats(chatIds: ids) }
                 lastKnownChatIds = ids
             }
+            .onChange(of: firestore.userTypeLoaded) { _, loaded in
+                // Retry listening for chats once userType is loaded
+                if loaded {
+                    firestore.listenForChatsForCurrentUser()
+                }
+            }
             .onChange(of: firestore.chats.count) { _, _ in
                 let ids = firestore.chats.map { $0.id }
                 if ids != lastKnownChatIds {

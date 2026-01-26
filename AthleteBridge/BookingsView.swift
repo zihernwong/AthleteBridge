@@ -373,9 +373,23 @@ struct BookingRowView: View {
     private var displayTitle: String {
         let role = firestore.currentUserType?.uppercased()
         if role == "COACH" {
-            return item.clientName ?? item.clientID
+            // Try clientName from booking, then lookup from clients list, then fallback to "Client"
+            if let name = item.clientName, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                return name
+            }
+            if let client = firestore.clients.first(where: { $0.id == item.clientID }), !client.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                return client.name
+            }
+            return "Client"
         } else {
-            return item.coachName ?? item.coachID
+            // Try coachName from booking, then lookup from coaches list, then fallback to "Coach"
+            if let name = item.coachName, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                return name
+            }
+            if let coach = firestore.coaches.first(where: { $0.id == item.coachID }), !coach.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                return coach.name
+            }
+            return "Coach"
         }
     }
 

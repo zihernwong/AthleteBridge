@@ -67,6 +67,8 @@ struct ProfileView: View {
     @State private var showCopiedConfirmation: Bool = false
     // Tracks whether we are editing an existing profile (true) or creating a new one (false)
     @State private var isEditMode: Bool = false
+    // Tracks whether the form has been populated from existing data (prevents overwriting user input)
+    @State private var hasPopulatedFromExisting: Bool = false
     @State private var searchText: String = ""
     @State private var showingGoalsPicker: Bool = false
 
@@ -500,6 +502,9 @@ struct ProfileView: View {
         }
     
     private func populateFromExisting() {
+        // Only populate once to avoid overwriting user input
+        guard !hasPopulatedFromExisting else { return }
+
         if let client = firestore.currentClient {
             role = .client
             name = client.name
@@ -511,6 +516,7 @@ struct ProfileView: View {
             clientCity = client.city ?? ""
             clientBioText = client.bio ?? ""
             isEditMode = true
+            hasPopulatedFromExisting = true
         } else if let coach = firestore.currentCoach {
             role = .coach
             name = coach.name
@@ -530,6 +536,7 @@ struct ProfileView: View {
                 coachRateUpperText = ""
             }
             isEditMode = true
+            hasPopulatedFromExisting = true
         } else {
             isEditMode = false
         }
@@ -647,31 +654,21 @@ struct ProfileView: View {
                                        photoURL: photoURL,
                                        bio: bioText,
                                        zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
-                                       city: coachCity.isEmpty ? nil : coachCity) { err in
-                    let finishSave = {
-                        DispatchQueue.main.async {
-                            isSaving = false
-                            if let err = err {
-                                saveMessage = "Error saving coach: \(err.localizedDescription)"
-                            } else {
-                                fm.fetchCurrentProfiles(for: uid)
-                                showSavedConfirmation = true
-                                fm.showToast("Coach profile saved")
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                                    showSavedConfirmation = false
-                                    presentationMode.wrappedValue.dismiss()
-                                }
+                                       city: coachCity.isEmpty ? nil : coachCity,
+                                       rateRange: rateRangeToSave) { err in
+                    DispatchQueue.main.async {
+                        isSaving = false
+                        if let err = err {
+                            saveMessage = "Error saving coach: \(err.localizedDescription)"
+                        } else {
+                            fm.fetchCurrentProfiles(for: uid)
+                            showSavedConfirmation = true
+                            fm.showToast("Coach profile saved")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                showSavedConfirmation = false
+                                presentationMode.wrappedValue.dismiss()
                             }
                         }
-                    }
-
-                    if err == nil, let rr = rateRangeToSave {
-                        let ref = Firestore.firestore().collection("coaches").document(uid)
-                        ref.setData(["RateRange": rr], merge: true) { _ in
-                            finishSave()
-                        }
-                    } else {
-                        finishSave()
                     }
                 }
             }

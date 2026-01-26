@@ -3,8 +3,7 @@ import SwiftUI
 struct MainAppView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var firestore: FirestoreManager
-    @State private var navigateToClientForm = false
-    // Small UIImage used for the TabBar icon (loaded from firestore URLs)
+        // Small UIImage used for the TabBar icon (loaded from firestore URLs)
     @State private var tabAvatarImage: UIImage? = nil
     @State private var selectedTab: Int = 1 // default to Home so Profile view doesn't open fullscreen by default
     // Prevent repeated automatic switching to the coach Home tab once the user has actively
@@ -13,9 +12,6 @@ struct MainAppView: View {
     @State private var didAutoSelectCoachHome: Bool = false
     // Flag set when the user manually selects a tab so we don't override their choice
     @State private var userDidSelectTab: Bool = false
-
-    // Local search text used for the Find a Coach section in the Home tab
-    @State private var findCoachSearchText: String = ""
 
     // Computed flag: true when the signed-in user should be treated as a coach
     private var isCoachUserComputed: Bool {
@@ -30,6 +26,7 @@ struct MainAppView: View {
             // Messages tab (placeholder) — moved Locations into Bookings
             RequiresProfile(content: { messagesTab }, selectedTab: $selectedTab)
                 .tabItem { Label("Messages", systemImage: "message") }
+                .badge(firestore.unreadChatIds.count)
                 .tag(4)
 
             // Home (or Payments for coaches)
@@ -83,21 +80,18 @@ struct MainAppView: View {
             }
             if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
             else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
-            navigateToClientForm = (auth.user != nil) && !isCoachUserComputed
         }
         .onChange(of: auth.user?.uid) { _old, _new in
             if let uid = _new {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
             }
-            navigateToClientForm = (_new != nil) && !isCoachUserComputed
         }
         .onChange(of: isCoachUserComputed) { _old, isCoach in
             if isCoach && selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
                 selectedTab = 1
                 didAutoSelectCoachHome = true
             }
-            navigateToClientForm = (auth.user != nil) && !isCoach
         }
         .onChange(of: firestore.currentClientPhotoURL) { _old, new in
             if let u = new { loadTabAvatar(from: u) } else { tabAvatarImage = nil }
@@ -109,80 +103,9 @@ struct MainAppView: View {
 
     private var homeTab: some View {
         NavigationStack {
-            ZStack {
-                if let bg = appLogoImageSwiftUI() {
-                    bg.resizable().scaledToFit().opacity(0.08).frame(maxWidth: 400).allowsHitTesting(false)
-                }
-
-                if isCoachUserComputed {
-                    VStack {
-                        Spacer()
-                        if let img = appLogoImageSwiftUI() {
-                            img.resizable().scaledToFit().frame(maxWidth: 300).padding()
-                        } else {
-                            Image("AthleteBridgeLogo").resizable().scaledToFit().frame(maxWidth: 300).padding()
-                        }
-                        Spacer()
-                    }
-                } else {
-                    VStack {
-                        HStack(spacing: 12) {
-                            avatarView
-
-                            VStack(alignment: .leading) {
-                                Text("Welcome, \(auth.user?.email ?? "User")!")
-                                    .font(.title3)
-                                if let clientURL = firestore.currentClientPhotoURL {
-                                    Text("Client photo: \(clientURL.absoluteString)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else if let coachURL = firestore.currentCoachPhotoURL {
-                                    Text("Coach photo: \(coachURL.absoluteString)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                } else {
-                                    Text("No photo URL resolved")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                Button("Logout") { auth.logout() }
-                                    .foregroundColor(.red)
-                            }
-                            .padding(.horizontal)
-
-                            Spacer()
-                        }
-                        .padding(.top, 12)
-
-                        // Find a Coach search bar and quick navigation
-                        SearchBar(text: $findCoachSearchText, placeholder: "Search coach by name")
-                            .padding(10)
-                            .background(Color(UIColor.systemGray6))
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(UIColor.separator).opacity(0.08), lineWidth: 1)
-                            )
-                            .padding(.horizontal)
-
-                        NavigationLink(destination: MatchResultsView(client: firestore.currentClient ?? Client(id: auth.user?.uid ?? UUID().uuidString, name: auth.user?.email ?? "You", goals: [], preferredAvailability: []), searchQuery: findCoachSearchText).environmentObject(firestore)) {
-                            HStack {
-                                Text("Find Coaches")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }
-                            .padding()
-                            .background(Color(UIColor.systemBackground))
-                            .cornerRadius(8)
-                        }
-                        .padding(.horizontal)
-
-                        Spacer()
-                    }
-                }
-            }
-            .navigationTitle("AthleteBridge")
-            .navigationDestination(isPresented: $navigateToClientForm) { ClientFormView() }
+            ClientFormView()
+                .environmentObject(firestore)
+                .environmentObject(auth)
         }
     }
 
@@ -191,40 +114,6 @@ struct MainAppView: View {
         NavigationStack {
             PaymentsView()
                 .navigationTitle("Payments")
-        }
-    }
-
-    private var avatarView: some View {
-        Group {
-            if let clientURL = firestore.currentClientPhotoURL {
-                AsyncImage(url: clientURL) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView().frame(width: 44, height: 44)
-                    case .success(let image):
-                        image.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle()).shadow(radius: 4)
-                    case .failure(_):
-                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-                    @unknown default:
-                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-                    }
-                }
-            } else if let coachURL = firestore.currentCoachPhotoURL {
-                AsyncImage(url: coachURL) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView().frame(width: 44, height: 44)
-                    case .success(let image):
-                        image.resizable().scaledToFill().frame(width: 44, height: 44).clipShape(Circle()).shadow(radius: 4)
-                    case .failure(_):
-                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-                    @unknown default:
-                        Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-                    }
-                }
-            } else {
-                Image(systemName: "person.circle.fill").resizable().frame(width: 44, height: 44).foregroundColor(.secondary)
-            }
         }
     }
 

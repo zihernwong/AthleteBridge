@@ -404,26 +404,127 @@ class FirestoreManager: ObservableObject {
             return
         }
 
-        // If user type hasn't loaded yet, defer until it does
+        // If user type hasn't loaded yet, defer and retry after a short delay
         if !userTypeLoaded {
-            print("listenForChatsForCurrentUser: userType not loaded yet, deferring")
+            print("listenForChatsForCurrentUser: userType not loaded yet, will retry in 0.5s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.listenForChatsForCurrentUser()
+            }
             return
         }
 
-        // Stop previous listener if any
+        // Stop previous listeners if any
         chatsListener?.remove()
         chatsListener = nil
+        chatsListenerSecondary?.remove()
+        chatsListenerSecondary = nil
 
-        print("listenForChatsForCurrentUser: registering listener for uid=\(uid) userType=\(self.currentUserType ?? "nil")")
+        print("listenForChatsForCurrentUser: registering listeners for uid=\(uid) userType=\(self.currentUserType ?? "nil")")
 
+        // Create references for both possible collections (coaches and clients)
+        // This ensures we find chats regardless of how the participant was added
+        let coachRef = db.collection("coaches").document(uid)
+        let clientRef = db.collection("clients").document(uid)
+
+        // Track results from both queries to merge them
+        var coachChats: [ChatItem] = []
+        var clientChats: [ChatItem] = []
+        var coachOtherUids: Set<String> = []
+        var clientOtherUids: Set<String> = []
+
+        // Helper to merge and publish results
+        let mergeAndPublish: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            // Combine chats from both queries, removing duplicates by id
+            var seen = Set<String>()
+            var merged: [ChatItem] = []
+            for chat in (coachChats + clientChats) {
+                if !seen.contains(chat.id) {
+                    seen.insert(chat.id)
+                    merged.append(chat)
+                }
+            }
+            // Sort by lastMessageAt descending
+            merged.sort { ($0.lastMessageAt ?? .distantPast) > ($1.lastMessageAt ?? .distantPast) }
+
+            DispatchQueue.main.async {
+                self.chats = merged
+                self.chatsDebug = "Loaded \(merged.count) chats"
+                let ids = merged.map { $0.id }
+                if !ids.isEmpty { self.loadPreviewsForChats(chatIds: ids) }
+            }
+
+            // Resolve participant names
+            let allOtherUids = coachOtherUids.union(clientOtherUids)
+            if !allOtherUids.isEmpty {
+                self.ensureParticipantNames(Array(allOtherUids))
+            }
+        }
+
+        // Query 1: Chats where user is referenced as a coach
+        let coachQuery = db.collection("chats").whereField("participantRefs", arrayContains: coachRef).order(by: "lastMessageAt", descending: true)
+        chatsListener = coachQuery.addSnapshotListener { [weak self] snap, err in
+            guard let self = self else { return }
+            if let err = err {
+                print("listenForChatsForCurrentUser (coach): snapshot error: \(err)")
+            }
+            let docs = snap?.documents ?? []
+            coachChats = []
+            coachOtherUids = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                var participantsArr: [String] = []
+                if let refs = data["participantRefs"] as? [DocumentReference] {
+                    participantsArr = refs.map { $0.documentID }
+                } else if let strArr = data["participants"] as? [String] {
+                    participantsArr = strArr
+                }
+                let lastText = data["lastMessageText"] as? String
+                let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+                coachChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                for p in participantsArr where p != uid { coachOtherUids.insert(p) }
+            }
+            mergeAndPublish()
+        }
+
+        // Query 2: Chats where user is referenced as a client
+        let clientQuery = db.collection("chats").whereField("participantRefs", arrayContains: clientRef).order(by: "lastMessageAt", descending: true)
+        chatsListenerSecondary = clientQuery.addSnapshotListener { [weak self] snap, err in
+            guard let self = self else { return }
+            if let err = err {
+                print("listenForChatsForCurrentUser (client): snapshot error: \(err)")
+            }
+            let docs = snap?.documents ?? []
+            clientChats = []
+            clientOtherUids = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                var participantsArr: [String] = []
+                if let refs = data["participantRefs"] as? [DocumentReference] {
+                    participantsArr = refs.map { $0.documentID }
+                } else if let strArr = data["participants"] as? [String] {
+                    participantsArr = strArr
+                }
+                let lastText = data["lastMessageText"] as? String
+                let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+                clientChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                for p in participantsArr where p != uid { clientOtherUids.insert(p) }
+            }
+            mergeAndPublish()
+        }
+    }
+
+    // Secondary chat listener for querying both collections
+    private var chatsListenerSecondary: ListenerRegistration?
+
+    // Original single-query listener kept for reference but replaced above
+    private func listenForChatsForCurrentUserSingleQuery() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
         let userTypeUpper = (self.currentUserType ?? "").uppercased()
         let userCollName = (userTypeUpper == "COACH") ? "coaches" : "clients"
         let userRef = db.collection(userCollName).document(uid)
-
-        // Query the root `chats` collection for any chat containing a participantRef equal to the
-        // current user's document reference. This ensures the user will see newly-created chats
-        // even if the creator didn't (or couldn't) write the per-user pointer document under
-        // coaches/{id}/chats or clients/{id}/chats due to security restrictions.
         let query = db.collection("chats").whereField("participantRefs", arrayContains: userRef).order(by: "lastMessageAt", descending: true)
 
         chatsListener = query.addSnapshotListener { snap, err in
@@ -477,6 +578,7 @@ class FirestoreManager: ObservableObject {
     /// Stop listening for chats for current user
     func stopListeningForChats() {
         if let l = chatsListener { l.remove(); chatsListener = nil }
+        if let l = chatsListenerSecondary { l.remove(); chatsListenerSecondary = nil }
         DispatchQueue.main.async { self.chats = []; self.chatsDebug = "stopped" }
     }
 
@@ -644,6 +746,7 @@ class FirestoreManager: ObservableObject {
 
     func stopAllChatListeners() {
         if let l = chatsListener { l.remove(); chatsListener = nil }
+        if let l = chatsListenerSecondary { l.remove(); chatsListenerSecondary = nil }
         for (_, l) in messageListeners { l.remove() }
         messageListeners.removeAll()
         // also remove preview listeners
@@ -1008,7 +1111,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, rateRange: [Double]? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
         // Base payload (do not include createdAt here yet so we can control whether it is written)
         var baseData: [String: Any] = [
             "FirstName": firstName,
@@ -1024,6 +1127,7 @@ class FirestoreManager: ObservableObject {
         if let z = zipCode { baseData["ZipCode"] = z }
         if let c = city { baseData["City"] = c }
         if let mp = meetingPreference { baseData["meetingPreference"] = mp }
+        if let rr = rateRange { baseData["RateRange"] = rr }
 
         let docRef = self.db.collection("coaches").document(id)
 
@@ -1363,7 +1467,11 @@ class FirestoreManager: ObservableObject {
                 let coachName = (data["CoachName"] as? String)
                     ?? (data["coachName"] as? String)
                     ?? (data["coach_name"] as? String)
-                return BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Extract client name from booking doc
+                let clientName = (data["ClientName"] as? String)
+                    ?? (data["clientName"] as? String)
+                    ?? (data["client_name"] as? String)
+                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
@@ -1390,7 +1498,11 @@ class FirestoreManager: ObservableObject {
                 let coachName = (data["CoachName"] as? String)
                     ?? (data["coachName"] as? String)
                     ?? (data["coach_name"] as? String)
-                return BookingItem(id: id, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Extract client name from booking doc
+                let clientName = (data["ClientName"] as? String)
+                    ?? (data["clientName"] as? String)
+                    ?? (data["client_name"] as? String)
+                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
             }
             completion(items)
         }
@@ -1938,6 +2050,7 @@ class FirestoreManager: ObservableObject {
                 "createdAt": FieldValue.serverTimestamp()
             ]
             if let name = coachName { data["CoachName"] = name }
+            if let name = clientName { data["ClientName"] = name }
             if let extra = extra { for (k,v) in extra { data[k] = v } }
 
             print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId) coachName=\(coachName ?? "nil")")
@@ -2529,7 +2642,14 @@ class FirestoreManager: ObservableObject {
                 let notes = data["Notes"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                let item = BookingItem(id: id, clientID: clientID, clientName: nil, coachID: coachId, coachName: nil, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Extract client and coach names from booking doc
+                let clientName = (data["ClientName"] as? String)
+                    ?? (data["clientName"] as? String)
+                    ?? (data["client_name"] as? String)
+                let coachName = (data["CoachName"] as? String)
+                    ?? (data["coachName"] as? String)
+                    ?? (data["coach_name"] as? String)
+                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
                 items.append(item)
             }
             completion(items)

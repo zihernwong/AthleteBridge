@@ -48,25 +48,28 @@ struct AcceptedBookingsView: View {
                                     .foregroundColor(.green)
                             }
 
-                            // Cancel booking button
-                            Button(role: .destructive) {
-                                bookingToCancel = b
-                                showCancelAlert = true
-                            } label: {
-                                Text("Cancel Booking")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
+                            // Hide Cancel and Reschedule buttons once payment is acknowledged
+                            if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                // Cancel booking button
+                                Button(role: .destructive) {
+                                    bookingToCancel = b
+                                    showCancelAlert = true
+                                } label: {
+                                    Text("Cancel Booking")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
 
-                            // Reschedule booking button
-                            Button {
-                                bookingToReschedule = b
-                            } label: {
-                                Text("Reschedule Booking")
-                                    .frame(maxWidth: .infinity)
+                                // Reschedule booking button
+                                Button {
+                                    bookingToReschedule = b
+                                } label: {
+                                    Text("Reschedule Booking")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.blue)
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.blue)
                         }
                         .padding(.vertical, 4)
                         Divider()
