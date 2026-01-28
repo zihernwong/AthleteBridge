@@ -551,6 +551,8 @@ import FirebaseAuth
 
  struct CoachCalendarGridView: View {
      let coachID: String
+     // NEW: Support multiple coach IDs for group booking availability merge
+     var coachIDs: [String]? = nil
      @Binding var date: Date
      var showOnlyAvailable: Bool = false
      var onSlotSelected: ((FirestoreManager.BookingItem) -> Void)?
@@ -561,11 +563,22 @@ import FirebaseAuth
      @EnvironmentObject var firestore: FirestoreManager
      @EnvironmentObject var auth: AuthViewModel
      @State private var bookings: [FirestoreManager.BookingItem] = []
+     // NEW: Store bookings per coach for merged availability display
+     @State private var allCoachBookings: [String: [FirestoreManager.BookingItem]] = [:]
+     @State private var allCoachAwayTimes: [String: [FirestoreManager.AwayTimeItem]] = [:]
      @State private var loading: Bool = true
      @State private var showBookingSheet: Bool = false
      @State private var selectedSlotStart: Date = Date()
      @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*60)
      @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
+
+     // Computed property for effective coach IDs (supports both single and multiple)
+     private var effectiveCoachIDs: [String] {
+         if let ids = coachIDs, !ids.isEmpty {
+             return ids
+         }
+         return coachID.isEmpty ? [] : [coachID]
+     }
 
      // Configuration: generate slots between these hours
      private let startHour = 6
@@ -580,19 +593,56 @@ import FirebaseAuth
          let label: String
      }
 
-     // Helper: check booking overlap for a slot
+     // Helper: check booking overlap for a slot (checks ALL coaches for group bookings)
      private func bookingOverlapping(slotStart: Date, slotEnd: Date) -> FirestoreManager.BookingItem? {
+         // For multiple coaches, check all their bookings
+         if effectiveCoachIDs.count > 1 {
+             for coachId in effectiveCoachIDs {
+                 if let coachBookings = allCoachBookings[coachId] {
+                     if let overlapping = coachBookings.first(where: { b in
+                         guard let s = b.startAt, let e = b.endAt else { return false }
+                         return (s < slotEnd) && (e > slotStart)
+                     }) {
+                         return overlapping
+                     }
+                 }
+             }
+             return nil
+         }
+         // Single coach - use existing bookings array
          return bookings.first { b in
              guard let s = b.startAt, let e = b.endAt else { return false }
              return (s < slotEnd) && (e > slotStart)
          }
      }
 
-     // Helper: check away overlap for a slot
+     // Helper: check away overlap for a slot (checks ALL coaches for group bookings)
      private func awayOverlapping(slotStart: Date, slotEnd: Date) -> FirestoreManager.AwayTimeItem? {
+         // For multiple coaches, check all their away times
+         if effectiveCoachIDs.count > 1 {
+             for coachId in effectiveCoachIDs {
+                 if let coachAwayTimes = allCoachAwayTimes[coachId] {
+                     if let overlapping = coachAwayTimes.first(where: { a in
+                         return (a.startAt < slotEnd) && (a.endAt > slotStart)
+                     }) {
+                         return overlapping
+                     }
+                 }
+             }
+             return nil
+         }
+         // Single coach - use existing awayTimes array
          return awayTimes.first { a in
              return (a.startAt < slotEnd) && (a.endAt > slotStart)
          }
+     }
+
+     // Helper: get coach name for a booking (for display in merged view)
+     private func coachNameForBooking(_ booking: FirestoreManager.BookingItem) -> String? {
+         if effectiveCoachIDs.count > 1 {
+             return booking.coachName
+         }
+         return nil
      }
 
     // Helper to render a single slot row; breaking this out improves compiler type-check time
@@ -615,10 +665,18 @@ import FirebaseAuth
                 HStack {
                     if isBlocked {
                         if let b = overlappingBooking {
-                            Text(timeRangeString(for: b))
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                                .padding(.leading, 10)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(timeRangeString(for: b))
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                                // Show coach name when multiple coaches selected
+                                if effectiveCoachIDs.count > 1, let coachName = b.coachName {
+                                    Text(coachName)
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            }
+                            .padding(.leading, 10)
                             Spacer()
                             if let status = b.status {
                                 Text(status.capitalized)
@@ -627,18 +685,36 @@ import FirebaseAuth
                                     .padding(.trailing, 10)
                             }
                         } else if let away = overlappingAway {
-                            // Display the reason from the away time
-                            Text(away.notes ?? "Away")
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                                .padding(.leading, 10)
+                            VStack(alignment: .leading, spacing: 2) {
+                                // Display the reason from the away time
+                                Text(away.notes ?? "Away")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                                // Show which coach is away when multiple coaches selected
+                                if effectiveCoachIDs.count > 1 {
+                                    if let coachId = away.coachId,
+                                       let coach = firestore.coaches.first(where: { $0.id == coachId }) {
+                                        Text(coach.name)
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.8))
+                                    }
+                                }
+                            }
+                            .padding(.leading, 10)
                             Spacer()
                         }
                     } else {
-                        Text("Available")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                            .padding(.leading, 10)
+                        if effectiveCoachIDs.count > 1 {
+                            Text("All Coaches Available")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                                .padding(.leading, 10)
+                        } else {
+                            Text("Available")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                                .padding(.leading, 10)
+                        }
                         Spacer()
                     }
                 }
@@ -707,17 +783,53 @@ import FirebaseAuth
          let cal = Calendar.current
          let dayStart = cal.startOfDay(for: date)
          let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-         firestore.fetchBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
-             DispatchQueue.main.async {
-                 self.bookings = items.sorted { (a,b) in
-                     (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+
+         // For multiple coaches, fetch all their bookings and away times
+         if effectiveCoachIDs.count > 1 {
+             let group = DispatchGroup()
+             var newAllCoachBookings: [String: [FirestoreManager.BookingItem]] = [:]
+             var newAllCoachAwayTimes: [String: [FirestoreManager.AwayTimeItem]] = [:]
+             let lock = NSLock()
+
+             for coachId in effectiveCoachIDs {
+                 group.enter()
+                 firestore.fetchBookingsForCoach(coachId: coachId, start: dayStart, end: dayEnd) { items in
+                     lock.lock()
+                     newAllCoachBookings[coachId] = items.sorted { (a,b) in
+                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                     }
+                     lock.unlock()
+                     group.leave()
+                 }
+
+                 group.enter()
+                 firestore.fetchAwayTimesForCoach(coachId: coachId, start: dayStart, end: dayEnd) { items in
+                     lock.lock()
+                     newAllCoachAwayTimes[coachId] = items
+                     lock.unlock()
+                     group.leave()
                  }
              }
-         }
-         firestore.fetchAwayTimesForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
-             DispatchQueue.main.async {
-                 self.awayTimes = items
+
+             group.notify(queue: .main) {
+                 self.allCoachBookings = newAllCoachBookings
+                 self.allCoachAwayTimes = newAllCoachAwayTimes
                  self.loading = false
+             }
+         } else {
+             // Single coach - use existing logic
+             firestore.fetchBookingsForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+                 DispatchQueue.main.async {
+                     self.bookings = items.sorted { (a,b) in
+                         (a.startAt ?? Date.distantFuture) < (b.startAt ?? Date.distantFuture)
+                     }
+                 }
+             }
+             firestore.fetchAwayTimesForCoach(coachId: coachID, start: dayStart, end: dayEnd) { items in
+                 DispatchQueue.main.async {
+                     self.awayTimes = items
+                     self.loading = false
+                 }
              }
          }
      }

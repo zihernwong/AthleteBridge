@@ -14,6 +14,43 @@ struct ConfirmBookingView: View {
     @State private var loading: Bool = true
     @State private var isProcessing: Bool = false
     @State private var errorMessage: String? = nil
+    @State private var coachAcceptances: [String: Bool] = [:]
+    @State private var clientConfirmations: [String: Bool] = [:]
+
+    // Check if this is a group booking
+    private var isGroupBooking: Bool {
+        booking.isGroupBooking ?? false ||
+        (booking.coachIDs?.count ?? 0) > 1 ||
+        (booking.clientIDs?.count ?? 0) > 1
+    }
+
+    // Check if this is a multi-client booking
+    private var isMultiClientBooking: Bool {
+        (booking.clientIDs?.count ?? 0) > 1
+    }
+
+    // Check if all coaches have accepted (for group bookings)
+    private var allCoachesAccepted: Bool {
+        guard isGroupBooking else { return true }
+        let coachIds = booking.allCoachIDs
+        guard !coachIds.isEmpty else { return true }
+        return coachIds.allSatisfy { coachAcceptances[$0] == true }
+    }
+
+    // Check if current client has already confirmed
+    private var currentClientAlreadyConfirmed: Bool {
+        guard isMultiClientBooking else { return false }
+        guard let currentClientId = auth.user?.uid else { return false }
+        return clientConfirmations[currentClientId] == true
+    }
+
+    // Check if all clients have confirmed
+    private var allClientsConfirmed: Bool {
+        guard isMultiClientBooking else { return true }
+        let clientIds = booking.allClientIDs
+        guard !clientIds.isEmpty else { return true }
+        return clientIds.allSatisfy { clientConfirmations[$0] == true }
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,13 +59,105 @@ struct ConfirmBookingView: View {
                     ProgressView("Loading...")
                 } else {
                     Form {
-                        Section(header: Text("Appointment")) {
-                            Text(booking.clientName ?? "Client")
+                        Section(header: Text(isGroupBooking ? "Group Appointment" : "Appointment")) {
+                            if isGroupBooking {
+                                HStack {
+                                    Image(systemName: "person.3.fill")
+                                        .foregroundColor(.blue)
+                                    Text("Group Session")
+                                        .font(.subheadline)
+                                        .foregroundColor(.blue)
+                                }
+                                Text(booking.participantSummary)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            // Show clients - use list format for multiple clients
+                            if isGroupBooking && booking.allClientNames.count > 1 {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Clients:").font(.subheadline).foregroundColor(.secondary)
+                                    ForEach(booking.allClientNames, id: \.self) { name in
+                                        Text("• \(name)")
+                                    }
+                                }
+                            } else {
+                                Text(booking.clientName ?? "Client")
+                            }
+
                             if let start = booking.startAt {
                                 Text("Starts: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
                             }
                             if let end = booking.endAt {
                                 Text("Ends: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
+                            }
+                        }
+
+                        // Show coach acceptances for group bookings
+                        if isGroupBooking {
+                            Section(header: Text("Coach Acceptances")) {
+                                ForEach(Array(zip(booking.allCoachIDs, booking.allCoachNames)), id: \.0) { coachId, coachName in
+                                    let accepted = coachAcceptances[coachId] ?? false
+                                    HStack {
+                                        Text(coachName)
+                                        Spacer()
+                                        if accepted {
+                                            Label("Accepted", systemImage: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                                .font(.caption)
+                                        } else {
+                                            Label("Pending", systemImage: "clock")
+                                                .foregroundColor(.orange)
+                                                .font(.caption)
+                                        }
+                                    }
+                                }
+
+                                if !allCoachesAccepted {
+                                    Text("Waiting for all coaches to accept before you can confirm")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+
+                        // Show client confirmations for multi-client bookings
+                        if isMultiClientBooking {
+                            Section(header: Text("Client Confirmations")) {
+                                ForEach(Array(zip(booking.allClientIDs, booking.allClientNames)), id: \.0) { clientId, clientName in
+                                    let confirmed = clientConfirmations[clientId] ?? false
+                                    let isCurrentUser = clientId == auth.user?.uid
+                                    HStack {
+                                        Text(clientName)
+                                        if isCurrentUser {
+                                            Text("(You)")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        if confirmed {
+                                            Label("Confirmed", systemImage: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                                .font(.caption)
+                                        } else {
+                                            Label("Pending", systemImage: "clock")
+                                                .foregroundColor(.orange)
+                                                .font(.caption)
+                                        }
+                                    }
+                                }
+
+                                if !allClientsConfirmed && allCoachesAccepted {
+                                    if currentClientAlreadyConfirmed {
+                                        Text("Waiting for other clients to confirm")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    } else {
+                                        Text("Please confirm to proceed with the booking")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                    }
+                                }
                             }
                         }
 
@@ -49,15 +178,29 @@ struct ConfirmBookingView: View {
                         }
 
                         Section {
-                            Button(action: confirm) {
-                                if isProcessing { ProgressView() } else { Text("Confirm Booking") }
+                            if currentClientAlreadyConfirmed {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                    Text("You have confirmed this booking")
+                                        .foregroundColor(.green)
+                                }
+                                if !allClientsConfirmed {
+                                    Text("Waiting for other clients to confirm...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                Button(action: confirm) {
+                                    if isProcessing { ProgressView() } else { Text("Confirm Booking") }
+                                }
+                                .disabled(isProcessing || rateUSD == nil || (isGroupBooking && !allCoachesAccepted))
                             }
-                            .disabled(isProcessing || rateUSD == nil)
 
                             Button(role: .destructive, action: decline) {
                                 Text("Decline")
                             }
-                            .disabled(isProcessing)
+                            .disabled(isProcessing || currentClientAlreadyConfirmed)
                         }
                     }
                 }
@@ -84,19 +227,46 @@ struct ConfirmBookingView: View {
             if let r = data["RateUSD"] as? Double { self.rateUSD = r }
             else if let r = data["RateCents"] as? Int { self.rateUSD = Double(r) / 100.0 }
             self.coachNote = data["CoachNote"] as? String ?? data["CoachNote"] as? String
+
+            // Load coach acceptances for group bookings
+            if let acceptances = data["CoachAcceptances"] as? [String: Bool] {
+                self.coachAcceptances = acceptances
+            }
+
+            // Load client confirmations for multi-client bookings
+            if let confirmations = data["ClientConfirmations"] as? [String: Bool] {
+                self.clientConfirmations = confirmations
+            }
         } catch {
             self.errorMessage = "Failed to load offer: \(error.localizedDescription)"
         }
     }
 
     private func confirm() {
-        guard auth.user != nil else { errorMessage = "Not authenticated"; return }
+        guard let clientId = auth.user?.uid else { errorMessage = "Not authenticated"; return }
         isProcessing = true
         errorMessage = nil
 
+        // Use group booking confirm for group bookings
+        if isGroupBooking {
+            firestore.confirmGroupBookingAsClient(bookingId: booking.id, clientId: clientId) { err in
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    if let err = err {
+                        self.errorMessage = err.localizedDescription
+                    } else {
+                        self.firestore.fetchBookingsForCurrentClientSubcollection()
+                        self.firestore.showToast("Group booking confirmed")
+                        dismiss()
+                    }
+                }
+            }
+            return
+        }
+
+        // Original single-coach confirm flow
         let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
         let coachId = booking.coachID
-        let clientId = booking.clientID
 
         var updatePayload: [String: Any] = ["Status": "confirmed"]
         updatePayload["confirmedAt"] = FieldValue.serverTimestamp()
@@ -130,14 +300,30 @@ struct ConfirmBookingView: View {
     }
 
     private func decline() {
-        guard auth.user != nil else { errorMessage = "Not authenticated"; return }
+        guard let clientId = auth.user?.uid else { errorMessage = "Not authenticated"; return }
         isProcessing = true
         errorMessage = nil
 
+        // Use group booking status update for group bookings
+        if isGroupBooking {
+            firestore.updateGroupBookingStatus(bookingId: booking.id, status: "declined_by_client") { err in
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    if let err = err {
+                        self.errorMessage = err.localizedDescription
+                    } else {
+                        self.firestore.fetchBookingsForCurrentClientSubcollection()
+                        self.firestore.showToast("Group booking declined")
+                        dismiss()
+                    }
+                }
+            }
+            return
+        }
 
+        // Original single-coach decline flow
         let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
         let coachId = booking.coachID
-        let clientId = booking.clientID
 
         let updatePayload: [String: Any] = ["Status": "declined_by_client", "declinedAt": FieldValue.serverTimestamp(), "declinedByClient": clientId]
         let batch = Firestore.firestore().batch()

@@ -31,8 +31,23 @@ struct BookingsView: View {
                     // Requested bookings section for coaches
                     if currentUserRole == "COACH" {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Requested Bookings").font(.headline)
-                            let requested = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "requested" }
+                            Text("Bookings Awaiting Your Acceptance").font(.headline)
+                            // Include bookings that need this coach's acceptance:
+                            // - status "requested" (no one has accepted yet)
+                            // - status "partially_accepted" AND this coach hasn't accepted yet
+                            let currentCoachId = auth.user?.uid ?? ""
+                            let requested = firestore.coachBookings.filter { booking in
+                                let status = (booking.status ?? "").lowercased()
+                                if status == "requested" {
+                                    return true
+                                }
+                                if status == "partially_accepted" {
+                                    // Check if current coach has already accepted
+                                    let acceptances = booking.coachAcceptances ?? [:]
+                                    return acceptances[currentCoachId] != true
+                                }
+                                return false
+                            }
                             if requested.isEmpty {
                                 Text("No requested bookings").foregroundColor(.secondary)
                             } else {
@@ -175,8 +190,23 @@ struct BookingsView: View {
 
     private var clientPendingAcceptanceSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Bookings Pending Acceptance").font(.headline)
-            let pending = firestore.bookings.filter { ($0.status ?? "").lowercased() == "pending acceptance" }
+            Text("Bookings Awaiting Your Confirmation").font(.headline)
+            // Include bookings that need this client's confirmation:
+            // - status "pending acceptance" (all coaches accepted, waiting for client)
+            // - status "partially_confirmed" AND this client hasn't confirmed yet
+            let currentClientId = auth.user?.uid ?? ""
+            let pending = firestore.bookings.filter { booking in
+                let status = (booking.status ?? "").lowercased()
+                if status == "pending acceptance" {
+                    return true
+                }
+                if status == "partially_confirmed" {
+                    // Check if current client has already confirmed
+                    let confirmations = booking.clientConfirmations ?? [:]
+                    return confirmations[currentClientId] != true
+                }
+                return false
+            }
             if pending.isEmpty {
                 Text("No pending bookings").foregroundColor(.secondary)
             } else {
@@ -370,7 +400,17 @@ struct BookingRowView: View {
     let item: FirestoreManager.BookingItem
     @EnvironmentObject var firestore: FirestoreManager
 
+    private var isGroup: Bool {
+        item.isGroupBooking ?? false ||
+        (item.coachIDs?.count ?? 0) > 1 ||
+        (item.clientIDs?.count ?? 0) > 1
+    }
+
     private var displayTitle: String {
+        if isGroup {
+            return "Group Session"
+        }
+
         let role = firestore.currentUserType?.uppercased()
         if role == "COACH" {
             // Try clientName from booking, then lookup from clients list, then fallback to "Client"
@@ -396,11 +436,60 @@ struct BookingRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                if isGroup {
+                    Image(systemName: "person.3.fill")
+                        .foregroundColor(.blue)
+                }
                 Text(displayTitle).font(.headline)
                 Spacer()
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            // Show participant summary for group bookings
+            if isGroup {
+                // Show coaches with their acceptance status
+                if !item.allCoachIDs.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Coaches:").font(.subheadline).foregroundColor(.secondary)
+                        ForEach(Array(zip(item.allCoachIDs, item.allCoachNames)), id: \.0) { coachId, coachName in
+                            let accepted = item.coachAcceptances?[coachId] ?? false
+                            HStack(spacing: 4) {
+                                Image(systemName: accepted ? "checkmark.circle.fill" : "clock")
+                                    .foregroundColor(accepted ? .green : .orange)
+                                    .font(.caption)
+                                Text(coachName)
+                                    .font(.subheadline)
+                                    .foregroundColor(accepted ? .primary : .secondary)
+                            }
+                        }
+                    }
+                }
+                // Show clients with their confirmation status for multi-client bookings
+                if item.allClientIDs.count > 1 {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Clients:").font(.subheadline).foregroundColor(.secondary)
+                        ForEach(Array(zip(item.allClientIDs, item.allClientNames)), id: \.0) { clientId, clientName in
+                            let confirmed = item.clientConfirmations?[clientId] ?? false
+                            HStack(spacing: 4) {
+                                Image(systemName: confirmed ? "checkmark.circle.fill" : "clock")
+                                    .foregroundColor(confirmed ? .green : .orange)
+                                    .font(.caption)
+                                Text(clientName)
+                                    .font(.subheadline)
+                                    .foregroundColor(confirmed ? .primary : .secondary)
+                            }
+                        }
+                    }
+                } else if !item.allClientNames.isEmpty {
+                    Text("Clients: \(item.allClientNames.joined(separator: ", "))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Text(item.participantSummary)
+                    .font(.caption)
+                    .foregroundColor(.blue)
             }
 
             if let start = item.startAt {

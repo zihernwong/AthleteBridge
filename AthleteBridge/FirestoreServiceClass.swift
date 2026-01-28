@@ -200,6 +200,17 @@ class FirestoreManager: ObservableObject {
         let paymentStatus: String?
         let RateUSD: Double?
 
+        // Group booking fields
+        let clientIDs: [String]?
+        let clientNames: [String]?
+        let coachIDs: [String]?
+        let coachNames: [String]?
+        let isGroupBooking: Bool?
+        let creatorID: String?
+        let creatorType: String?
+        let coachAcceptances: [String: Bool]?
+        let clientConfirmations: [String: Bool]?
+
         init(id: String,
              clientID: String,
              clientName: String? = nil,
@@ -211,7 +222,16 @@ class FirestoreManager: ObservableObject {
              notes: String? = nil,
              status: String? = nil,
              paymentStatus: String? = nil,
-             RateUSD: Double? = nil) {
+             RateUSD: Double? = nil,
+             clientIDs: [String]? = nil,
+             clientNames: [String]? = nil,
+             coachIDs: [String]? = nil,
+             coachNames: [String]? = nil,
+             isGroupBooking: Bool? = nil,
+             creatorID: String? = nil,
+             creatorType: String? = nil,
+             coachAcceptances: [String: Bool]? = nil,
+             clientConfirmations: [String: Bool]? = nil) {
             self.id = id
             self.clientID = clientID
             self.clientName = clientName
@@ -224,6 +244,61 @@ class FirestoreManager: ObservableObject {
             self.status = status
             self.paymentStatus = paymentStatus
             self.RateUSD = RateUSD
+            self.clientIDs = clientIDs
+            self.clientNames = clientNames
+            self.coachIDs = coachIDs
+            self.coachNames = coachNames
+            self.isGroupBooking = isGroupBooking
+            self.creatorID = creatorID
+            self.creatorType = creatorType
+            self.coachAcceptances = coachAcceptances
+            self.clientConfirmations = clientConfirmations
+        }
+
+        // Computed properties for unified access
+        var allCoachIDs: [String] {
+            if let ids = coachIDs, !ids.isEmpty { return ids }
+            return coachID.isEmpty ? [] : [coachID]
+        }
+
+        var allClientIDs: [String] {
+            if let ids = clientIDs, !ids.isEmpty { return ids }
+            return clientID.isEmpty ? [] : [clientID]
+        }
+
+        var allCoachNames: [String] {
+            if let names = coachNames, !names.isEmpty { return names }
+            if let name = coachName { return [name] }
+            return []
+        }
+
+        var allClientNames: [String] {
+            if let names = clientNames, !names.isEmpty { return names }
+            if let name = clientName { return [name] }
+            return []
+        }
+
+        var allCoachesAccepted: Bool {
+            guard let acceptances = coachAcceptances, !acceptances.isEmpty else {
+                return true // Legacy booking or no acceptances tracking
+            }
+            return acceptances.values.allSatisfy { $0 }
+        }
+
+        var allClientsConfirmed: Bool {
+            guard let confirmations = clientConfirmations, !confirmations.isEmpty else {
+                return true // Legacy booking or no confirmations tracking
+            }
+            return confirmations.values.allSatisfy { $0 }
+        }
+
+        var participantSummary: String {
+            let coachCount = allCoachIDs.count
+            let clientCount = allClientIDs.count
+            if coachCount == 1 && clientCount == 1 {
+                return "1:1 Session"
+            }
+            return "\(coachCount) coach\(coachCount > 1 ? "es" : ""), \(clientCount) client\(clientCount > 1 ? "s" : "")"
         }
     }
 
@@ -1283,7 +1358,17 @@ class FirestoreManager: ObservableObject {
                                 let status = data["Status"] as? String
                                 let paymentStatus = data["PaymentStatus"] as? String
                                 let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                                // Group booking fields
+                                let clientIDs = data["ClientIDs"] as? [String]
+                                let clientNamesArr = data["ClientNames"] as? [String]
+                                let coachIDs = data["CoachIDs"] as? [String]
+                                let coachNamesArr = data["CoachNames"] as? [String]
+                                let isGroupBooking = data["isGroupBooking"] as? Bool
+                                let creatorID = data["creatorID"] as? String
+                                let creatorType = data["creatorType"] as? String
+                                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                                 results.append(item)
                                 group.leave()
                             }
@@ -1297,7 +1382,17 @@ class FirestoreManager: ObservableObject {
                             let status = data["Status"] as? String
                             let paymentStatus = data["PaymentStatus"] as? String
                             let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                            // Group booking fields
+                            let clientIDs = data["ClientIDs"] as? [String]
+                            let clientNamesArr = data["ClientNames"] as? [String]
+                            let coachIDs = data["CoachIDs"] as? [String]
+                            let coachNamesArr = data["CoachNames"] as? [String]
+                            let isGroupBooking = data["isGroupBooking"] as? Bool
+                            let creatorID = data["creatorID"] as? String
+                            let creatorType = data["creatorType"] as? String
+                            let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                            let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                             results.append(item)
                             group.leave()
                         }
@@ -1325,7 +1420,17 @@ class FirestoreManager: ObservableObject {
                             let status = data["Status"] as? String
                             let paymentStatus = data["PaymentStatus"] as? String
                             let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                            // Group booking fields
+                            let clientIDs = data["ClientIDs"] as? [String]
+                            let clientNamesArr = data["ClientNames"] as? [String]
+                            let coachIDs = data["CoachIDs"] as? [String]
+                            let coachNamesArr = data["CoachNames"] as? [String]
+                            let isGroupBooking = data["isGroupBooking"] as? Bool
+                            let creatorID = data["creatorID"] as? String
+                            let creatorType = data["creatorType"] as? String
+                            let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                            let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                             results.append(item)
                             group.leave()
                         }
@@ -1339,7 +1444,17 @@ class FirestoreManager: ObservableObject {
                         let status = data["Status"] as? String
                         let paymentStatus = data["PaymentStatus"] as? String
                         let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
-                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                        // Group booking fields
+                        let clientIDs = data["ClientIDs"] as? [String]
+                        let clientNamesArr = data["ClientNames"] as? [String]
+                        let coachIDs = data["CoachIDs"] as? [String]
+                        let coachNamesArr = data["CoachNames"] as? [String]
+                        let isGroupBooking = data["isGroupBooking"] as? Bool
+                        let creatorID = data["creatorID"] as? String
+                        let creatorType = data["creatorType"] as? String
+                        let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                        let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                         results.append(item)
                         group.leave()
                     }
@@ -1471,7 +1586,17 @@ class FirestoreManager: ObservableObject {
                 let clientName = (data["ClientName"] as? String)
                     ?? (data["clientName"] as? String)
                     ?? (data["client_name"] as? String)
-                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Group booking fields
+                let clientIDs = data["ClientIDs"] as? [String]
+                let clientNames = data["ClientNames"] as? [String]
+                let coachIDs = data["CoachIDs"] as? [String]
+                let coachNames = data["CoachNames"] as? [String]
+                let isGroupBooking = data["isGroupBooking"] as? Bool
+                let creatorID = data["creatorID"] as? String
+                let creatorType = data["creatorType"] as? String
+                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
             }
             completion(items)
         }
@@ -1502,7 +1627,17 @@ class FirestoreManager: ObservableObject {
                 let clientName = (data["ClientName"] as? String)
                     ?? (data["clientName"] as? String)
                     ?? (data["client_name"] as? String)
-                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Group booking fields
+                let clientIDs = data["ClientIDs"] as? [String]
+                let clientNames = data["ClientNames"] as? [String]
+                let coachIDs = data["CoachIDs"] as? [String]
+                let coachNames = data["CoachNames"] as? [String]
+                let isGroupBooking = data["isGroupBooking"] as? Bool
+                let creatorID = data["creatorID"] as? String
+                let creatorType = data["creatorType"] as? String
+                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
             }
             completion(items)
         }
@@ -2150,6 +2285,229 @@ class FirestoreManager: ObservableObject {
         saveBookingAndMirror(coachId: coachUid, clientId: clientUid, startAt: startAt, endAt: endAt, status: status, location: location, notes: notes, extra: nil, completion: completion)
     }
 
+    /// Save a group booking with multiple coaches and/or multiple clients.
+    /// Mirrors the booking to all participants' subcollections and updates all coaches' calendar arrays.
+    func saveGroupBookingAndMirror(
+        coachIds: [String],
+        clientIds: [String],
+        startAt: Date,
+        endAt: Date,
+        status: String = "requested",
+        location: String? = nil,
+        notes: String? = nil,
+        creatorID: String,
+        creatorType: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        guard !coachIds.isEmpty, !clientIds.isEmpty else {
+            completion(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "At least one coach and one client required"]))
+            return
+        }
+
+        let bookingRef = self.db.collection("bookings").document()
+        let bookingId = bookingRef.documentID
+
+        // Fetch all coach and client names concurrently
+        let group = DispatchGroup()
+        var coachNames: [String: String] = [:]
+        var clientNames: [String: String] = [:]
+
+        for coachId in coachIds {
+            group.enter()
+            self.db.collection("coaches").document(coachId).getDocument { snap, _ in
+                if let data = snap?.data() {
+                    let firstName = data["FirstName"] as? String ?? ""
+                    let lastName = data["LastName"] as? String ?? ""
+                    let fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
+                    if !fullName.isEmpty { coachNames[coachId] = fullName }
+                }
+                group.leave()
+            }
+        }
+
+        for clientId in clientIds {
+            group.enter()
+            self.db.collection("clients").document(clientId).getDocument { snap, _ in
+                if let data = snap?.data() {
+                    let firstName = data["FirstName"] as? String ?? ""
+                    let lastName = data["LastName"] as? String ?? ""
+                    var fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
+                    if fullName.isEmpty {
+                        fullName = data["name"] as? String ?? ""
+                    }
+                    if !fullName.isEmpty { clientNames[clientId] = fullName }
+                }
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+
+            // Build ordered arrays of names
+            let coachNamesArray = coachIds.map { coachNames[$0] ?? $0 }
+            let clientNamesArray = clientIds.map { clientNames[$0] ?? $0 }
+
+            // Initialize coach acceptances - all false initially
+            let coachAcceptances = Dictionary(uniqueKeysWithValues: coachIds.map { ($0, false) })
+
+            // Initialize client confirmations - all false initially (for multi-client bookings)
+            let clientConfirmations = Dictionary(uniqueKeysWithValues: clientIds.map { ($0, false) })
+
+            // Determine if this is a group booking
+            let isGroupBooking = coachIds.count > 1 || clientIds.count > 1
+
+            // Primary coach and client for backward compatibility
+            let primaryCoachId = coachIds[0]
+            let primaryClientId = clientIds[0]
+            let primaryCoachRef = self.db.collection("coaches").document(primaryCoachId)
+            let primaryClientRef = self.db.collection("clients").document(primaryClientId)
+
+            var data: [String: Any] = [
+                "CoachID": primaryCoachRef,
+                "ClientID": primaryClientRef,
+                "CoachIDs": coachIds,
+                "ClientIDs": clientIds,
+                "CoachNames": coachNamesArray,
+                "ClientNames": clientNamesArray,
+                "CoachName": coachNamesArray.first ?? "",
+                "ClientName": clientNamesArray.first ?? "",
+                "StartAt": Timestamp(date: startAt),
+                "EndAt": Timestamp(date: endAt),
+                "Location": location ?? "",
+                "Notes": notes ?? "",
+                "Status": status,
+                "isGroupBooking": isGroupBooking,
+                "creatorID": creatorID,
+                "creatorType": creatorType,
+                "CoachAcceptances": coachAcceptances,
+                "ClientConfirmations": clientConfirmations,
+                "createdAt": FieldValue.serverTimestamp()
+            ]
+
+            print("[FirestoreManager] saveGroupBookingAndMirror begin: bookingId=\(bookingId) coaches=\(coachIds) clients=\(clientIds)")
+
+            let batch = self.db.batch()
+
+            // Set root booking document
+            batch.setData(data, forDocument: bookingRef)
+
+            // Mirror to ALL coaches' subcollections and update their calendar arrays
+            for coachId in coachIds {
+                let coachRef = self.db.collection("coaches").document(coachId)
+                let coachBookingRef = coachRef.collection("bookings").document(bookingId)
+                batch.setData(data, forDocument: coachBookingRef)
+
+                // Build calendar summary for this coach
+                let bookingSummary: [String: Any] = [
+                    "id": bookingId,
+                    "ClientIDs": clientIds,
+                    "CoachIDs": coachIds,
+                    "StartAt": Timestamp(date: startAt),
+                    "EndAt": Timestamp(date: endAt),
+                    "Location": location ?? "",
+                    "Notes": notes ?? "",
+                    "Status": status,
+                    "isGroupBooking": isGroupBooking,
+                    "createdAt": Timestamp(date: Date())
+                ]
+                batch.updateData(["calendar": FieldValue.arrayUnion([bookingSummary])], forDocument: coachRef)
+            }
+
+            // Mirror to ALL clients' subcollections
+            for clientId in clientIds {
+                let clientBookingRef = self.db.collection("clients").document(clientId).collection("bookings").document(bookingId)
+                batch.setData(data, forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("[FirestoreManager] saveGroupBookingAndMirror commit error: \(err)")
+                    completion(err)
+                    return
+                }
+                print("[FirestoreManager] saveGroupBookingAndMirror commit succeeded for booking \(bookingId)")
+
+                // Send notifications to all coaches (if status is requested)
+                if status.lowercased() == "requested" {
+                    let creatorName = creatorType == "client" ? (clientNames[creatorID] ?? "A client") : (coachNames[creatorID] ?? "A coach")
+                    for coachId in coachIds {
+                        // Don't notify the creator if they're a coach
+                        if coachId == creatorID { continue }
+
+                        let notifRef = self.db.collection("pendingNotifications").document(coachId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Group Booking Requested",
+                            "body": "\(creatorName) requested a group session - Action Required",
+                            "bookingId": bookingId,
+                            "senderId": creatorID,
+                            "isGroupBooking": true,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { nerr in
+                            if let nerr = nerr {
+                                print("[FirestoreManager] Failed to write group booking notification for coach \(coachId): \(nerr)")
+                            }
+                        }
+                    }
+
+                    // Notify other clients that they've been added to a group session
+                    if clientIds.count > 1 {
+                        for clientId in clientIds {
+                            // Don't notify the creator
+                            if clientId == creatorID { continue }
+
+                            let notifRef = self.db.collection("pendingNotifications").document(clientId).collection("notifications").document()
+                            let notifPayload: [String: Any] = [
+                                "title": "Added to Group Session",
+                                "body": "\(creatorName) added you to a group session",
+                                "bookingId": bookingId,
+                                "senderId": creatorID,
+                                "isGroupBooking": true,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                            notifRef.setData(notifPayload) { nerr in
+                                if let nerr = nerr {
+                                    print("[FirestoreManager] Failed to write group booking notification for client \(clientId): \(nerr)")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                completion(nil)
+            }
+        }
+    }
+
+    /// Convenience wrapper for group bookings from UI.
+    func saveGroupBooking(
+        coachIds: [String],
+        clientIds: [String],
+        startAt: Date,
+        endAt: Date,
+        location: String?,
+        notes: String?,
+        creatorID: String,
+        creatorType: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        saveGroupBookingAndMirror(
+            coachIds: coachIds,
+            clientIds: clientIds,
+            startAt: startAt,
+            endAt: endAt,
+            status: "requested",
+            location: location,
+            notes: notes,
+            creatorID: creatorID,
+            creatorType: creatorType,
+            completion: completion
+        )
+    }
+
     /// Debug helper to fetch all bookings (root collection) and append a readable dump into bookingsDebug.
     func fetchAllBookingsDebug() {
         DispatchQueue.main.async { self.bookingsDebug = "Starting fetchAllBookingsDebug..." }
@@ -2297,7 +2655,17 @@ class FirestoreManager: ObservableObject {
                             }
                         }
 
-                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil)
+                        // Group booking fields
+                        let clientIDs = data["ClientIDs"] as? [String]
+                        let clientNames = data["ClientNames"] as? [String]
+                        let coachIDs = data["CoachIDs"] as? [String]
+                        let coachNames = data["CoachNames"] as? [String]
+                        let isGroupBooking = data["isGroupBooking"] as? Bool
+                        let creatorID = data["creatorID"] as? String
+                        let creatorType = data["creatorType"] as? String
+                        let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                        let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                         aggregated.append(item)
                     }
                     group.leave()
@@ -2496,6 +2864,315 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Accept a group booking as a specific coach.
+    /// Updates this coach's acceptance in CoachAcceptances map and determines overall status.
+    func acceptGroupBookingAsCoach(
+        bookingId: String,
+        coachId: String,
+        rateUSD: Double?,
+        coachNote: String?,
+        completion: @escaping (Error?) -> Void
+    ) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { [weak self] snap, err in
+            guard let self = self else { return }
+
+            if let err = err {
+                print("acceptGroupBookingAsCoach: failed to read booking: \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            // Get existing acceptances or create new map
+            var acceptances = data["CoachAcceptances"] as? [String: Bool] ?? [:]
+            let coachIds = data["CoachIDs"] as? [String] ?? []
+            let clientIds = data["ClientIDs"] as? [String] ?? []
+            let creatorID = data["creatorID"] as? String
+
+            // Mark this coach as accepted
+            acceptances[coachId] = true
+
+            // Check if all coaches have now accepted
+            let allAccepted = coachIds.allSatisfy { acceptances[$0] == true }
+
+            // Determine new status
+            let newStatus = allAccepted ? "Pending Acceptance" : "partially_accepted"
+
+            var updateData: [String: Any] = [
+                "CoachAcceptances": acceptances,
+                "Status": newStatus
+            ]
+            if let rate = rateUSD {
+                updateData["RateUSD"] = rate
+            }
+            if let note = coachNote, !note.isEmpty {
+                updateData["CoachNote"] = note
+            }
+
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(updateData, forDocument: bookingRef)
+
+            // Update ALL coach mirrors
+            for cId in coachIds {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(updateData, forDocument: coachBookingRef)
+            }
+
+            // Update ALL client mirrors
+            for clId in clientIds {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(updateData, forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("acceptGroupBookingAsCoach: batch commit failed: \(err)")
+                    completion(err)
+                    return
+                }
+
+                print("acceptGroupBookingAsCoach: coach \(coachId) accepted booking \(bookingId), status=\(newStatus)")
+
+                // Send notifications
+                // Notify ALL clients when all coaches have accepted
+                if allAccepted {
+                    for clientId in clientIds {
+                        let notifRef = self.db.collection("pendingNotifications").document(clientId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Group Booking Ready",
+                            "body": "All coaches have accepted your group session - Please confirm",
+                            "bookingId": bookingId,
+                            "senderId": coachId,
+                            "isGroupBooking": true,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                }
+
+                // Notify other coaches that this coach accepted
+                for otherCoachId in coachIds where otherCoachId != coachId {
+                    let notifRef = self.db.collection("pendingNotifications").document(otherCoachId).collection("notifications").document()
+                    let notifPayload: [String: Any] = [
+                        "title": "Coach Accepted",
+                        "body": "A coach has accepted the group session",
+                        "bookingId": bookingId,
+                        "senderId": coachId,
+                        "isGroupBooking": true,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ]
+                    notifRef.setData(notifPayload) { _ in }
+                }
+
+                completion(nil)
+            }
+        }
+    }
+
+    /// Confirm a group booking as a client (after all coaches have accepted).
+    /// For multi-client bookings, tracks per-client confirmations.
+    func confirmGroupBookingAsClient(bookingId: String, clientId: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { [weak self] snap, err in
+            guard let self = self else { return }
+
+            if let err = err {
+                print("confirmGroupBookingAsClient: failed to read booking: \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            let coachIds = data["CoachIDs"] as? [String] ?? []
+            let clientIds = data["ClientIDs"] as? [String] ?? []
+
+            // Get existing confirmations or create new map
+            var confirmations = data["ClientConfirmations"] as? [String: Bool] ?? [:]
+
+            // Mark this client as confirmed
+            confirmations[clientId] = true
+
+            // Check if all clients have now confirmed
+            let allConfirmed = clientIds.allSatisfy { confirmations[$0] == true }
+
+            // Determine new status
+            let newStatus = allConfirmed ? "confirmed" : "partially_confirmed"
+
+            var updateData: [String: Any] = [
+                "ClientConfirmations": confirmations,
+                "Status": newStatus
+            ]
+
+            // Only set confirmedAt when fully confirmed
+            if allConfirmed {
+                updateData["confirmedAt"] = FieldValue.serverTimestamp()
+            }
+
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(updateData, forDocument: bookingRef)
+
+            // Update ALL coach mirrors
+            for cId in coachIds {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(updateData, forDocument: coachBookingRef)
+            }
+
+            // Update ALL client mirrors
+            for clId in clientIds {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(updateData, forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("confirmGroupBookingAsClient: batch commit failed: \(err)")
+                    completion(err)
+                    return
+                }
+
+                print("confirmGroupBookingAsClient: client \(clientId) confirmed booking \(bookingId), status=\(newStatus)")
+
+                // Only notify coaches when ALL clients have confirmed (fully confirmed)
+                if allConfirmed {
+                    for coachId in coachIds {
+                        let notifRef = self.db.collection("pendingNotifications").document(coachId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Group Booking Confirmed",
+                            "body": "All clients have confirmed the group session",
+                            "bookingId": bookingId,
+                            "senderId": clientId,
+                            "isGroupBooking": true,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+
+                    // Notify other clients that the booking is fully confirmed
+                    for otherClientId in clientIds where otherClientId != clientId {
+                        let notifRef = self.db.collection("pendingNotifications").document(otherClientId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Group Session Confirmed",
+                            "body": "All participants have confirmed - your group session is now booked!",
+                            "bookingId": bookingId,
+                            "senderId": clientId,
+                            "isGroupBooking": true,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                } else {
+                    // Notify other clients that this client has confirmed (waiting for them)
+                    let clientName = data["ClientNames"] as? [String] ?? []
+                    let confirmingClientName = clientIds.firstIndex(of: clientId).flatMap { idx in
+                        idx < clientName.count ? clientName[idx] : nil
+                    } ?? "A participant"
+
+                    for otherClientId in clientIds where otherClientId != clientId && confirmations[otherClientId] != true {
+                        let notifRef = self.db.collection("pendingNotifications").document(otherClientId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Action Required: Confirm Group Session",
+                            "body": "\(confirmingClientName) has confirmed. Please review and confirm the group session.",
+                            "bookingId": bookingId,
+                            "senderId": clientId,
+                            "isGroupBooking": true,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                }
+
+                completion(nil)
+            }
+        }
+    }
+
+    /// Update booking status for group bookings - updates all participant mirrors.
+    func updateGroupBookingStatus(bookingId: String, status: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { [weak self] snap, err in
+            guard let self = self else { return }
+
+            if let err = err {
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            let coachIds = data["CoachIDs"] as? [String] ?? []
+            let clientIds = data["ClientIDs"] as? [String] ?? []
+
+            // Fall back to single coach/client if arrays are empty
+            var allCoachIds = coachIds
+            var allClientIds = clientIds
+            if allCoachIds.isEmpty {
+                if let ref = data["CoachID"] as? DocumentReference {
+                    allCoachIds = [ref.documentID]
+                } else if let s = data["CoachID"] as? String {
+                    allCoachIds = [s.split(separator: "/").last.map(String.init) ?? s]
+                }
+            }
+            if allClientIds.isEmpty {
+                if let ref = data["ClientID"] as? DocumentReference {
+                    allClientIds = [ref.documentID]
+                } else if let s = data["ClientID"] as? String {
+                    allClientIds = [s.split(separator: "/").last.map(String.init) ?? s]
+                }
+            }
+
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(["Status": status], forDocument: bookingRef)
+
+            // Update ALL coach mirrors
+            for cId in allCoachIds {
+                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
+                batch.updateData(["Status": status], forDocument: coachBookingRef)
+            }
+
+            // Update ALL client mirrors
+            for clId in allClientIds {
+                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
+                batch.updateData(["Status": status], forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("updateGroupBookingStatus: batch commit failed: \(err)")
+                    completion(err)
+                } else {
+                    print("updateGroupBookingStatus: booking \(bookingId) status updated to \(status)")
+                    completion(nil)
+                }
+            }
+        }
+    }
+
     /// Reschedule a booking by updating StartAt, EndAt, and Status across root and mirrored subcollections.
     func rescheduleBooking(bookingId: String, newStart: Date, newEnd: Date, newStatus: String, completion: @escaping (Error?) -> Void) {
         let bookingRef = self.db.collection("bookings").document(bookingId)
@@ -2649,7 +3326,17 @@ class FirestoreManager: ObservableObject {
                 let coachName = (data["CoachName"] as? String)
                     ?? (data["coachName"] as? String)
                     ?? (data["coach_name"] as? String)
-                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate)
+                // Group booking fields
+                let clientIDs = data["ClientIDs"] as? [String]
+                let clientNames = data["ClientNames"] as? [String]
+                let coachIDs = data["CoachIDs"] as? [String]
+                let coachNames = data["CoachNames"] as? [String]
+                let isGroupBooking = data["isGroupBooking"] as? Bool
+                let creatorID = data["creatorID"] as? String
+                let creatorType = data["creatorType"] as? String
+                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
+                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
+                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations)
                 items.append(item)
             }
             completion(items)
@@ -3260,6 +3947,7 @@ extension FirestoreManager {
         let startAt: Date
         let endAt: Date
         let notes: String?
+        let coachId: String?  // Added to track which coach the away time belongs to
     }
 
     /// Fetch away time blocks for a coach from coaches/{coachId}/awayTimes within an optional date range.
@@ -3278,7 +3966,7 @@ extension FirestoreManager {
                 let data = d.data()
                 guard let s = (data["startAt"] as? Timestamp)?.dateValue(), let e = (data["endAt"] as? Timestamp)?.dateValue() else { return nil }
                 let notes = data["notes"] as? String
-                return AwayTimeItem(id: d.documentID, startAt: s, endAt: e, notes: notes)
+                return AwayTimeItem(id: d.documentID, startAt: s, endAt: e, notes: notes, coachId: coachId)
             }
             completion(items)
         }

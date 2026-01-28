@@ -84,27 +84,59 @@ struct CoachConfirmedBookingsView: View {
     }
 
     private func cancelBooking(_ booking: FirestoreManager.BookingItem) {
-        firestore.updateBookingStatus(bookingId: booking.id, status: "cancelled") { err in
+        let isGroup = booking.isGroupBooking ?? false || booking.allCoachIDs.count > 1 || booking.allClientIDs.count > 1
+
+        // Use appropriate update function based on booking type
+        let updateFunc: (@escaping (Error?) -> Void) -> Void = { completion in
+            if isGroup {
+                self.firestore.updateGroupBookingStatus(bookingId: booking.id, status: "cancelled_by_coach", completion: completion)
+            } else {
+                self.firestore.updateBookingStatus(bookingId: booking.id, status: "cancelled_by_coach", completion: completion)
+            }
+        }
+
+        updateFunc { err in
             DispatchQueue.main.async {
                 if let err = err {
-                    firestore.showToast("Failed to cancel: \(err.localizedDescription)")
+                    self.firestore.showToast("Failed to cancel: \(err.localizedDescription)")
                 } else {
-                    // Send notification to client
-                    if !booking.clientID.isEmpty {
-                        let coachName = firestore.currentCoach?.name ?? "Coach"
-                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.clientID).collection("notifications").document()
+                    let coachName = self.firestore.currentCoach?.name ?? "Coach"
+                    let currentCoachId = self.auth.user?.uid ?? ""
+
+                    // Notify all clients
+                    for clientId in booking.allClientIDs {
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
                         let notifPayload: [String: Any] = [
-                            "title": "Booking Cancelled",
-                            "body": "\(coachName) has cancelled the booking.",
+                            "title": isGroup ? "Group Booking Cancelled" : "Booking Cancelled",
+                            "body": "\(coachName) has cancelled the \(isGroup ? "group " : "")booking.",
                             "bookingId": booking.id,
-                            "senderId": booking.coachID,
+                            "senderId": currentCoachId,
+                            "isGroupBooking": isGroup,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
                         ]
                         notifRef.setData(notifPayload) { _ in }
                     }
-                    firestore.showToast("Booking cancelled")
-                    firestore.fetchBookingsForCurrentCoachSubcollection()
+
+                    // For group bookings, also notify other coaches
+                    if isGroup {
+                        for coachId in booking.allCoachIDs where coachId != currentCoachId {
+                            let notifRef = Firestore.firestore().collection("pendingNotifications").document(coachId).collection("notifications").document()
+                            let notifPayload: [String: Any] = [
+                                "title": "Group Booking Cancelled",
+                                "body": "\(coachName) has cancelled the group booking.",
+                                "bookingId": booking.id,
+                                "senderId": currentCoachId,
+                                "isGroupBooking": true,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                            notifRef.setData(notifPayload) { _ in }
+                        }
+                    }
+
+                    self.firestore.showToast("Booking cancelled")
+                    self.firestore.fetchBookingsForCurrentCoachSubcollection()
                 }
             }
         }

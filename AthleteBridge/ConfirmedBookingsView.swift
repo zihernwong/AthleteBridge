@@ -85,26 +85,40 @@ struct ConfirmedBookingsView: View {
     }
 
     private func cancelBooking(_ booking: FirestoreManager.BookingItem) {
-        firestore.updateBookingStatus(bookingId: booking.id, status: "cancelled") { err in
+        let isGroup = booking.isGroupBooking ?? false || booking.allCoachIDs.count > 1
+
+        // Use appropriate update function based on booking type
+        let updateFunc: (@escaping (Error?) -> Void) -> Void = { completion in
+            if isGroup {
+                self.firestore.updateGroupBookingStatus(bookingId: booking.id, status: "cancelled", completion: completion)
+            } else {
+                self.firestore.updateBookingStatus(bookingId: booking.id, status: "cancelled", completion: completion)
+            }
+        }
+
+        updateFunc { err in
             DispatchQueue.main.async {
                 if let err = err {
-                    firestore.showToast("Failed to cancel: \(err.localizedDescription)")
+                    self.firestore.showToast("Failed to cancel: \(err.localizedDescription)")
                 } else {
-                    if !booking.coachID.isEmpty {
-                        let clientName = firestore.currentClient?.name ?? "Client"
-                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.coachID).collection("notifications").document()
+                    // Notify all coaches in the booking
+                    let clientName = self.firestore.currentClient?.name ?? "Client"
+                    let coachIds = booking.allCoachIDs
+                    for coachId in coachIds {
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(coachId).collection("notifications").document()
                         let notifPayload: [String: Any] = [
-                            "title": "Booking Cancelled",
-                            "body": "\(clientName) has cancelled the booking.",
+                            "title": isGroup ? "Group Booking Cancelled" : "Booking Cancelled",
+                            "body": "\(clientName) has cancelled the \(isGroup ? "group " : "")booking.",
                             "bookingId": booking.id,
                             "senderId": booking.clientID,
+                            "isGroupBooking": isGroup,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
                         ]
                         notifRef.setData(notifPayload) { _ in }
                     }
-                    firestore.showToast("Booking cancelled")
-                    firestore.fetchBookingsForCurrentClientSubcollection()
+                    self.firestore.showToast("Booking cancelled")
+                    self.firestore.fetchBookingsForCurrentClientSubcollection()
                 }
             }
         }

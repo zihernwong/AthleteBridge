@@ -12,6 +12,13 @@ struct BookingEditorView: View {
     @State private var startAt: Date = Date()
     @State private var endAt: Date = Date().addingTimeInterval(60*60)
 
+    // Group booking support
+    @State private var isGroupBooking: Bool = false
+    @State private var selectedCoachIds: Set<String> = []
+    @State private var selectedCoachNames: Set<String> = []
+    @State private var selectedClientIds: Set<String> = []
+    @State private var selectedClientNames: Set<String> = []
+
     // Reviews for selected coach
     @State private var coachReviews: [FirestoreManager.ReviewItem] = []
 
@@ -58,22 +65,130 @@ struct BookingEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    if let client = firestore.currentClient {
-                        Text("Signed in as: \(client.name)")
-                    } else if let uid = auth.user?.uid {
-                        // fallback: show uid while we fetch profile
-                        Text("Signed in as: \(uid)")
+                    if isGroupBooking {
+                        // Multi-select clients for group bookings
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let currentClient = firestore.currentClient {
+                                HStack {
+                                    Image(systemName: "person.fill")
+                                        .foregroundColor(.green)
+                                    Text("You: \(currentClient.name)")
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Text("(included)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            // Filter out current user from the client list
+                            let otherClients = firestore.clients.filter { $0.id != auth.user?.uid }
+                            if !otherClients.isEmpty {
+                                MultiSelectDropdown(
+                                    title: "Add Other Clients",
+                                    items: otherClients.map { $0.name },
+                                    selection: $selectedClientNames,
+                                    placeholder: "Tap to add more clients"
+                                )
+                                .onChange(of: selectedClientNames) { _, newNames in
+                                    // Sync IDs with names
+                                    selectedClientIds = Set(newNames.compactMap { name in
+                                        firestore.clients.first(where: { $0.name == name })?.id
+                                    })
+                                }
+                            }
+
+                            let totalClients = 1 + selectedClientIds.count
+                            if totalClients > 1 {
+                                Text("\(totalClients) clients in this session")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                        }
                     } else {
-                        Text("Not signed in").foregroundColor(.secondary)
+                        // Single client (current user) for regular bookings
+                        if let client = firestore.currentClient {
+                            Text("Signed in as: \(client.name)")
+                        } else if let uid = auth.user?.uid {
+                            // fallback: show uid while we fetch profile
+                            Text("Signed in as: \(uid)")
+                        } else {
+                            Text("Not signed in").foregroundColor(.secondary)
+                        }
                     }
                 } header: {
-                    Text("Client (defaults to signed-in user)")
+                    Text(isGroupBooking ? "Clients" : "Client (defaults to signed-in user)")
+                }
+
+                // Group Booking Toggle
+                Section {
+                    Toggle("Group Booking", isOn: $isGroupBooking)
+                        .onChange(of: isGroupBooking) { _, newValue in
+                            if newValue {
+                                // When enabling group booking, add currently selected coach to set
+                                if !selectedCoachId.isEmpty {
+                                    selectedCoachIds.insert(selectedCoachId)
+                                    if let coach = selectedCoach {
+                                        selectedCoachNames.insert(coach.name)
+                                    }
+                                }
+                                // Fetch clients list for multi-select
+                                firestore.fetchClients()
+                            } else {
+                                // When disabling, use first selected coach as the single selection
+                                if let firstId = selectedCoachIds.first {
+                                    selectedCoachId = firstId
+                                    if let coach = firestore.coaches.first(where: { $0.id == firstId }) {
+                                        coachSearchText = coach.name
+                                    }
+                                }
+                                selectedCoachIds.removeAll()
+                                selectedCoachNames.removeAll()
+                                // Clear client selections
+                                selectedClientIds.removeAll()
+                                selectedClientNames.removeAll()
+                            }
+                        }
+                    if isGroupBooking {
+                        Text("Select multiple coaches and/or clients for a group session")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } header: {
+                    Text("Booking Type")
                 }
 
                 Section {
                     if firestore.coaches.isEmpty {
                         Text("No coaches available").foregroundColor(.secondary)
+                    } else if isGroupBooking {
+                        // Multi-select mode for group bookings
+                        VStack(alignment: .leading, spacing: 8) {
+                            MultiSelectDropdown(
+                                title: "Select Coaches",
+                                items: firestore.coaches.map { $0.name },
+                                selection: $selectedCoachNames,
+                                placeholder: "Tap to select coaches"
+                            )
+                            .onChange(of: selectedCoachNames) { _, newNames in
+                                // Sync IDs with names
+                                selectedCoachIds = Set(newNames.compactMap { name in
+                                    firestore.coaches.first(where: { $0.name == name })?.id
+                                })
+                                // Update single selection for compatibility
+                                if let firstId = selectedCoachIds.first {
+                                    selectedCoachId = firstId
+                                }
+                            }
+
+                            if !selectedCoachIds.isEmpty {
+                                Text("\(selectedCoachIds.count) coach\(selectedCoachIds.count > 1 ? "es" : "") selected")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     } else {
+                        // Single coach selection (original behavior)
                         VStack(alignment: .leading, spacing: 8) {
                             TextField("Search coach by name", text: $coachSearchText)
                                 .textFieldStyle(.roundedBorder)
@@ -110,7 +225,7 @@ struct BookingEditorView: View {
                         }
                     }
                 } header: {
-                    Text("Coach")
+                    Text(isGroupBooking ? "Coaches" : "Coach")
                 }
 
                 // Only after a coach is selected, show Coach Info and Calendar
@@ -203,6 +318,18 @@ struct BookingEditorView: View {
 
                     // Show coach calendar grid once a coach is selected; hide time pickers
                     Section {
+                        // Show merged availability info for group bookings
+                        if isGroupBooking && selectedCoachIds.count > 1 {
+                            HStack {
+                                Image(systemName: "calendar.badge.checkmark")
+                                    .foregroundColor(.blue)
+                                Text("Showing combined availability for \(selectedCoachIds.count) coaches")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(.vertical, 4)
+                        }
+
                         // Calendar day controls
                         HStack {
                             Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.left") }
@@ -217,6 +344,7 @@ struct BookingEditorView: View {
                         .padding(.vertical, 6)
 
                         CoachCalendarGridView(coachID: selectedCoachId,
+                                              coachIDs: isGroupBooking ? Array(selectedCoachIds) : nil,
                                               date: $calendarDate,
                                               showOnlyAvailable: false,
                                               onSlotSelected: nil,
@@ -232,7 +360,7 @@ struct BookingEditorView: View {
                                               })
                             .environmentObject(firestore)
                             .environmentObject(auth)
-                            .id(calendarDate)
+                            .id("\(calendarDate)-\(Array(selectedCoachIds).sorted().joined(separator: ","))")
 
                         if let s = selectedSlotStart, let e = selectedSlotEnd {
                             Text("Selected: \(DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)) - \(DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short))")
@@ -244,7 +372,7 @@ struct BookingEditorView: View {
                                 .foregroundColor(.secondary)
                         }
                     } header: {
-                        Text("Coach Calendar")
+                        Text(isGroupBooking && selectedCoachIds.count > 1 ? "Combined Coach Availability" : "Coach Calendar")
                     }
 
                     // Details section remains
@@ -433,11 +561,23 @@ struct BookingEditorView: View {
             showAlert = true
             return
         }
-        let coachUid = selectedCoachId
-        guard !coachUid.isEmpty else {
-            alertMessage = "Select a coach"
-            showAlert = true
-            return
+
+        // Get coach IDs based on booking type
+        let coachIdsToBook: [String]
+        if isGroupBooking {
+            coachIdsToBook = Array(selectedCoachIds)
+            guard !coachIdsToBook.isEmpty else {
+                alertMessage = "Select at least one coach for group booking"
+                showAlert = true
+                return
+            }
+        } else {
+            guard !selectedCoachId.isEmpty else {
+                alertMessage = "Select a coach"
+                showAlert = true
+                return
+            }
+            coachIdsToBook = [selectedCoachId]
         }
 
         // Snap times to nearest 30-minute boundary before validation/save
@@ -465,32 +605,52 @@ struct BookingEditorView: View {
 
         isSaving = true
 
-        // Check for overlapping bookings — fetch the full day to catch all possible overlaps
+        // Check for overlapping bookings for ALL coaches
         let dayStart = Calendar.current.startOfDay(for: startAt)
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? startAt
-        firestore.fetchBookingsForCoach(coachId: coachUid, start: dayStart, end: dayEnd) { existingBookings in
-            DispatchQueue.main.async {
+
+        // For group bookings, check all coaches for overlaps
+        let group = DispatchGroup()
+        var hasOverlap = false
+        var overlapCoachName: String? = nil
+
+        for coachId in coachIdsToBook {
+            group.enter()
+            firestore.fetchBookingsForCoach(coachId: coachId, start: dayStart, end: dayEnd) { existingBookings in
                 let overlapping = existingBookings.filter { b in
                     guard let bStart = b.startAt, let bEnd = b.endAt else { return false }
                     let status = (b.status ?? "").lowercased()
-                    // Block if any booking in this range is requested, confirmed, or pending acceptance
-                    guard status == "requested" || status == "confirmed" || status == "pending acceptance" else { return false }
+                    guard status == "requested" || status == "confirmed" || status == "pending acceptance" || status == "partially_accepted" else { return false }
                     return bStart < self.endAt && bEnd > self.startAt
                 }
                 if !overlapping.isEmpty {
-                    self.isSaving = false
-                    self.alertMessage = "This time is already requested by you or someone else. Please choose a different time."
-                    self.showAlert = true
-                    return
+                    hasOverlap = true
+                    if let coach = self.firestore.coaches.first(where: { $0.id == coachId }) {
+                        overlapCoachName = coach.name
+                    }
                 }
-
-                // No overlap — proceed with save
-                self.performSave(coachUid: coachUid, clientUid: clientUid)
+                group.leave()
             }
+        }
+
+        group.notify(queue: .main) {
+            if hasOverlap {
+                self.isSaving = false
+                if let coachName = overlapCoachName {
+                    self.alertMessage = "\(coachName) already has a booking at this time. Please choose a different time."
+                } else {
+                    self.alertMessage = "One or more coaches have a conflicting booking. Please choose a different time."
+                }
+                self.showAlert = true
+                return
+            }
+
+            // No overlap — proceed with save
+            self.performSave(coachIds: coachIdsToBook, clientUid: clientUid)
         }
     }
 
-    private func performSave(coachUid: String, clientUid: String) {
+    private func performSave(coachIds: [String], clientUid: String) {
         // UI-level timeout: ensure spinner cleared if backend callback never invoked
         var uiTimeoutItem: DispatchWorkItem? = nil
         uiTimeoutItem = DispatchWorkItem {
@@ -501,36 +661,74 @@ struct BookingEditorView: View {
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20.0, execute: uiTimeoutItem!)
-        // Determine location name from the selected saved location id; allow nil for no selection
+
+        // Determine location name from the selected saved location id
         let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
-        // Always create bookings with default status "requested"
-        let clientNameExtra = firestore.currentClient?.name ?? ""
-        let coachNameExtra = selectedCoach?.name ?? ""
-        let extra: [String: Any] = {
-            var m: [String: Any] = [:]
-            if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }
-            if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
-            return m
-        }()
-        firestore.saveBookingAndMirror(coachId: coachUid, clientId: clientUid, startAt: startAt, endAt: endAt, status: "requested", location: locationName, notes: notes, extra: extra) { err in
+
+        let saveCompletion: (Error?) -> Void = { err in
             DispatchQueue.main.async {
-                // cancel UI timeout
                 uiTimeoutItem?.cancel()
                 self.isSaving = false
                 if let err = err {
                     self.alertMessage = "Failed to save booking: \(err.localizedDescription)"
                     self.showAlert = true
                 } else {
-                    // Refresh the client subcollection which is the canonical source
-                    firestore.fetchBookingsForCurrentClientSubcollection()
-                    firestore.showToast("Booking saved")
-                    // Dismiss both sheets simultaneously
+                    self.firestore.fetchBookingsForCurrentClientSubcollection()
+                    self.firestore.showToast(self.isGroupBooking ? "Group booking saved" : "Booking saved")
                     withAnimation {
                         self.showConfirmOverlay = false
                         self.showSheet = false
                     }
                 }
             }
+        }
+
+        // Build client IDs list - always include current user, plus any additional selected clients
+        var allClientIds = [clientUid]
+        if isGroupBooking {
+            // Add other selected clients (excluding current user to avoid duplicates)
+            let additionalClients = Array(selectedClientIds).filter { $0 != clientUid }
+            allClientIds.append(contentsOf: additionalClients)
+        }
+
+        // Use group booking if multiple coaches OR multiple clients
+        let isMultiParticipant = isGroupBooking || coachIds.count > 1 || allClientIds.count > 1
+
+        if isMultiParticipant {
+            // Use group booking function
+            firestore.saveGroupBooking(
+                coachIds: coachIds,
+                clientIds: allClientIds,
+                startAt: startAt,
+                endAt: endAt,
+                location: locationName,
+                notes: notes,
+                creatorID: clientUid,
+                creatorType: "client",
+                completion: saveCompletion
+            )
+        } else {
+            // Use regular booking function for single coach
+            let coachUid = coachIds[0]
+            let clientNameExtra = firestore.currentClient?.name ?? ""
+            let coachNameExtra = selectedCoach?.name ?? ""
+            let extra: [String: Any] = {
+                var m: [String: Any] = [:]
+                if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }
+                if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
+                return m
+            }()
+            firestore.saveBookingAndMirror(
+                coachId: coachUid,
+                clientId: clientUid,
+                startAt: startAt,
+                endAt: endAt,
+                status: "requested",
+                location: locationName,
+                notes: notes,
+                extra: extra,
+                completion: saveCompletion
+            )
         }
     }
 }

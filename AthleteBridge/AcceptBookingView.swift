@@ -14,8 +14,18 @@ struct AcceptBookingView: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String? = nil
 
+    // Check if this is a group booking
+    private var isGroupBooking: Bool {
+        booking.isGroupBooking ?? false ||
+        (booking.coachIDs?.count ?? 0) > 1 ||
+        (booking.clientIDs?.count ?? 0) > 1
+    }
+
     // Resolve client display name: prefer booking.clientName, else lookup by clientID from firestore.clients
     private var clientDisplayName: String {
+        if isGroupBooking {
+            return booking.allClientNames.joined(separator: ", ")
+        }
         if let name = booking.clientName, !name.trimmingCharacters(in: .whitespaces).isEmpty {
             return name
         }
@@ -28,8 +38,45 @@ struct AcceptBookingView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Booking")) {
-                    HStack { Text("Client").bold(); Spacer(); Text(clientDisplayName) }
+                Section(header: Text(isGroupBooking ? "Group Booking" : "Booking")) {
+                    if isGroupBooking {
+                        HStack {
+                            Image(systemName: "person.3.fill")
+                                .foregroundColor(.blue)
+                            Text("Group Session")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                        }
+                    }
+
+                    // Show clients - use list format for multiple clients
+                    if isGroupBooking && booking.allClientNames.count > 1 {
+                        HStack(alignment: .top) {
+                            Text("Clients").bold()
+                            Spacer()
+                            VStack(alignment: .trailing) {
+                                ForEach(booking.allClientNames, id: \.self) { name in
+                                    Text(name).font(.subheadline)
+                                }
+                            }
+                        }
+                    } else {
+                        HStack { Text("Client").bold(); Spacer(); Text(clientDisplayName) }
+                    }
+
+                    // Show all coaches for group bookings
+                    if isGroupBooking && booking.allCoachNames.count > 1 {
+                        HStack(alignment: .top) {
+                            Text("Coaches").bold()
+                            Spacer()
+                            VStack(alignment: .trailing) {
+                                ForEach(booking.allCoachNames, id: \.self) { name in
+                                    Text(name).font(.subheadline)
+                                }
+                            }
+                        }
+                    }
+
                     if let status = booking.status, !status.isEmpty {
                         HStack { Text("Status").bold(); Spacer(); Text(status.capitalized) }
                     }
@@ -42,6 +89,33 @@ struct AcceptBookingView: View {
                     if let start = booking.startAt, let end = booking.endAt {
                         let mins = Int(end.timeIntervalSince(start) / 60)
                         HStack { Text("Duration").bold(); Spacer(); Text("\(mins) min") }
+                    }
+                }
+
+                // Show coach acceptance status for group bookings
+                if isGroupBooking, let acceptances = booking.coachAcceptances {
+                    Section(header: Text("Coach Acceptances")) {
+                        ForEach(booking.allCoachIDs, id: \.self) { coachId in
+                            let coachName = booking.coachNames?.first(where: { name in
+                                booking.coachIDs?.firstIndex(where: { $0 == coachId }).map { idx in
+                                    booking.coachNames?.indices.contains(idx) == true && booking.coachNames?[idx] == name
+                                } ?? false
+                            }) ?? coachId
+                            let accepted = acceptances[coachId] ?? false
+                            HStack {
+                                Text(coachName)
+                                Spacer()
+                                if accepted {
+                                    Label("Accepted", systemImage: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                        .font(.caption)
+                                } else {
+                                    Label("Pending", systemImage: "clock")
+                                        .foregroundColor(.orange)
+                                        .font(.caption)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -97,7 +171,7 @@ struct AcceptBookingView: View {
 
     private func save() {
         // Use AuthViewModel's user property for auth state rather than calling Firebase directly
-        guard auth.user != nil else {
+        guard let currentUserId = auth.user?.uid else {
             errorMessage = "Not authenticated"
             return
         }
@@ -107,7 +181,29 @@ struct AcceptBookingView: View {
 
         let rateVal = Double(rateText.replacingOccurrences(of: ",", with: "."))
 
-        // Build update payload and write directly to Firestore in a batched update.
+        // Use group booking acceptance for group bookings
+        if isGroupBooking {
+            firestore.acceptGroupBookingAsCoach(
+                bookingId: booking.id,
+                coachId: currentUserId,
+                rateUSD: rateVal,
+                coachNote: note.isEmpty ? nil : note
+            ) { err in
+                DispatchQueue.main.async {
+                    self.isSaving = false
+                    if let err = err {
+                        self.errorMessage = err.localizedDescription
+                    } else {
+                        self.firestore.fetchBookingsForCurrentCoachSubcollection()
+                        self.firestore.showToast("Accepted group booking")
+                        dismiss()
+                    }
+                }
+            }
+            return
+        }
+
+        // Original single-coach booking flow
         let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
         let coachId = booking.coachID
         let clientId = booking.clientID
