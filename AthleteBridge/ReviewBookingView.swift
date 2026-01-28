@@ -109,37 +109,55 @@ struct ReviewBookingView: View {
     }
 
     private func confirmOrDecline(status: String) {
-        // Call the centralized updater in FirestoreManager which updates root + mirrored docs.
-        firestore.updateBookingStatus(bookingId: booking.id, status: status) { err in
-            DispatchQueue.main.async {
-                if let err = err {
-                    firestore.showToast("Failed to update booking: \(err.localizedDescription)")
-                } else {
-                    // Send notification to coach when client confirms
-                    if status == "confirmed", !booking.coachID.isEmpty {
-                        let clientName = firestore.currentClient?.name ?? "Client"
-                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.coachID).collection("notifications").document()
-                        let notifPayload: [String: Any] = [
-                            "title": "Booking Confirmed",
-                            "body": "\(clientName) has confirmed the booking.",
-                            "bookingId": booking.id,
-                            "senderId": booking.clientID,
-                            "createdAt": FieldValue.serverTimestamp(),
-                            "delivered": false
-                        ]
-                        notifRef.setData(notifPayload) { nerr in
-                            if let nerr = nerr {
-                                print("[ReviewBookingView] Failed to send notification to coach: \(nerr)")
+        if booking.isGroupBooking == true && status == "confirmed" {
+            // Group booking: call group confirmation logic
+            guard let clientId = auth.user?.uid else {
+                firestore.showToast("No authenticated user")
+                return
+            }
+            firestore.confirmGroupBookingAsClient(bookingId: booking.id, clientId: clientId) { err in
+                DispatchQueue.main.async {
+                    if let err = err {
+                        firestore.showToast("Failed to update booking: \(err.localizedDescription)")
+                    } else {
+                        firestore.showToast("Group booking confirmation updated")
+                        firestore.fetchBookingsForCurrentClientSubcollection()
+                        firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
+                        dismiss()
+                    }
+                }
+            }
+        } else {
+            // Non-group booking or decline
+            firestore.updateBookingStatus(bookingId: booking.id, status: status) { err in
+                DispatchQueue.main.async {
+                    if let err = err {
+                        firestore.showToast("Failed to update booking: \(err.localizedDescription)")
+                    } else {
+                        // Send notification to coach when client confirms
+                        if status == "confirmed", !booking.coachID.isEmpty {
+                            let clientName = firestore.currentClient?.name ?? "Client"
+                            let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.coachID).collection("notifications").document()
+                            let notifPayload: [String: Any] = [
+                                "title": "Booking Confirmed",
+                                "body": "\(clientName) has confirmed the booking.",
+                                "bookingId": booking.id,
+                                "senderId": booking.clientID,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                            notifRef.setData(notifPayload) { nerr in
+                                if let nerr = nerr {
+                                    print("[ReviewBookingView] Failed to send notification to coach: \(nerr)")
+                                }
                             }
                         }
+                        let friendly = (status == "confirmed") ? "Booking confirmed" : "Booking declined"
+                        firestore.showToast(friendly)
+                        firestore.fetchBookingsForCurrentClientSubcollection()
+                        firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
+                        dismiss()
                     }
-                    let friendly = (status == "confirmed") ? "Booking confirmed" : "Booking declined"
-                    firestore.showToast(friendly)
-                    // Optionally refresh lists
-                    firestore.fetchBookingsForCurrentClientSubcollection()
-                    // refresh the coach-specific subcollection listing for the affected coach
-                    firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
-                    dismiss()
                 }
             }
         }

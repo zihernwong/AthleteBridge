@@ -9,52 +9,78 @@ struct ConfirmedBookingsView: View {
     @State private var showCancelAlert: Bool = false
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
+    // Tab selection: 0 = Upcoming, 1 = Past
+    @State private var selectedTab: Int = 0
 
     private func isConfirmed(_ status: String?) -> Bool {
         let s = (status ?? "").lowercased()
         return s == "confirmed" || s == "accepted" || s == "approved"
     }
+    private func isUpcoming(_ booking: FirestoreManager.BookingItem) -> Bool {
+        guard let endAt = booking.endAt else { return false }
+        return endAt > Date()
+    }
+    private func isPast(_ booking: FirestoreManager.BookingItem) -> Bool {
+        guard let endAt = booking.endAt else { return false }
+        return endAt <= Date()
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                let confirmed = firestore.bookings.filter { isConfirmed($0.status) }
-                if confirmed.isEmpty {
-                    Text("No confirmed bookings")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    ForEach(confirmed, id: \ .id) { b in
-                        VStack(alignment: .leading, spacing: 8) {
-                            BookingRowView(item: b)
-                            // Hide Cancel and Reschedule buttons once payment is acknowledged
-                            if (b.paymentStatus ?? "").lowercased() != "paid" {
-                                Button(role: .destructive) {
-                                    bookingToCancel = b
-                                    showCancelAlert = true
-                                } label: {
-                                    Text("Cancel Booking")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
+        VStack {
+            Picker("Tab", selection: $selectedTab) {
+                Text("Upcoming").tag(0)
+                Text("Past").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding([.horizontal, .top])
 
-                                Button {
-                                    bookingToReschedule = b
-                                } label: {
-                                    Text("Reschedule Booking")
-                                        .frame(maxWidth: .infinity)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(selectedTab == 0 ? "Upcoming Bookings" : "Past Bookings")
+                        .font(.largeTitle).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
+
+                    let confirmed = firestore.bookings.filter { isConfirmed($0.status) }
+                    let filtered = selectedTab == 0 ? confirmed.filter(isUpcoming) : confirmed.filter(isPast)
+                    if filtered.isEmpty {
+                        Text("No \(selectedTab == 0 ? "upcoming" : "past") confirmed bookings")
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    } else {
+                        ForEach(filtered, id: \.id) { b in
+                            VStack(alignment: .leading, spacing: 8) {
+                                BookingRowView(item: b)
+                                // Hide Cancel and Reschedule buttons once payment is acknowledged
+                                if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                    Button(role: .destructive) {
+                                        bookingToCancel = b
+                                        showCancelAlert = true
+                                    } label: {
+                                        Text("Cancel Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+
+                                    Button {
+                                        bookingToReschedule = b
+                                    } label: {
+                                        Text("Reschedule Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.blue)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.blue)
                             }
+                            .padding(.vertical, 4)
+                            Divider()
                         }
-                        .padding(.vertical, 4)
-                        Divider()
                     }
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
         }
         .navigationTitle("Confirmed Bookings")
         .onAppear {

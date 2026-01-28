@@ -9,75 +9,101 @@ struct AcceptedBookingsView: View {
     @State private var showCancelAlert: Bool = false
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
+    // Tab selection: 0 = Upcoming, 1 = Past
+    @State private var selectedTab: Int = 0
+
+    private func isUpcoming(_ booking: FirestoreManager.BookingItem) -> Bool {
+        guard let endAt = booking.endAt else { return false }
+        return endAt > Date()
+    }
+    private func isPast(_ booking: FirestoreManager.BookingItem) -> Bool {
+        guard let endAt = booking.endAt else { return false }
+        return endAt <= Date()
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                let confirmedBookings = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "confirmed" }
-                if confirmedBookings.isEmpty {
-                    Text("No confirmed bookings found")
-                        .foregroundColor(.secondary)
+        VStack {
+            Picker("Tab", selection: $selectedTab) {
+                Text("Upcoming").tag(0)
+                Text("Past").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding([.horizontal, .top])
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(selectedTab == 0 ? "Upcoming Bookings" : "Past Bookings")
+                        .font(.largeTitle).bold()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 8)
-                } else {
-                    ForEach(confirmedBookings, id: \ .id) { b in
-                        VStack(alignment: .leading, spacing: 8) {
-                            BookingRowView(item: b)
 
-                            if (b.paymentStatus ?? "").lowercased() != "paid" {
-                                Button(action: {
-                                    firestore.updateBookingPaymentStatus(bookingId: b.id, paymentStatus: "paid") { err in
-                                        DispatchQueue.main.async {
-                                            if let err = err {
-                                                firestore.showToast("Failed: \(err.localizedDescription)")
-                                            } else {
-                                                firestore.fetchBookingsForCurrentCoachSubcollection()
-                                                firestore.showToast("Payment acknowledged")
+                    let confirmedBookings = firestore.coachBookings.filter { ($0.status ?? "").lowercased() == "confirmed" }
+                    let filtered = selectedTab == 0 ? confirmedBookings.filter(isUpcoming) : confirmedBookings.filter(isPast)
+                    if filtered.isEmpty {
+                        Text("No \(selectedTab == 0 ? "upcoming" : "past") confirmed bookings")
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    } else {
+                        ForEach(filtered, id: \.id) { b in
+                            VStack(alignment: .leading, spacing: 8) {
+                                BookingRowView(item: b)
+
+                                if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                    Button(action: {
+                                        firestore.updateBookingPaymentStatus(bookingId: b.id, paymentStatus: "paid") { err in
+                                            DispatchQueue.main.async {
+                                                if let err = err {
+                                                    firestore.showToast("Failed: \(err.localizedDescription)")
+                                                } else {
+                                                    firestore.fetchBookingsForCurrentCoachSubcollection()
+                                                    firestore.showToast("Payment acknowledged")
+                                                }
                                             }
                                         }
+                                    }) {
+                                        Text("Acknowledge Payment")
+                                            .frame(maxWidth: .infinity)
                                     }
-                                }) {
-                                    Text("Acknowledge Payment")
-                                        .frame(maxWidth: .infinity)
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.green)
+                                } else {
+                                    Text("Payment: Paid")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.green)
-                            } else {
-                                Text("Payment: Paid")
-                                    .font(.caption)
-                                    .foregroundColor(.green)
-                            }
 
-                            // Hide Cancel and Reschedule buttons once payment is acknowledged
-                            if (b.paymentStatus ?? "").lowercased() != "paid" {
-                                // Cancel booking button
-                                Button(role: .destructive) {
-                                    bookingToCancel = b
-                                    showCancelAlert = true
-                                } label: {
-                                    Text("Cancel Booking")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
+                                // Hide Cancel and Reschedule buttons once payment is acknowledged
+                                if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                    // Cancel booking button
+                                    Button(role: .destructive) {
+                                        bookingToCancel = b
+                                        showCancelAlert = true
+                                    } label: {
+                                        Text("Cancel Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
 
-                                // Reschedule booking button
-                                Button {
-                                    bookingToReschedule = b
-                                } label: {
-                                    Text("Reschedule Booking")
-                                        .frame(maxWidth: .infinity)
+                                    // Reschedule booking button
+                                    Button {
+                                        bookingToReschedule = b
+                                    } label: {
+                                        Text("Reschedule Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(.blue)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.blue)
                             }
+                            .padding(.vertical, 4)
+                            Divider()
                         }
-                        .padding(.vertical, 4)
-                        Divider()
                     }
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
         }
         .navigationTitle("Confirmed Bookings")
         .onAppear {
