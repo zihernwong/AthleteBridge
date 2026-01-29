@@ -226,13 +226,23 @@ struct BookingsView: View {
                 }
             }
             NavigationLink(destination:
+                            ClientRequestedBookingsView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)) {
+                Text("View Requested Bookings")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color("LogoGreen"))
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            NavigationLink(destination:
                             ClientConfirmedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
                 Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(.blue)
+            .tint(Color("LogoBlue"))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)

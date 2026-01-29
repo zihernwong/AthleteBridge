@@ -594,6 +594,7 @@ import FirebaseAuth
      }
 
      // Helper: check booking overlap for a slot (checks ALL coaches for group bookings)
+     // Excludes cancelled bookings so those time slots show as available
      private func bookingOverlapping(slotStart: Date, slotEnd: Date) -> FirestoreManager.BookingItem? {
          // For multiple coaches, check all their bookings
          if effectiveCoachIDs.count > 1 {
@@ -601,6 +602,8 @@ import FirebaseAuth
                  if let coachBookings = allCoachBookings[coachId] {
                      if let overlapping = coachBookings.first(where: { b in
                          guard let s = b.startAt, let e = b.endAt else { return false }
+                         // Skip cancelled bookings - those time slots are available
+                         if b.status?.lowercased() == "cancelled" { return false }
                          return (s < slotEnd) && (e > slotStart)
                      }) {
                          return overlapping
@@ -612,6 +615,8 @@ import FirebaseAuth
          // Single coach - use existing bookings array
          return bookings.first { b in
              guard let s = b.startAt, let e = b.endAt else { return false }
+             // Skip cancelled bookings - those time slots are available
+             if b.status?.lowercased() == "cancelled" { return false }
              return (s < slotEnd) && (e > slotStart)
          }
      }

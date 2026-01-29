@@ -2929,8 +2929,18 @@ class FirestoreManager: ObservableObject {
                     completion(err)
                 } else {
                     print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
-                    // Calendar auto-add is handled by fetch functions with proper role checking
-                    completion(nil)
+                    // If cancelled, remove from Apple Calendar to free up coach availability
+                    if status.lowercased() == "cancelled" {
+                        self.removeBookingFromAppleCalendar(bookingId: bookingId) { calErr in
+                            if let calErr = calErr {
+                                print("updateBookingStatus: failed to remove calendar event: \(calErr)")
+                            }
+                            // Complete regardless of calendar removal result
+                            completion(nil)
+                        }
+                    } else {
+                        completion(nil)
+                    }
                 }
             }
         }
@@ -3233,13 +3243,24 @@ class FirestoreManager: ObservableObject {
                 batch.updateData(["Status": status], forDocument: clientBookingRef)
             }
 
-            batch.commit { err in
+            batch.commit { [weak self] err in
                 if let err = err {
                     print("updateGroupBookingStatus: batch commit failed: \(err)")
                     completion(err)
                 } else {
                     print("updateGroupBookingStatus: booking \(bookingId) status updated to \(status)")
-                    completion(nil)
+                    // If cancelled, remove from Apple Calendar to free up coach availability
+                    if status.lowercased() == "cancelled" {
+                        self?.removeBookingFromAppleCalendar(bookingId: bookingId) { calErr in
+                            if let calErr = calErr {
+                                print("updateGroupBookingStatus: failed to remove calendar event: \(calErr)")
+                            }
+                            // Complete regardless of calendar removal result
+                            completion(nil)
+                        }
+                    } else {
+                        completion(nil)
+                    }
                 }
             }
         }
@@ -3868,6 +3889,84 @@ class FirestoreManager: ObservableObject {
     /// - Parameter notes: Any notes for the event.
     /// - Parameter bookingId: The Firestore booking document ID, used to check for duplicates.
     /// - Parameter completion: Completion handler with the event identifier or error.
+    /// Remove a booking event from Apple Calendar when cancelled.
+    /// Reads the calendarEventId from the booking document and deletes the corresponding calendar event.
+    func removeBookingFromAppleCalendar(bookingId: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        // First read the booking to get the calendarEventId
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("removeBookingFromAppleCalendar: failed to read booking: \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data(),
+                  let eventId = data["calendarEventId"] as? String,
+                  !eventId.isEmpty else {
+                // No calendar event to remove
+                print("removeBookingFromAppleCalendar: no calendarEventId found for booking \(bookingId)")
+                completion(nil)
+                return
+            }
+
+            let handleAccessResponse: (Bool, Error?) -> Void = { granted, error in
+                let eventStore = EKEventStore()
+
+                if let err = error {
+                    print("removeBookingFromAppleCalendar: requestAccess error: \(err)")
+                    completion(err)
+                    return
+                }
+
+                if !granted {
+                    let err = NSError(domain: "FirestoreManager", code: 403, userInfo: [NSLocalizedDescriptionKey: "Calendar access not granted"])
+                    print("removeBookingFromAppleCalendar: calendar access denied by user")
+                    completion(err)
+                    return
+                }
+
+                // Find and delete the event
+                if let event = eventStore.event(withIdentifier: eventId) {
+                    do {
+                        try eventStore.remove(event, span: .thisEvent)
+                        print("removeBookingFromAppleCalendar: successfully removed calendar event \(eventId)")
+
+                        // Clear the calendarEventId from the booking document
+                        bookingRef.updateData([
+                            "calendarEventId": FieldValue.delete(),
+                            "calendarRemovedAt": FieldValue.serverTimestamp(),
+                            "calendarRemovedBy": Auth.auth().currentUser?.uid ?? NSNull()
+                        ]) { err in
+                            if let err = err {
+                                print("removeBookingFromAppleCalendar: failed to clear calendarEventId: \(err)")
+                            }
+                            DispatchQueue.main.async { completion(nil) }
+                        }
+                    } catch {
+                        print("removeBookingFromAppleCalendar: failed to remove event: \(error)")
+                        DispatchQueue.main.async { completion(error) }
+                    }
+                } else {
+                    // Event not found on this device (may have been added on another device)
+                    print("removeBookingFromAppleCalendar: event \(eventId) not found on this device")
+                    DispatchQueue.main.async { completion(nil) }
+                }
+            }
+
+            if #available(iOS 17.0, *) {
+                EKEventStore().requestFullAccessToEvents { granted, error in
+                    handleAccessResponse(granted, error)
+                }
+            } else {
+                EKEventStore().requestAccess(to: .event) { granted, error in
+                    handleAccessResponse(granted, error)
+                }
+            }
+        }
+    }
+
     func addBookingToAppleCalendar(title: String, start: Date, end: Date, location: String?, notes: String?, bookingId: String, completion: @escaping (Result<String, Error>) -> Void) {
         // Create the event store inside the closure to avoid capturing a non-Sendable instance
         let handleAccessResponse: (Bool, Error?) -> Void = { granted, error in
