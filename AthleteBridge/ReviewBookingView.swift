@@ -52,10 +52,10 @@ struct ReviewBookingView: View {
                     Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                 }
 
-                if let note = booking.notes, !note.isEmpty {
+                if let note = booking.coachNote, !note.isEmpty {
                     Text("Note from coach:")
                         .font(.subheadline).bold()
-                    Text(booking.notes ?? "")
+                    Text(note)
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
