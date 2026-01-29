@@ -45,7 +45,7 @@ struct ReviewBookingView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Review Booking")
-                    .font(.title2)
+                    .font(.largeTitle)
                     .bold()
 
                 // Coach
@@ -101,21 +101,27 @@ struct ReviewBookingView: View {
 
                 // Action buttons: Decline (left) and Confirm (right)
                 HStack {
-                    Button(role: .destructive) {
+                    Button {
                         confirmOrDecline(status: "declined_by_client")
                     } label: {
                         Text("Decline")
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color("LogoBlue"))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.bordered)
 
                     Button {
                         confirmOrDecline(status: "confirmed")
                     } label: {
                         Text("Confirm Booking")
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color("LogoGreen"))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
                 .padding(.top)
 
@@ -133,7 +139,7 @@ struct ReviewBookingView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Review")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Close") { dismiss() }

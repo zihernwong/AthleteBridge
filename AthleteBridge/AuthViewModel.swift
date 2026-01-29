@@ -64,11 +64,16 @@ class AuthViewModel: ObservableObject {
 
     // MARK: - Logout
     func logout() {
-        do {
-            try Auth.auth().signOut()
-            self.user = nil
-        } catch {
-            print("Error signing out: \(error)")
+        // Remove device token first to prevent receiving notifications for this account
+        NotificationManager.shared.removeDeviceToken {
+            do {
+                try Auth.auth().signOut()
+                DispatchQueue.main.async {
+                    self.user = nil
+                }
+            } catch {
+                print("Error signing out: \(error)")
+            }
         }
     }
 

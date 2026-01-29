@@ -81,6 +81,52 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         saveTokenToFirestore(token)
     }
 
+    /// Remove device token from Firestore when user logs out.
+    /// This prevents the device from receiving notifications for this account after logout.
+    func removeDeviceToken(completion: (() -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("NotificationManager: no authenticated user to remove token")
+            completion?()
+            return
+        }
+        guard let token = cachedFCMToken ?? previouslySavedToken else {
+            print("NotificationManager: no token to remove")
+            completion?()
+            return
+        }
+
+        let db = Firestore.firestore()
+
+        // Determine collection (coaches or clients) and remove token
+        let userTypeRef = db.collection("userType").document(uid)
+        userTypeRef.getDocument { [weak self] snap, err in
+            let removeFromCollection: (String) -> Void = { collection in
+                let docRef = db.collection(collection).document(uid)
+                docRef.updateData(["deviceTokens": FieldValue.arrayRemove([token])]) { err in
+                    if let err = err {
+                        print("NotificationManager: failed to remove token on logout: \(err)")
+                    } else {
+                        print("NotificationManager: removed device token from \(collection)/\(uid)")
+                    }
+                    self?.previouslySavedToken = nil
+                    completion?()
+                }
+            }
+
+            if let data = snap?.data(), let t = (data["type"] as? String)?.uppercased() {
+                let coll = (t == "COACH") ? "coaches" : "clients"
+                removeFromCollection(coll)
+            } else {
+                // Fallback: check if coach document exists
+                let coachRef = db.collection("coaches").document(uid)
+                coachRef.getDocument { csnap, _ in
+                    let collection = (csnap?.exists == true) ? "coaches" : "clients"
+                    removeFromCollection(collection)
+                }
+            }
+        }
+    }
+
     /// Internal method to persist token to Firestore, replacing any previously saved token from this device
     private func saveTokenToFirestore(_ token: String) {
         guard let uid = Auth.auth().currentUser?.uid else {
