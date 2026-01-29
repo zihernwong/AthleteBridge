@@ -66,16 +66,15 @@ import FirebaseAuth
         let rawQuery = (searchQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? searchQuery : (localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : localSearchText)
         guard let q = rawQuery?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return candidates }
 
-        let separators = CharacterSet(charactersIn: ",").union(.whitespacesAndNewlines)
-        let tokens = q.lowercased().split { separators.contains($0.unicodeScalars.first!) }.map { String($0) }.filter { !$0.isEmpty }
-        guard !tokens.isEmpty else { return candidates }
+        let queryLower = q.lowercased()
 
         return candidates.filter { coach in
             let nameLower = coach.name.lowercased()
-            if tokens.contains(where: { nameLower.contains($0) }) { return true }
-            // Combine specialties into one lowercased string for single-pass matching
+            // Match full search phrase against coach name
+            if nameLower.contains(queryLower) { return true }
+            // Also check if query matches any specialty
             let combinedSpecs = coach.specialties.joined(separator: " ").lowercased()
-            if tokens.contains(where: { combinedSpecs.contains($0) }) { return true }
+            if combinedSpecs.contains(queryLower) { return true }
             return false
        }
      }

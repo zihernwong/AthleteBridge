@@ -4038,6 +4038,38 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Update or set the payments dictionary on the current coach document. Keys are payment types (e.g., "venmo", "paypal"), values are usernames.
+    func updateCurrentCoachAvailability(_ availability: [String], completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let ref = db.collection("coaches").document(uid)
+        ref.setData(["availability": availability, "updatedAt": FieldValue.serverTimestamp()], merge: true) { err in
+            if let err = err {
+                print("updateCurrentCoachAvailability error: \(err)")
+                completion?(err)
+                return
+            }
+            if let cur = self.currentCoach {
+                let updated = Coach(id: cur.id,
+                                    name: cur.name,
+                                    specialties: cur.specialties,
+                                    experienceYears: cur.experienceYears,
+                                    availability: availability,
+                                    bio: cur.bio,
+                                    hourlyRate: cur.hourlyRate,
+                                    photoURLString: cur.photoURLString,
+                                    meetingPreference: cur.meetingPreference,
+                                    zipCode: cur.zipCode,
+                                    city: cur.city,
+                                    payments: cur.payments,
+                                    rateRange: cur.rateRange)
+                self.currentCoach = updated
+            }
+            completion?(nil)
+        }
+    }
+
     func updateCurrentCoachPayments(_ payments: [String: String], completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))

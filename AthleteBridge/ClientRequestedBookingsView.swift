@@ -7,45 +7,94 @@ struct ClientRequestedBookingsView: View {
 
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
+    @State private var selectedTab: Int = 0
 
     private func isRequested(_ status: String?) -> Bool {
         let s = (status ?? "").lowercased()
         return s == "requested"
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("These bookings are waiting for coach acceptance.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+    private var upcomingRequested: [FirestoreManager.BookingItem] {
+        let now = Date()
+        return firestore.bookings
+            .filter { isRequested($0.status) }
+            .filter { ($0.startAt ?? .distantFuture) >= now }
+            .sorted { ($0.startAt ?? .distantFuture) < ($1.startAt ?? .distantFuture) }
+    }
 
-                let requested = firestore.bookings.filter { isRequested($0.status) }
-                if requested.isEmpty {
-                    Text("No requested bookings")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 8)
-                } else {
-                    ForEach(requested, id: \.id) { b in
-                        VStack(alignment: .leading, spacing: 8) {
-                            BookingRowView(item: b)
-                            Button(role: .destructive) {
-                                bookingToCancel = b
-                                showCancelAlert = true
-                            } label: {
-                                Text("Cancel Request")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding(.vertical, 4)
-                        Divider()
-                    }
+    private var pastRequested: [FirestoreManager.BookingItem] {
+        let now = Date()
+        return firestore.bookings
+            .filter { isRequested($0.status) }
+            .filter { ($0.startAt ?? .distantFuture) < now }
+            .sorted { ($0.startAt ?? .distantPast) > ($1.startAt ?? .distantPast) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("These bookings are waiting for coach acceptance.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.top, 8)
+
+            HStack(spacing: 0) {
+                Button {
+                    selectedTab = 0
+                } label: {
+                    Text("Upcoming")
+                        .font(.subheadline.weight(selectedTab == 0 ? .semibold : .regular))
+                        .foregroundColor(selectedTab == 0 ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedTab == 0 ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
+                }
+                Button {
+                    selectedTab = 1
+                } label: {
+                    Text("Past")
+                        .font(.subheadline.weight(selectedTab == 1 ? .semibold : .regular))
+                        .foregroundColor(selectedTab == 1 ? .white : .primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedTab == 1 ? Color("LogoBlue") : Color(UIColor.secondarySystemBackground))
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    let bookings = selectedTab == 0 ? upcomingRequested : pastRequested
+                    let emptyMessage = selectedTab == 0 ? "No upcoming requested bookings" : "No past requested bookings"
+
+                    if bookings.isEmpty {
+                        Text(emptyMessage)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    } else {
+                        ForEach(bookings, id: \.id) { b in
+                            VStack(alignment: .leading, spacing: 8) {
+                                BookingRowView(item: b)
+                                Button(role: .destructive) {
+                                    bookingToCancel = b
+                                    showCancelAlert = true
+                                } label: {
+                                    Text("Cancel Request")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            .padding(.vertical, 4)
+                            Divider()
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+            }
         }
         .navigationTitle("Requested Bookings")
         .onAppear {

@@ -331,6 +331,11 @@ struct ProfileView: View {
                 }
             }
 
+            VStack(alignment: .leading) {
+                Text("Availability").font(.subheadline).foregroundColor(.secondary)
+                AvailabilityChipSelect(items: availableAvailability, selection: $selectedCoachAvailability)
+            }
+
             // Auto-add confirmed bookings to device calendar (opt-in) for coaches
             VStack(alignment: .leading) {
                 Text("Calendar") .font(.subheadline).foregroundColor(.secondary)
