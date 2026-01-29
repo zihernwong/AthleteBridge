@@ -3,6 +3,7 @@ import SwiftUI
 struct ReviewsByUserView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
 
     @State private var reviews: [FirestoreManager.ReviewItem] = []
     @State private var loading: Bool = false
@@ -40,6 +41,13 @@ struct ReviewsByUserView: View {
             }
         }
         .navigationTitle("My Reviews")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark")
+                }
+            }
+        }
         .onAppear {
             loadMyReviews()
         }

@@ -40,7 +40,7 @@ struct MainAppView: View {
 
             // For coaches, keep Reviews as a primary tab; for clients, move it to More
             if isCoachUserComputed {
-                RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
+                RequiresProfile(content: { NavigationStack { ReviewsView() } }, selectedTab: $selectedTab)
                     .tabItem { Label("Reviews", systemImage: "star.bubble") }
                     .tag(2)
             }

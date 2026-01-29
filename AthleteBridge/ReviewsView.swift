@@ -30,6 +30,7 @@ struct ReviewsView: View {
     @State private var myReviews: [FirestoreManager.ReviewItem] = []
     @State private var loadingMyReviews: Bool = false
     @State private var myReviewsLoaded: Bool = false
+    @State private var showMyReviews: Bool = false
 
     // Computed lists to split reviews for the current user
     private var reviewsAboutUser: [FirestoreManager.ReviewItem] {
@@ -50,7 +51,6 @@ struct ReviewsView: View {
     }
 
     var body: some View {
-        NavigationStack {
             List {
                 let userType = firestore.currentUserType?.uppercased()
 
@@ -68,10 +68,16 @@ struct ReviewsView: View {
 
                 if userType == "CLIENT" || userType == nil {
                     Section(header: Text("Your Reviews")) {
-                        NavigationLink(destination: ReviewsByUserView().environmentObject(firestore).environmentObject(auth)) {
-                            Text("View My Reviews")
-                                .padding(.vertical, 8)
+                        Button(action: { showMyReviews = true }) {
+                            HStack {
+                                Text("View My Reviews")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 8)
                         }
+                        .foregroundColor(.primary)
                     }
                 }
 
@@ -181,7 +187,13 @@ struct ReviewsView: View {
             .alert(isPresented: $showAlert) {
                 Alert(title: Text("Notice"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
             }
-        }
+            .sheet(isPresented: $showMyReviews) {
+                NavigationStack {
+                    ReviewsByUserView()
+                        .environmentObject(firestore)
+                        .environmentObject(auth)
+                }
+            }
     }
 
     private func submitReview() {
