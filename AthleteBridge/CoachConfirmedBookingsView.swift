@@ -51,13 +51,31 @@ struct CoachConfirmedBookingsView: View {
 
                                 if (b.paymentStatus ?? "").lowercased() != "paid" {
                                     Button(action: {
-                                        firestore.updateBookingPaymentStatus(bookingId: b.id, paymentStatus: "paid") { err in
-                                            DispatchQueue.main.async {
-                                                if let err = err {
-                                                    firestore.showToast("Failed: \(err.localizedDescription)")
-                                                } else {
-                                                    firestore.fetchBookingsForCurrentCoachSubcollection()
-                                                    firestore.showToast("Payment acknowledged")
+                                        // Use appropriate function for group vs regular bookings
+                                        if b.isGroupBooking == true {
+                                            firestore.acknowledgeGroupBookingPayment(bookingId: b.id, paymentStatus: "paid") { err in
+                                                DispatchQueue.main.async {
+                                                    if let err = err {
+                                                        firestore.showToast("Failed: \(err.localizedDescription)")
+                                                    } else {
+                                                        firestore.fetchBookingsForCurrentCoachSubcollection()
+                                                        firestore.showToast("Payment acknowledged")
+                                                        // Send notification to all clients
+                                                        sendPaymentConfirmedNotifications(booking: b)
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            firestore.updateBookingPaymentStatus(bookingId: b.id, paymentStatus: "paid") { err in
+                                                DispatchQueue.main.async {
+                                                    if let err = err {
+                                                        firestore.showToast("Failed: \(err.localizedDescription)")
+                                                    } else {
+                                                        firestore.fetchBookingsForCurrentCoachSubcollection()
+                                                        firestore.showToast("Payment acknowledged")
+                                                        // Send notification to client
+                                                        sendPaymentConfirmedNotifications(booking: b)
+                                                    }
                                                 }
                                             }
                                         }
@@ -66,11 +84,11 @@ struct CoachConfirmedBookingsView: View {
                                             .frame(maxWidth: .infinity)
                                     }
                                     .buttonStyle(.borderedProminent)
-                                    .tint(.green)
+                                    .tint(Color("LogoBlue"))
                                 } else {
                                     Text("Payment: Paid")
                                         .font(.caption)
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                 }
 
                                 // Hide Cancel and Reschedule buttons once payment is acknowledged
@@ -151,6 +169,38 @@ struct CoachConfirmedBookingsView: View {
                     }
                     firestore.showToast("Booking cancelled")
                     firestore.fetchBookingsForCurrentCoachSubcollection()
+                }
+            }
+        }
+    }
+
+    private func sendPaymentConfirmedNotifications(booking: FirestoreManager.BookingItem) {
+        let coachName = firestore.currentCoach?.name ?? "Coach"
+        let coachId = booking.coachID
+
+        // Get all client IDs to notify
+        var clientIdsToNotify: [String] = []
+        if let clientIDs = booking.clientIDs, !clientIDs.isEmpty {
+            clientIdsToNotify = clientIDs
+        } else if !booking.clientID.isEmpty {
+            clientIdsToNotify = [booking.clientID]
+        }
+
+        // Send notification to each client
+        for clientId in clientIdsToNotify {
+            let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
+            let notifPayload: [String: Any] = [
+                "title": "Payment Confirmed",
+                "body": "\(coachName) has confirmed your payment.",
+                "bookingId": booking.id,
+                "senderId": coachId,
+                "isGroupBooking": booking.isGroupBooking ?? false,
+                "createdAt": FieldValue.serverTimestamp(),
+                "delivered": false
+            ]
+            notifRef.setData(notifPayload) { err in
+                if let err = err {
+                    print("Failed to send payment confirmation notification to \(clientId): \(err)")
                 }
             }
         }

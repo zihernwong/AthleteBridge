@@ -19,8 +19,11 @@ struct BookingEditorView: View {
     @State private var selectedClientIds: Set<String> = []
     @State private var selectedClientNames: Set<String> = []
 
-    // Reviews for selected coach
-    @State private var coachReviews: [FirestoreManager.ReviewItem] = []
+    // Reviews for selected coaches (keyed by coach ID)
+    @State private var coachReviewsMap: [String: [FirestoreManager.ReviewItem]] = [:]
+
+    // Track selected coach tab for group booking tabbed view
+    @State private var selectedCoachTabId: String = ""
 
     // For presenting chat sheet
     private struct ChatSheetId: Identifiable { let id: String }
@@ -42,6 +45,11 @@ struct BookingEditorView: View {
     // Cache the selected coach lookup
     private var selectedCoach: Coach? {
         selectedCoachId.isEmpty ? nil : firestore.coaches.first(where: { $0.id == selectedCoachId })
+    }
+
+    // All selected coaches for group booking
+    private var selectedCoaches: [Coach] {
+        firestore.coaches.filter { selectedCoachIds.contains($0.id) }
     }
 
     // Inline suggestions for coach names (prefix match)
@@ -229,94 +237,63 @@ struct BookingEditorView: View {
                 }
 
                 // Only after a coach is selected, show Coach Info and Calendar
-                if let coach = selectedCoach {
-                    // Coach Info section (above the calendar)
+                if isGroupBooking && selectedCoaches.count > 1 {
+                    // Show all selected coaches' info in a horizontal TabView
                     Section {
-                        HStack(alignment: .top, spacing: 12) {
-                            let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
-                            AvatarView(url: coachURL ?? nil, size: 72, useCurrentUser: false)
-                            VStack(alignment: .leading, spacing: 8) {
-                                if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text(bio).font(.body).foregroundColor(.primary)
-                                } else {
-                                    Text("No bio provided").font(.subheadline).foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        if !coach.specialties.isEmpty {
-                            Text("Specialties: \(coach.specialties.joined(separator: ", "))")
-                        }
-                        Text("Experience: \(coach.experienceYears) years")
-                        if let range = coach.rateRange, range.count >= 2 {
-                            Text(String(format: "$%.0f - $%.0f / hr", range[0], range[1]))
-                        } else {
-                            Text("Message coach for rate").foregroundColor(.secondary)
-                        }
-                        if !coach.availability.isEmpty {
-                            Text("Availability: \(coach.availability.joined(separator: ", "))")
-                        }
-
-                        // Message Coach button
-                        Button(action: {
-                            guard Auth.auth().currentUser?.uid != nil else {
-                                firestore.showToast("Please sign in to message coaches")
-                                return
-                            }
-                            let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
-                            presentedChat = ChatSheetId(id: expectedChatId)
-                            firestore.createOrGetChat(withCoachId: coach.id) { chatId in
-                                DispatchQueue.main.async {
-                                    let target = chatId ?? expectedChatId
-                                    if target != expectedChatId {
-                                        presentedChat = ChatSheetId(id: target)
+                        VStack(spacing: 0) {
+                            // Coach name tabs
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(selectedCoaches, id: \.id) { coach in
+                                        Button(action: {
+                                            withAnimation { selectedCoachTabId = coach.id }
+                                        }) {
+                                            Text(coach.name)
+                                                .font(.subheadline)
+                                                .fontWeight(selectedCoachTabId == coach.id ? .semibold : .regular)
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 8)
+                                                .background(selectedCoachTabId == coach.id ? Color.blue : Color(UIColor.secondarySystemBackground))
+                                                .foregroundColor(selectedCoachTabId == coach.id ? .white : .primary)
+                                                .cornerRadius(20)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
+                                .padding(.vertical, 8)
                             }
-                        }) {
-                            HStack {
-                                Image(systemName: "message.fill")
-                                Text("Message Coach")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .padding(.top, 8)
 
-                        // Reviews summary section
-                        VStack(alignment: .leading, spacing: 8) {
-                            let avgRating = coachReviews.isEmpty ? 0.0 : coachReviews.compactMap { r -> Double? in
-                                if let s = r.rating, let d = Double(s) { return d }
-                                return nil
-                            }.reduce(0, +) / Double(coachReviews.count)
+                            Divider()
 
-                            HStack(spacing: 8) {
-                                HStack(spacing: 2) {
-                                    ForEach(1...5, id: \.self) { i in
-                                        Image(systemName: Double(i) <= avgRating ? "star.fill" : (Double(i) - 0.5 <= avgRating ? "star.leadinghalf.filled" : "star"))
-                                            .foregroundColor(.yellow)
-                                            .font(.subheadline)
-                                    }
+                            // Coach info content for selected tab
+                            if let coach = selectedCoaches.first(where: { $0.id == selectedCoachTabId }) ?? selectedCoaches.first {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    coachInfoContent(coach: coach)
                                 }
-
-                                Text(String(format: "%.1f", avgRating))
-                                    .font(.headline)
-
-                                Text("(\(coachReviews.count) reviews)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            NavigationLink(destination: CoachReviewsListView(coach: coach, reviews: coachReviews)) {
-                                Text("View All Reviews")
-                                    .font(.subheadline)
+                                .padding(.top, 12)
                             }
                         }
-                        .padding(.top, 8)
+                    } header: {
+                        Text("Coaches (\(selectedCoaches.count) selected)")
+                    }
+                } else if isGroupBooking && selectedCoaches.count == 1, let coach = selectedCoaches.first {
+                    // Single coach selected in group booking mode
+                    Section {
+                        coachInfoContent(coach: coach)
                     } header: {
                         Text(coach.name)
                     }
+                } else if let coach = selectedCoach {
+                    // Single coach info section (original behavior)
+                    Section {
+                        coachInfoContent(coach: coach)
+                    } header: {
+                        Text(coach.name)
+                    }
+                }
 
-                    // Show coach calendar grid once a coach is selected; hide time pickers
+                // Show coach calendar grid once any coach is selected; hide time pickers
+                if (isGroupBooking && !selectedCoaches.isEmpty) || selectedCoach != nil {
                     Section {
                         // Show merged availability info for group bookings
                         if isGroupBooking && selectedCoachIds.count > 1 {
@@ -343,7 +320,7 @@ struct BookingEditorView: View {
                         }
                         .padding(.vertical, 6)
 
-                        CoachCalendarGridView(coachID: selectedCoachId,
+                        CoachCalendarGridView(coachID: selectedCoachId.isEmpty ? (selectedCoachIds.first ?? "") : selectedCoachId,
                                               coachIDs: isGroupBooking ? Array(selectedCoachIds) : nil,
                                               date: $calendarDate,
                                               showOnlyAvailable: false,
@@ -423,7 +400,7 @@ struct BookingEditorView: View {
                         if let s = selectedSlotStart, let e = selectedSlotEnd { startAt = s; endAt = e }
                         saveBooking()
                     }
-                    .disabled(selectedCoachId.isEmpty || auth.user == nil || (selectedCoachId.isEmpty && !(startAt < endAt)))
+                    .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil)
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -466,7 +443,11 @@ struct BookingEditorView: View {
                         VStack(spacing: 0) {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Confirm Date & Time").font(.headline)
-                                if let coach = selectedCoach {
+                                if isGroupBooking && !selectedCoaches.isEmpty {
+                                    Text("Coaches: \(selectedCoaches.map { $0.name }.joined(separator: ", "))")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                } else if let coach = selectedCoach {
                                     Text("Coach: \(coach.name)")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
@@ -522,7 +503,7 @@ struct BookingEditorView: View {
                                     Text("Confirm Booking Time").frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(selectedCoachId.isEmpty || auth.user == nil || !(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600)
+                                .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil || !(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600)
                             }
                             .padding()
                         }
@@ -540,19 +521,121 @@ struct BookingEditorView: View {
             .animation(.easeInOut, value: showConfirmOverlay)
         )
         .onChange(of: selectedCoachId) { _, newCoachId in
-            // Fetch reviews when coach is selected
-            if !newCoachId.isEmpty {
+            // Fetch reviews when single coach is selected (non-group booking)
+            if !isGroupBooking && !newCoachId.isEmpty {
                 firestore.fetchReviewsForCoach(coachId: newCoachId) { items in
-                    DispatchQueue.main.async { coachReviews = items }
+                    DispatchQueue.main.async { coachReviewsMap[newCoachId] = items }
                 }
-            } else {
-                coachReviews = []
+            }
+        }
+        .onChange(of: selectedCoachIds) { _, newCoachIds in
+            // Fetch reviews for all selected coaches (group booking)
+            for coachId in newCoachIds {
+                if coachReviewsMap[coachId] == nil {
+                    firestore.fetchReviewsForCoach(coachId: coachId) { items in
+                        DispatchQueue.main.async { coachReviewsMap[coachId] = items }
+                    }
+                }
+            }
+            // Clean up reviews for deselected coaches
+            let deselectedIds = coachReviewsMap.keys.filter { !newCoachIds.contains($0) && $0 != selectedCoachId }
+            for id in deselectedIds {
+                coachReviewsMap.removeValue(forKey: id)
+            }
+            // Set default tab selection to first coach if current selection is invalid
+            if !newCoachIds.contains(selectedCoachTabId), let firstId = newCoachIds.first {
+                selectedCoachTabId = firstId
             }
         }
         .sheet(item: $presentedChat) { sheet in
             ChatView(chatId: sheet.id)
                 .environmentObject(firestore)
         }
+    }
+
+    @ViewBuilder
+    private func coachInfoContent(coach: Coach) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            let coachURL = firestore.coachPhotoURLs[coach.id] ?? nil
+            AvatarView(url: coachURL ?? nil, size: 72, useCurrentUser: false)
+            VStack(alignment: .leading, spacing: 8) {
+                if let bio = coach.bio, !bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(bio).font(.body).foregroundColor(.primary)
+                } else {
+                    Text("No bio provided").font(.subheadline).foregroundColor(.secondary)
+                }
+            }
+        }
+        if !coach.specialties.isEmpty {
+            Text("Specialties: \(coach.specialties.joined(separator: ", "))")
+        }
+        Text("Experience: \(coach.experienceYears) years")
+        if let range = coach.rateRange, range.count >= 2 {
+            Text(String(format: "$%.0f - $%.0f / hr", range[0], range[1]))
+        } else {
+            Text("Message coach for rate").foregroundColor(.secondary)
+        }
+        if !coach.availability.isEmpty {
+            Text("Availability: \(coach.availability.joined(separator: ", "))")
+        }
+
+        // Message Coach button
+        Button(action: {
+            guard Auth.auth().currentUser?.uid != nil else {
+                firestore.showToast("Please sign in to message coaches")
+                return
+            }
+            let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
+            presentedChat = ChatSheetId(id: expectedChatId)
+            firestore.createOrGetChat(withCoachId: coach.id) { chatId in
+                DispatchQueue.main.async {
+                    let target = chatId ?? expectedChatId
+                    if target != expectedChatId {
+                        presentedChat = ChatSheetId(id: target)
+                    }
+                }
+            }
+        }) {
+            HStack {
+                Image(systemName: "message.fill")
+                Text("Message Coach")
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .padding(.top, 8)
+
+        // Reviews summary section
+        let reviews = coachReviewsMap[coach.id] ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            let avgRating = reviews.isEmpty ? 0.0 : reviews.compactMap { r -> Double? in
+                if let s = r.rating, let d = Double(s) { return d }
+                return nil
+            }.reduce(0, +) / Double(reviews.count)
+
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    ForEach(1...5, id: \.self) { i in
+                        Image(systemName: Double(i) <= avgRating ? "star.fill" : (Double(i) - 0.5 <= avgRating ? "star.leadinghalf.filled" : "star"))
+                            .foregroundColor(.yellow)
+                            .font(.subheadline)
+                    }
+                }
+
+                Text(String(format: "%.1f", avgRating))
+                    .font(.headline)
+
+                Text("(\(reviews.count) reviews)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            NavigationLink(destination: CoachReviewsListView(coach: coach, reviews: reviews)) {
+                Text("View All Reviews")
+                    .font(.subheadline)
+            }
+        }
+        .padding(.top, 8)
     }
 
     private func saveBooking() {

@@ -2389,6 +2389,7 @@ class FirestoreManager: ObservableObject {
                 "Location": location ?? "",
                 "Notes": notes ?? "",
                 "Status": status,
+                "PaymentStatus": "unpaid",
                 "isGroupBooking": isGroupBooking,
                 "creatorID": creatorID,
                 "creatorType": creatorType,
@@ -3380,6 +3381,76 @@ class FirestoreManager: ObservableObject {
                     completion(err)
                 } else {
                     print("updateBookingPaymentStatus: booking \(bookingId) payment status updated to \(paymentStatus)")
+                    completion(nil)
+                }
+            }
+        }
+    }
+
+    /// Acknowledge payment for a group booking - updates root and all participant mirrors
+    func acknowledgeGroupBookingPayment(bookingId: String, paymentStatus: String, completion: @escaping (Error?) -> Void) {
+        let bookingRef = self.db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("acknowledgeGroupBookingPayment: failed to read booking \(bookingId): \(err)")
+                completion(err)
+                return
+            }
+
+            guard let data = snap?.data() else {
+                print("acknowledgeGroupBookingPayment: booking \(bookingId) not found")
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+
+            // Get all coach and client IDs for group booking
+            let coachIDs = data["CoachIDs"] as? [String] ?? []
+            let clientIDs = data["ClientIDs"] as? [String] ?? []
+
+            // Fallback to single coach/client if arrays are empty
+            var allCoachIds = coachIDs
+            var allClientIds = clientIDs
+
+            if allCoachIds.isEmpty {
+                if let ref = data["CoachID"] as? DocumentReference {
+                    allCoachIds = [ref.documentID]
+                } else if let s = data["CoachID"] as? String {
+                    allCoachIds = [s.split(separator: "/").last.map(String.init) ?? s]
+                }
+            }
+
+            if allClientIds.isEmpty {
+                if let ref = data["ClientID"] as? DocumentReference {
+                    allClientIds = [ref.documentID]
+                } else if let s = data["ClientID"] as? String {
+                    allClientIds = [s.split(separator: "/").last.map(String.init) ?? s]
+                }
+            }
+
+            let batch = self.db.batch()
+
+            // Update root booking
+            batch.updateData(["PaymentStatus": paymentStatus], forDocument: bookingRef)
+
+            // Update all coach mirrors
+            for coachId in allCoachIds {
+                let coachBookingRef = self.db.collection("coaches").document(coachId).collection("bookings").document(bookingId)
+                batch.updateData(["PaymentStatus": paymentStatus], forDocument: coachBookingRef)
+            }
+
+            // Update all client mirrors
+            for clientId in allClientIds {
+                let clientBookingRef = self.db.collection("clients").document(clientId).collection("bookings").document(bookingId)
+                batch.updateData(["PaymentStatus": paymentStatus], forDocument: clientBookingRef)
+            }
+
+            batch.commit { err in
+                if let err = err {
+                    print("acknowledgeGroupBookingPayment: batch commit failed: \(err)")
+                    completion(err)
+                } else {
+                    print("acknowledgeGroupBookingPayment: booking \(bookingId) payment status updated to \(paymentStatus) for \(allCoachIds.count) coaches and \(allClientIds.count) clients")
                     completion(nil)
                 }
             }
