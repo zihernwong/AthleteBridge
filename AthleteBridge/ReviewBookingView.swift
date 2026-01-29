@@ -158,8 +158,8 @@ struct ReviewBookingView: View {
                         firestore.showToast("Failed to update booking: \(err.localizedDescription)")
                     } else {
                         firestore.showToast("Group booking confirmation updated")
+                        // Fetch will auto-add to calendar if enabled
                         firestore.fetchBookingsForCurrentClientSubcollection()
-                        firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
                         dismiss()
                     }
                 }
@@ -191,8 +191,8 @@ struct ReviewBookingView: View {
                         }
                         let friendly = (status == "confirmed") ? "Booking confirmed" : "Booking declined"
                         firestore.showToast(friendly)
+                        // Fetch will auto-add to calendar if enabled
                         firestore.fetchBookingsForCurrentClientSubcollection()
-                        firestore.fetchBookingsForCoachSubcollection(coachId: booking.coachID)
                         dismiss()
                     }
                 }

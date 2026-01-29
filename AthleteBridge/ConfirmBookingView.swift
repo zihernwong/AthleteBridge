@@ -255,6 +255,7 @@ struct ConfirmBookingView: View {
                     if let err = err {
                         self.errorMessage = err.localizedDescription
                     } else {
+                        // Fetch will auto-add to calendar if enabled
                         self.firestore.fetchBookingsForCurrentClientSubcollection()
                         self.firestore.showToast("Group booking confirmed")
                         dismiss()
@@ -289,9 +290,8 @@ struct ConfirmBookingView: View {
                 if let err = err {
                     self.errorMessage = err.localizedDescription
                 } else {
-                    // refresh lists
+                    // Fetch will auto-add to calendar if enabled
                     self.firestore.fetchBookingsForCurrentClientSubcollection()
-                    self.firestore.fetchBookingsForCurrentCoachSubcollection()
                     self.firestore.showToast("Booking confirmed")
                     dismiss()
                 }

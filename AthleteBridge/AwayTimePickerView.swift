@@ -4,6 +4,7 @@ import FirebaseFirestore
 struct AwayTimePickerView: View {
     let coach: Coach
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var firestore: FirestoreManager
 
     // Round up to the next 30-minute boundary safely
     private static func nearest30Up(from date: Date) -> Date {
@@ -117,11 +118,33 @@ struct AwayTimePickerView: View {
         ]
         let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         payload["notes"] = trimmed
-        coll.addDocument(data: payload) { err in
+        coll.addDocument(data: payload) { [self] err in
             DispatchQueue.main.async {
                 isSaving = false
-                if let err = err { errorMessage = "Failed to save: \(err.localizedDescription)" }
-                else { dismiss() }
+                if let err = err {
+                    errorMessage = "Failed to save: \(err.localizedDescription)"
+                } else {
+                    // Add to Apple Calendar if enabled
+                    if firestore.autoAddToCalendar {
+                        let title = "Time Away - \(trimmed)"
+                        firestore.addBookingToAppleCalendar(
+                            title: title,
+                            start: startAt,
+                            end: endAt,
+                            location: nil,
+                            notes: trimmed,
+                            bookingId: "away-\(coach.id)-\(Int(startAt.timeIntervalSince1970))"
+                        ) { res in
+                            switch res {
+                            case .success(let eventId):
+                                print("Added time away to calendar: \(eventId)")
+                            case .failure(let err):
+                                print("Failed to add time away to calendar: \(err)")
+                            }
+                        }
+                    }
+                    dismiss()
+                }
             }
         }
     }
@@ -131,5 +154,6 @@ struct AwayTimePickerView_Previews: PreviewProvider {
     static var previews: some View {
         AwayTimePickerView(coach: Coach(id: "demo", name: "Demo Coach", specialties: [], experienceYears: 1, availability: []))
             .environmentObject(AuthViewModel())
+            .environmentObject(FirestoreManager())
     }
 }

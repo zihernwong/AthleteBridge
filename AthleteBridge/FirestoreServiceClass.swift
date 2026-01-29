@@ -41,6 +41,9 @@ class FirestoreManager: ObservableObject {
     // User preference: whether to automatically add confirmed bookings to the device calendar
     @Published var autoAddToCalendar: Bool = false
 
+    // Track booking IDs currently being processed for calendar add to prevent race conditions
+    private var calendarAddInProgress: Set<String> = []
+
     /// Fetch user-specific settings stored under `userSettings/{uid}` and populate local published properties.
     func fetchUserSettings(for uid: String) {
         let ref = db.collection("userSettings").document(uid)
@@ -186,7 +189,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // MARK: - Bookings
-    struct BookingItem: Identifiable {
+    struct BookingItem: Identifiable, Equatable {
         let id: String
         let clientID: String
         let clientName: String?
@@ -2587,12 +2590,56 @@ class FirestoreManager: ObservableObject {
     /// Fetch bookings stored under clients/{clientId}/bookings and set published `bookings`.
     func fetchBookingsFromClientSubcollection(clientId: String) {
         DispatchQueue.main.async { self.bookingsDebug = "Starting fetchBookingsFromClientSubcollection for \(clientId)..." }
-        fetchBookingsForClient(clientId: clientId) { items in
+        fetchBookingsForClient(clientId: clientId) { [weak self] items in
+            guard let self = self else { return }
             DispatchQueue.main.async {
                 self.bookings = items.sorted { (a,b) in
                     (a.startAt ?? Date.distantPast) > (b.startAt ?? Date.distantPast)
                 }
                 self.bookingsDebug += "\nFetched \(items.count) bookings from clients/\(clientId)/bookings"
+
+                // Auto-add confirmed upcoming bookings to calendar if enabled
+                // Only add if fetching for the current user (not another user's bookings)
+                guard let currentUserId = Auth.auth().currentUser?.uid,
+                      currentUserId == clientId,
+                      self.autoAddToCalendar else { return }
+
+                let confirmedUpcoming = items.filter {
+                    ($0.status ?? "").lowercased() == "confirmed" &&
+                    ($0.endAt ?? Date.distantPast) > Date() &&
+                    // Verify current user is actually a client in this booking
+                    ($0.clientID == currentUserId || ($0.clientIDs ?? []).contains(currentUserId))
+                }
+                for booking in confirmedUpcoming {
+                    // Skip if already being processed (race condition prevention)
+                    guard !self.calendarAddInProgress.contains(booking.id) else { continue }
+                    self.calendarAddInProgress.insert(booking.id)
+
+                    let coachNames = booking.allCoachNames.joined(separator: ", ")
+                    let title = booking.isGroupBooking == true
+                        ? "Group Session with \(coachNames.isEmpty ? "Coaches" : coachNames)"
+                        : "Session with \(booking.coachName ?? "Coach")"
+                    let start = booking.startAt ?? Date()
+                    let end = booking.endAt ?? Calendar.current.date(byAdding: .hour, value: 1, to: start) ?? Date()
+                    self.addBookingToAppleCalendar(
+                        title: title,
+                        start: start,
+                        end: end,
+                        location: booking.location,
+                        notes: booking.notes,
+                        bookingId: booking.id
+                    ) { [weak self] res in
+                        DispatchQueue.main.async {
+                            self?.calendarAddInProgress.remove(booking.id)
+                        }
+                        switch res {
+                        case .success(let eventId):
+                            print("Auto-added client booking to calendar: \(eventId)")
+                        case .failure(let err):
+                            print("Failed to auto-add client booking to calendar: \(err)")
+                        }
+                    }
+                }
             }
         }
     }
@@ -2696,12 +2743,56 @@ class FirestoreManager: ObservableObject {
     /// Fetch bookings for a specific coach's bookings subcollection and populate `coachBookings`.
     func fetchBookingsForCoachSubcollection(coachId: String) {
         DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchBookingsForCoachSubcollection for \(coachId)..." }
-        fetchBookingsForCoach(coachId: coachId) { items in
+        fetchBookingsForCoach(coachId: coachId) { [weak self] items in
+            guard let self = self else { return }
             DispatchQueue.main.async {
                 self.coachBookings = items.sorted { (a,b) in
                     (a.startAt ?? Date.distantPast) > (b.startAt ?? Date.distantPast)
                 }
                 self.coachBookingsDebug += "\nFetched \(items.count) bookings from coaches/\(coachId)/bookings"
+
+                // Auto-add confirmed upcoming bookings to calendar if enabled
+                // Only add if fetching for the current user (not another user's bookings)
+                guard let currentUserId = Auth.auth().currentUser?.uid,
+                      currentUserId == coachId,
+                      self.autoAddToCalendar else { return }
+
+                let confirmedUpcoming = items.filter {
+                    ($0.status ?? "").lowercased() == "confirmed" &&
+                    ($0.endAt ?? Date.distantPast) > Date() &&
+                    // Verify current user is actually a coach in this booking
+                    ($0.coachID == currentUserId || ($0.coachIDs ?? []).contains(currentUserId))
+                }
+                for booking in confirmedUpcoming {
+                    // Skip if already being processed (race condition prevention)
+                    guard !self.calendarAddInProgress.contains(booking.id) else { continue }
+                    self.calendarAddInProgress.insert(booking.id)
+
+                    let clientNames = booking.allClientNames.joined(separator: ", ")
+                    let title = booking.isGroupBooking == true
+                        ? "Group Session with \(clientNames.isEmpty ? "Clients" : clientNames)"
+                        : "Session with \(booking.clientName ?? "Client")"
+                    let start = booking.startAt ?? Date()
+                    let end = booking.endAt ?? Calendar.current.date(byAdding: .hour, value: 1, to: start) ?? Date()
+                    self.addBookingToAppleCalendar(
+                        title: title,
+                        start: start,
+                        end: end,
+                        location: booking.location,
+                        notes: booking.notes,
+                        bookingId: booking.id
+                    ) { [weak self] res in
+                        DispatchQueue.main.async {
+                            self?.calendarAddInProgress.remove(booking.id)
+                        }
+                        switch res {
+                        case .success(let eventId):
+                            print("Auto-added coach booking to calendar: \(eventId)")
+                        case .failure(let err):
+                            print("Failed to auto-add coach booking to calendar: \(err)")
+                        }
+                    }
+                }
             }
         }
     }
@@ -2838,36 +2929,7 @@ class FirestoreManager: ObservableObject {
                     completion(err)
                 } else {
                     print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
-                    // If booking was confirmed and the user opted into auto-add, add to calendar
-                    if status.lowercased() == "confirmed" || status.lowercased() == "accepted" {
-                        // Only proceed if the current user opted in
-                        if self.autoAddToCalendar {
-                            // Fetch the booking doc to extract details and add to calendar
-                            bookingRef.getDocument { bsnap, berr in
-                                if let berr = berr { print("updateBookingStatus: failed fetching booking to add calendar: \(berr)"); completion(nil); return }
-                                guard let bdata = bsnap?.data() else { completion(nil); return }
-                                // Extract title: prefer coach/client names
-                                var title = "Booking"
-                                if let clientRef = bdata["ClientID"] as? DocumentReference {
-                                    title = "Session with \(clientRef.documentID)"
-                                }
-                                if let coachRef = bdata["CoachID"] as? DocumentReference {
-                                    title = "Session with \(coachRef.documentID)"
-                                }
-                                // Extract start/end
-                                let start = (bdata["StartAt"] as? Timestamp)?.dateValue() ?? Date()
-                                let end = (bdata["EndAt"] as? Timestamp)?.dateValue() ?? Calendar.current.date(byAdding: .minute, value: 30, to: start) ?? Date()
-                                let location = bdata["Location"] as? String
-                                let notes = bdata["Notes"] as? String
-                                self.addBookingToAppleCalendar(title: title, start: start, end: end, location: location, notes: notes, bookingId: bookingId) { res in
-                                    switch res {
-                                    case .success(let eventId): print("Added booking to calendar: \(eventId)")
-                                    case .failure(let err): print("Failed to add booking to calendar: \(err)")
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Calendar auto-add is handled by fetch functions with proper role checking
                     completion(nil)
                 }
             }
