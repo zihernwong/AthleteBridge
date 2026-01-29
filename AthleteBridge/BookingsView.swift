@@ -226,7 +226,7 @@ struct BookingsView: View {
                 }
             }
             NavigationLink(destination:
-                            ConfirmedBookingsView()
+                            ClientConfirmedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
                 Text("View Confirmed Bookings")
@@ -242,7 +242,7 @@ struct BookingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Removed label per request
             NavigationLink(destination:
-                            AcceptedBookingsView()
+                            CoachConfirmedBookingsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)) {
                 Text("View Confirmed Bookings")

@@ -43,11 +43,11 @@ struct PaymentsView: View {
         return (firestore.currentUserType ?? "").uppercased() == "COACH"
     }
 
-    // Partition client bookings by payment status in a single pass
+    // Partition client bookings by payment status in a single pass (only confirmed bookings)
     private var clientBookingsPartitioned: (paid: [FirestoreManager.BookingItem], unpaid: [FirestoreManager.BookingItem]) {
         var paid: [FirestoreManager.BookingItem] = []
         var unpaid: [FirestoreManager.BookingItem] = []
-        for b in firestore.bookings {
+        for b in firestore.bookings where (b.status ?? "").lowercased() == "confirmed" {
             if (b.paymentStatus ?? "").lowercased() == "paid" { paid.append(b) }
             else { unpaid.append(b) }
         }

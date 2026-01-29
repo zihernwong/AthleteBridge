@@ -1,7 +1,7 @@
 import SwiftUI
 import FirebaseFirestore
 
-struct AcceptedBookingsView: View {
+struct CoachConfirmedBookingsView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
 
@@ -273,10 +273,10 @@ struct CoachRescheduleView: View {
     }
 }
 
-struct AcceptedBookingsView_Previews: PreviewProvider {
+struct CoachConfirmedBookingsView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationStack {
-            AcceptedBookingsView()
+            CoachConfirmedBookingsView()
                 .environmentObject(FirestoreManager())
                 .environmentObject(AuthViewModel())
         }

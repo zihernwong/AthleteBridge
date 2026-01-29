@@ -16,7 +16,28 @@ struct ReviewBookingView: View {
         if let rate = booking.RateUSD {
             return String(format: "$%.2f", rate)
         }
+        return "—"
+    }
 
+    // Calculate duration in 0.5 hour increments
+    private var durationHours: Double {
+        guard let start = booking.startAt, let end = booking.endAt else { return 0 }
+        let totalMinutes = end.timeIntervalSince(start) / 60
+        // Round to nearest 0.5 hour increment
+        let halfHours = (totalMinutes / 30).rounded()
+        return halfHours * 0.5
+    }
+
+    // Calculate total booking cost based on hourly rate and duration
+    private var totalBookingCost: Double? {
+        guard let rate = booking.RateUSD, durationHours > 0 else { return nil }
+        return rate * durationHours
+    }
+
+    private var totalCostDisplayText: String {
+        if let total = totalBookingCost {
+            return String(format: "$%.2f", total)
+        }
         return "—"
     }
 
@@ -36,12 +57,28 @@ struct ReviewBookingView: View {
                         .font(.headline)
                 }
 
-                // Price
+                // Hourly Rate
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Coach Price")
+                    Text("Hourly Rate")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(rateDisplayText)
+                        .font(.headline)
+                }
+
+                // Total Booking Cost
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Total Booking Cost")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        if durationHours > 0 {
+                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Text(totalCostDisplayText)
                         .font(.headline)
                 }
 

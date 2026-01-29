@@ -14,6 +14,22 @@ struct AcceptBookingView: View {
     @State private var isSaving: Bool = false
     @State private var errorMessage: String? = nil
 
+    // Calculate duration in 0.5 hour increments
+    private var durationHours: Double {
+        guard let start = booking.startAt, let end = booking.endAt else { return 0 }
+        let totalMinutes = end.timeIntervalSince(start) / 60
+        // Round to nearest 0.5 hour increment
+        let halfHours = (totalMinutes / 30).rounded()
+        return halfHours * 0.5
+    }
+
+    // Calculate total booking cost based on hourly rate and duration
+    private var totalBookingCost: Double? {
+        guard let rate = Double(rateText.replacingOccurrences(of: ",", with: ".")),
+              durationHours > 0 else { return nil }
+        return rate * durationHours
+    }
+
     // Check if this is a group booking
     private var isGroupBooking: Bool {
         booking.isGroupBooking ?? false ||
@@ -119,12 +135,31 @@ struct AcceptBookingView: View {
                     }
                 }
 
-                Section(header: Text("Rate (USD)")) {
+                Section(header: Text("Hourly Rate")) {
                     HStack {
                         Text("$")
                         TextField("e.g. 45.00", text: $rateText)
                             .keyboardType(.decimalPad)
                             .disableAutocorrection(true)
+                    }
+                }
+
+                Section(header: Text("Total Booking Cost (USD)")) {
+                    HStack {
+                        Text("$")
+                        if let total = totalBookingCost {
+                            Text(String(format: "%.2f", total))
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text("—")
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if durationHours > 0 {
+                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
 
