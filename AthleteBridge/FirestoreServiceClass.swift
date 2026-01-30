@@ -359,7 +359,7 @@ class FirestoreManager: ObservableObject {
         let createdAt: Date?
     }
 
-    struct ChatItem: Identifiable {
+    struct ChatItem: Identifiable, Equatable {
         let id: String
         let participants: [String]
         let lastMessageText: String?
@@ -499,6 +499,8 @@ class FirestoreManager: ObservableObject {
         chatsListener = nil
         chatsListenerSecondary?.remove()
         chatsListenerSecondary = nil
+        chatsListenerLegacy?.remove()
+        chatsListenerLegacy = nil
 
         print("listenForChatsForCurrentUser: registering listeners for uid=\(uid) userType=\(self.currentUserType ?? "nil")")
 
@@ -507,19 +509,21 @@ class FirestoreManager: ObservableObject {
         let coachRef = db.collection("coaches").document(uid)
         let clientRef = db.collection("clients").document(uid)
 
-        // Track results from both queries to merge them
+        // Track results from all queries to merge them
         var coachChats: [ChatItem] = []
         var clientChats: [ChatItem] = []
+        var legacyChats: [ChatItem] = []
         var coachOtherUids: Set<String> = []
         var clientOtherUids: Set<String> = []
+        var legacyOtherUids: Set<String> = []
 
         // Helper to merge and publish results
         let mergeAndPublish: () -> Void = { [weak self] in
             guard let self = self else { return }
-            // Combine chats from both queries, removing duplicates by id
+            // Combine chats from all queries, removing duplicates by id
             var seen = Set<String>()
             var merged: [ChatItem] = []
-            for chat in (coachChats + clientChats) {
+            for chat in (coachChats + clientChats + legacyChats) {
                 if !seen.contains(chat.id) {
                     seen.insert(chat.id)
                     merged.append(chat)
@@ -536,18 +540,20 @@ class FirestoreManager: ObservableObject {
             }
 
             // Resolve participant names
-            let allOtherUids = coachOtherUids.union(clientOtherUids)
+            let allOtherUids = coachOtherUids.union(clientOtherUids).union(legacyOtherUids)
             if !allOtherUids.isEmpty {
                 self.ensureParticipantNames(Array(allOtherUids))
             }
         }
 
         // Query 1: Chats where user is referenced as a coach
-        let coachQuery = db.collection("chats").whereField("participantRefs", arrayContains: coachRef).order(by: "lastMessageAt", descending: true)
+        // Note: We don't use orderBy here to avoid requiring a composite Firestore index.
+        // Sorting is done locally in mergeAndPublish().
+        let coachQuery = db.collection("chats").whereField("participantRefs", arrayContains: coachRef)
         chatsListener = coachQuery.addSnapshotListener { [weak self] snap, err in
             guard let self = self else { return }
             if let err = err {
-                print("listenForChatsForCurrentUser (coach): snapshot error: \(err)")
+                print("listenForChatsForCurrentUser (coach): error: \(err.localizedDescription)")
             }
             let docs = snap?.documents ?? []
             coachChats = []
@@ -570,11 +576,13 @@ class FirestoreManager: ObservableObject {
         }
 
         // Query 2: Chats where user is referenced as a client
-        let clientQuery = db.collection("chats").whereField("participantRefs", arrayContains: clientRef).order(by: "lastMessageAt", descending: true)
+        // Note: We don't use orderBy here to avoid requiring a composite Firestore index.
+        // Sorting is done locally in mergeAndPublish().
+        let clientQuery = db.collection("chats").whereField("participantRefs", arrayContains: clientRef)
         chatsListenerSecondary = clientQuery.addSnapshotListener { [weak self] snap, err in
             guard let self = self else { return }
             if let err = err {
-                print("listenForChatsForCurrentUser (client): snapshot error: \(err)")
+                print("listenForChatsForCurrentUser (client): error: \(err.localizedDescription)")
             }
             let docs = snap?.documents ?? []
             clientChats = []
@@ -595,10 +603,128 @@ class FirestoreManager: ObservableObject {
             }
             mergeAndPublish()
         }
+
+        // Query 3: Legacy chats where user is in participants string array (for backward compatibility)
+        // Note: We don't use orderBy here to avoid requiring a composite Firestore index.
+        // Sorting is done locally in mergeAndPublish().
+        let legacyQuery = db.collection("chats").whereField("participants", arrayContains: uid)
+        chatsListenerLegacy = legacyQuery.addSnapshotListener { [weak self] snap, err in
+            guard let self = self else { return }
+            if let err = err {
+                print("listenForChatsForCurrentUser (legacy): error: \(err.localizedDescription)")
+            }
+            let docs = snap?.documents ?? []
+            legacyChats = []
+            legacyOtherUids = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                var participantsArr: [String] = []
+                if let refs = data["participantRefs"] as? [DocumentReference] {
+                    participantsArr = refs.map { $0.documentID }
+                } else if let strArr = data["participants"] as? [String] {
+                    participantsArr = strArr
+                }
+                let lastText = data["lastMessageText"] as? String
+                let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+                legacyChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                for p in participantsArr where p != uid { legacyOtherUids.insert(p) }
+            }
+            mergeAndPublish()
+        }
     }
 
     // Secondary chat listener for querying both collections
     private var chatsListenerSecondary: ListenerRegistration?
+    // Tertiary chat listener for legacy participants string array
+    private var chatsListenerLegacy: ListenerRegistration?
+
+    /// Debug function to inspect all chats in the database and their structure.
+    /// Also attempts to find chats for the current user and load them directly.
+    func debugFetchAllChats() {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("DEBUG: No authenticated user")
+            return
+        }
+        print("DEBUG: Fetching all chats to inspect structure... (current uid=\(uid))")
+        db.collection("chats").limit(to: 50).getDocuments { [weak self] snap, err in
+            guard let self = self else { return }
+            if let err = err {
+                print("DEBUG: Error fetching chats: \(err)")
+                return
+            }
+            let docs = snap?.documents ?? []
+            print("DEBUG: Found \(docs.count) total chats in database")
+
+            var userChats: [ChatItem] = []
+            var otherUids: Set<String> = []
+
+            for doc in docs {
+                let data = doc.data()
+                print("DEBUG: Chat \(doc.documentID):")
+
+                var participantsArr: [String] = []
+                var userInChat = false
+
+                if let refs = data["participantRefs"] as? [DocumentReference] {
+                    print("  - participantRefs (DocumentReference[]): \(refs.map { $0.path })")
+                    participantsArr = refs.map { $0.documentID }
+                    userInChat = refs.contains { $0.documentID == uid }
+                } else if let refs = data["participantRefs"] {
+                    print("  - participantRefs (unknown type): \(type(of: refs)) = \(refs)")
+                } else {
+                    print("  - participantRefs: nil")
+                }
+
+                if let parts = data["participants"] as? [String] {
+                    print("  - participants (String[]): \(parts)")
+                    if participantsArr.isEmpty {
+                        // Extract UIDs from participants - they might be paths like "coaches/uid" or just "uid"
+                        participantsArr = parts.map { p in
+                            if p.contains("/") {
+                                return String(p.split(separator: "/").last ?? Substring(p))
+                            }
+                            return p
+                        }
+                    }
+                    userInChat = userInChat || parts.contains(uid) || parts.contains { $0.contains(uid) }
+                } else if let parts = data["participants"] {
+                    print("  - participants (unknown type): \(type(of: parts)) = \(parts)")
+                } else {
+                    print("  - participants: nil")
+                }
+
+                print("  - lastMessageAt: \(data["lastMessageAt"] ?? "nil")")
+                print("  - lastMessageText: \(data["lastMessageText"] ?? "nil")")
+                print("  - currentUserInChat: \(userInChat)")
+
+                // If user is in this chat, add it to our list
+                if userInChat {
+                    let lastText = data["lastMessageText"] as? String
+                    let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
+                    userChats.append(ChatItem(id: doc.documentID, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                    for p in participantsArr where p != uid { otherUids.insert(p) }
+                }
+            }
+
+            print("DEBUG: Found \(userChats.count) chats for current user")
+
+            // If we found chats but the main listeners didn't, load them directly
+            if !userChats.isEmpty && self.chats.isEmpty {
+                print("DEBUG: Main listeners found no chats, but debug found \(userChats.count). Loading directly...")
+                userChats.sort { ($0.lastMessageAt ?? .distantPast) > ($1.lastMessageAt ?? .distantPast) }
+                DispatchQueue.main.async {
+                    self.chats = userChats
+                    self.chatsDebug = "DEBUG loaded \(userChats.count) chats"
+                    let ids = userChats.map { $0.id }
+                    if !ids.isEmpty { self.loadPreviewsForChats(chatIds: ids) }
+                }
+                if !otherUids.isEmpty {
+                    self.ensureParticipantNames(Array(otherUids))
+                }
+            }
+        }
+    }
 
     // Original single-query listener kept for reference but replaced above
     private func listenForChatsForCurrentUserSingleQuery() {
@@ -660,6 +786,7 @@ class FirestoreManager: ObservableObject {
     func stopListeningForChats() {
         if let l = chatsListener { l.remove(); chatsListener = nil }
         if let l = chatsListenerSecondary { l.remove(); chatsListenerSecondary = nil }
+        if let l = chatsListenerLegacy { l.remove(); chatsListenerLegacy = nil }
         DispatchQueue.main.async { self.chats = []; self.chatsDebug = "stopped" }
     }
 
@@ -815,6 +942,185 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Force refresh participant names by directly fetching from Firestore (bypassing cache).
+    /// Call this when pull-to-refresh is triggered or when names appear as UIDs.
+    func forceRefreshParticipantNames(for uids: [String]) {
+        guard !uids.isEmpty else { return }
+
+        // Clear cached names for these UIDs so UI shows loading state
+        for uid in uids {
+            // Only clear if it looks like a UID (not a real name)
+            if let cached = participantNames[uid], looksLikeUID(cached) {
+                participantNames.removeValue(forKey: uid)
+            }
+        }
+
+        // Fetch directly from Firestore with source: .server to bypass cache
+        fetchParticipantNamesFromServer(uids)
+    }
+
+    /// Check if a string looks like a Firebase UID
+    private func looksLikeUID(_ str: String) -> Bool {
+        return str.count >= 20 && !str.contains(" ") && str.allSatisfy { $0.isLetter || $0.isNumber }
+    }
+
+    /// Fetch participant names directly from server, bypassing Firestore cache
+    private func fetchParticipantNamesFromServer(_ uids: [String]) {
+        // Chunk into groups of 10 (Firestore 'in' query limit)
+        let chunks = stride(from: 0, to: uids.count, by: 10).map {
+            Array(uids[$0..<min($0 + 10, uids.count)])
+        }
+
+        for chunk in chunks {
+            // Query coaches first
+            db.collection("coaches").whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments(source: .server) { [weak self] snap, err in
+                    guard let self = self else { return }
+                    if let err = err {
+                        print("forceRefreshParticipantNames (coaches): \(err.localizedDescription)")
+                    }
+
+                    var foundIds: Set<String> = []
+                    if let docs = snap?.documents {
+                        for doc in docs {
+                            let id = doc.documentID
+                            let data = doc.data()
+                            let first = data["FirstName"] as? String ?? ""
+                            let last = data["LastName"] as? String ?? ""
+                            let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+                            if !name.isEmpty {
+                                DispatchQueue.main.async { self.participantNames[id] = name }
+                                foundIds.insert(id)
+                            }
+                            // Also update photo URL
+                            if let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String), !photoStr.isEmpty {
+                                self.resolvePhotoURL(photoStr) { url in
+                                    DispatchQueue.main.async { self.coachPhotoURLs[id] = url }
+                                }
+                            }
+                        }
+                    }
+
+                    // Query clients for remaining UIDs
+                    let remaining = chunk.filter { !foundIds.contains($0) }
+                    if remaining.isEmpty { return }
+
+                    self.db.collection("clients").whereField(FieldPath.documentID(), in: remaining)
+                        .getDocuments(source: .server) { [weak self] csnap, cerr in
+                            guard let self = self else { return }
+                            if let cerr = cerr {
+                                print("forceRefreshParticipantNames (clients): \(cerr.localizedDescription)")
+                            }
+
+                            var foundClientIds: Set<String> = []
+                            if let cdocs = csnap?.documents {
+                                for cdoc in cdocs {
+                                    let id = cdoc.documentID
+                                    let cdata = cdoc.data()
+                                    let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? ""
+                                    if !name.isEmpty {
+                                        DispatchQueue.main.async { self.participantNames[id] = name }
+                                        foundClientIds.insert(id)
+                                    }
+                                    // Also update photo URL
+                                    if let photoStr = (cdata["photoURL"] as? String) ?? (cdata["PhotoURL"] as? String), !photoStr.isEmpty {
+                                        self.resolvePhotoURL(photoStr) { url in
+                                            DispatchQueue.main.async { self.clientPhotoURLs[id] = url }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // For UIDs still not found, schedule a retry after a delay
+                            let stillMissing = remaining.filter { !foundClientIds.contains($0) }
+                            if !stillMissing.isEmpty {
+                                // Retry after 2 seconds - the profile might still be creating
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                                    self?.retryFetchParticipantNames(stillMissing, attempt: 1)
+                                }
+                            }
+                        }
+                }
+        }
+    }
+
+    /// Retry fetching participant names with exponential backoff
+    private func retryFetchParticipantNames(_ uids: [String], attempt: Int) {
+        guard attempt <= 3 else {
+            // Give up after 3 attempts, use UID as fallback
+            for uid in uids where participantNames[uid] == nil {
+                DispatchQueue.main.async { self.participantNames[uid] = uid }
+            }
+            return
+        }
+
+        print("retryFetchParticipantNames: attempt \(attempt) for \(uids.count) UIDs")
+
+        // Check coaches
+        db.collection("coaches").whereField(FieldPath.documentID(), in: uids)
+            .getDocuments(source: .server) { [weak self] snap, _ in
+                guard let self = self else { return }
+                var found: Set<String> = []
+                if let docs = snap?.documents {
+                    for doc in docs {
+                        let id = doc.documentID
+                        let data = doc.data()
+                        let first = data["FirstName"] as? String ?? ""
+                        let last = data["LastName"] as? String ?? ""
+                        let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+                        if !name.isEmpty {
+                            DispatchQueue.main.async { self.participantNames[id] = name }
+                            found.insert(id)
+                        }
+                    }
+                }
+
+                let remaining = uids.filter { !found.contains($0) }
+                if remaining.isEmpty { return }
+
+                // Check clients
+                self.db.collection("clients").whereField(FieldPath.documentID(), in: remaining)
+                    .getDocuments(source: .server) { [weak self] csnap, _ in
+                        guard let self = self else { return }
+                        var foundClients: Set<String> = []
+                        if let cdocs = csnap?.documents {
+                            for cdoc in cdocs {
+                                let id = cdoc.documentID
+                                let cdata = cdoc.data()
+                                let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? ""
+                                if !name.isEmpty {
+                                    DispatchQueue.main.async { self.participantNames[id] = name }
+                                    foundClients.insert(id)
+                                }
+                            }
+                        }
+
+                        let stillMissing = remaining.filter { !foundClients.contains($0) }
+                        if !stillMissing.isEmpty {
+                            // Retry again with exponential backoff
+                            let delay = Double(attempt + 1) * 2.0
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                                self?.retryFetchParticipantNames(stillMissing, attempt: attempt + 1)
+                            }
+                        }
+                    }
+            }
+    }
+
+    /// Refresh all participant names for current chats
+    func refreshAllParticipantNames() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        var allParticipants: Set<String> = []
+        for chat in chats {
+            for p in chat.participants where p != uid {
+                allParticipants.insert(p)
+            }
+        }
+        if !allParticipants.isEmpty {
+            forceRefreshParticipantNames(for: Array(allParticipants))
+        }
+    }
+
     /// Return the best-known photo URL for a participant (coach first, then client).
     func participantPhotoURL(_ uid: String) -> URL? {
         return coachPhotoURLs[uid] ?? clientPhotoURLs[uid] ?? nil
@@ -828,6 +1134,7 @@ class FirestoreManager: ObservableObject {
     func stopAllChatListeners() {
         if let l = chatsListener { l.remove(); chatsListener = nil }
         if let l = chatsListenerSecondary { l.remove(); chatsListenerSecondary = nil }
+        if let l = chatsListenerLegacy { l.remove(); chatsListenerLegacy = nil }
         for (_, l) in messageListeners { l.remove() }
         messageListeners.removeAll()
         // also remove preview listeners
