@@ -577,33 +577,42 @@ struct BookingEditorView: View {
         }
         if !coach.availability.isEmpty {
             Text("Availability: \(coach.availability.joined(separator: ", "))")
+                .listRowSeparator(.hidden, edges: .bottom)
         }
 
         // Message Coach button
-        Button(action: {
-            guard Auth.auth().currentUser?.uid != nil else {
-                firestore.showToast("Please sign in to message coaches")
-                return
-            }
-            let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
-            presentedChat = ChatSheetId(id: expectedChatId)
-            firestore.createOrGetChat(withCoachId: coach.id) { chatId in
-                DispatchQueue.main.async {
-                    let target = chatId ?? expectedChatId
-                    if target != expectedChatId {
-                        presentedChat = ChatSheetId(id: target)
+        VStack(spacing: 0) {
+            Divider()
+                .padding(.horizontal, -16)
+            Button(action: {
+                guard Auth.auth().currentUser?.uid != nil else {
+                    firestore.showToast("Please sign in to message coaches")
+                    return
+                }
+                let expectedChatId = [Auth.auth().currentUser?.uid ?? "", coach.id].sorted().joined(separator: "_")
+                presentedChat = ChatSheetId(id: expectedChatId)
+                firestore.createOrGetChat(withCoachId: coach.id) { chatId in
+                    DispatchQueue.main.async {
+                        let target = chatId ?? expectedChatId
+                        if target != expectedChatId {
+                            presentedChat = ChatSheetId(id: target)
+                        }
                     }
                 }
+            }) {
+                HStack {
+                    Image(systemName: "message.fill")
+                    Text("Message Coach")
+                }
+                .frame(maxWidth: .infinity)
             }
-        }) {
-            HStack {
-                Image(systemName: "message.fill")
-                Text("Message Coach")
-            }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.borderedProminent)
+            .tint(Color("LogoGreen"))
+            .padding(.vertical, 12)
+            Divider()
+                .padding(.horizontal, -16)
         }
-        .buttonStyle(.borderedProminent)
-        .padding(.top, 8)
+        .listRowSeparator(.hidden)
 
         // Reviews summary section
         let reviews = coachReviewsMap[coach.id] ?? []
