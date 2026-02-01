@@ -123,7 +123,7 @@ struct AcceptBookingView: View {
                                 Spacer()
                                 if accepted {
                                     Label("Accepted", systemImage: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                         .font(.caption)
                                 } else {
                                     Label("Pending", systemImage: "clock")

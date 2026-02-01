@@ -22,18 +22,45 @@ struct Coach: Identifiable, Hashable {
 
     init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil) {
         self.id = id
-        self.name = name
-        self.specialties = specialties
-        self.experienceYears = experienceYears
-        self.availability = availability
-        self.bio = bio
-        self.hourlyRate = hourlyRate
+        self.name = name.trimmingCharacters(in: .whitespaces)
+        self.specialties = specialties.map { $0.trimmingCharacters(in: .whitespaces) }
+        self.experienceYears = max(0, experienceYears) // Clamp negative values to 0
+        self.availability = availability.map { $0.trimmingCharacters(in: .whitespaces) }
+        self.bio = bio?.trimmingCharacters(in: .whitespaces)
+        self.hourlyRate = hourlyRate.map { max(0, $0) } // Clamp negative values to 0
         self.photoURLString = photoURLString
-        self.meetingPreference = meetingPreference
-        self.zipCode = zipCode
-        self.city = city
+        self.meetingPreference = meetingPreference?.trimmingCharacters(in: .whitespaces)
+        self.zipCode = zipCode?.trimmingCharacters(in: .whitespaces)
+        self.city = city?.trimmingCharacters(in: .whitespaces)
         self.payments = payments
-        self.rateRange = rateRange
+        // Normalize rate range: ensure min <= max, clamp negatives to 0
+        if let range = rateRange, range.count >= 2 {
+            let lower = max(0, range[0])
+            let upper = max(0, range[1])
+            self.rateRange = [min(lower, upper), max(lower, upper)]
+        } else if let range = rateRange, range.count == 1 {
+            self.rateRange = [max(0, range[0])]
+        } else {
+            self.rateRange = rateRange
+        }
+    }
+
+    /// Returns true if the coach has a valid, non-empty name
+    var hasValidName: Bool {
+        !name.isEmpty
+    }
+
+    /// Returns the minimum rate from rateRange, or hourlyRate as fallback
+    var minimumRate: Double? {
+        rateRange?.first ?? hourlyRate
+    }
+
+    /// Returns the maximum rate from rateRange, or hourlyRate as fallback
+    var maximumRate: Double? {
+        if let range = rateRange, range.count >= 2 {
+            return range[1]
+        }
+        return rateRange?.first ?? hourlyRate
     }
 }
 
@@ -63,13 +90,18 @@ struct Client: Identifiable, Hashable {
          city: String? = nil,
          bio: String? = nil) {
         self.id = id
-        self.name = name
-        self.goals = goals
-        self.preferredAvailability = preferredAvailability
-        self.meetingPreference = meetingPreference
-        self.skillLevel = skillLevel
-        self.zipCode = zipCode
-        self.city = city
-        self.bio = bio
+        self.name = name.trimmingCharacters(in: .whitespaces)
+        self.goals = goals.map { $0.trimmingCharacters(in: .whitespaces) }
+        self.preferredAvailability = preferredAvailability.map { $0.trimmingCharacters(in: .whitespaces) }
+        self.meetingPreference = meetingPreference?.trimmingCharacters(in: .whitespaces)
+        self.skillLevel = skillLevel?.trimmingCharacters(in: .whitespaces)
+        self.zipCode = zipCode?.trimmingCharacters(in: .whitespaces)
+        self.city = city?.trimmingCharacters(in: .whitespaces)
+        self.bio = bio?.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Returns true if the client has a valid, non-empty name
+    var hasValidName: Bool {
+        !name.isEmpty
     }
 }

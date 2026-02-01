@@ -103,7 +103,7 @@ struct ConfirmBookingView: View {
                                         Spacer()
                                         if accepted {
                                             Label("Accepted", systemImage: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
+                                                .foregroundColor(Color("LogoGreen"))
                                                 .font(.caption)
                                         } else {
                                             Label("Pending", systemImage: "clock")
@@ -137,7 +137,7 @@ struct ConfirmBookingView: View {
                                         Spacer()
                                         if confirmed {
                                             Label("Confirmed", systemImage: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
+                                                .foregroundColor(Color("LogoGreen"))
                                                 .font(.caption)
                                         } else {
                                             Label("Pending", systemImage: "clock")
@@ -181,9 +181,9 @@ struct ConfirmBookingView: View {
                             if currentClientAlreadyConfirmed {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                     Text("You have confirmed this booking")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                 }
                                 if !allClientsConfirmed {
                                     Text("Waiting for other clients to confirm...")

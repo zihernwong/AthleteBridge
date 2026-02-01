@@ -339,6 +339,7 @@ class FirestoreManager: ObservableObject {
             return lhs.id == rhs.id
                 && lhs.name == rhs.name
                 && lhs.address == rhs.address
+                && lhs.notes == rhs.notes
                 && lhs.latitude == rhs.latitude
                 && lhs.longitude == rhs.longitude
         }
@@ -985,8 +986,8 @@ class FirestoreManager: ObservableObject {
                         for doc in docs {
                             let id = doc.documentID
                             let data = doc.data()
-                            let first = data["FirstName"] as? String ?? ""
-                            let last = data["LastName"] as? String ?? ""
+                            let first = (data["FirstName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                            let last = (data["LastName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
                             let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
                             if !name.isEmpty {
                                 DispatchQueue.main.async { self.participantNames[id] = name }
@@ -1065,8 +1066,8 @@ class FirestoreManager: ObservableObject {
                     for doc in docs {
                         let id = doc.documentID
                         let data = doc.data()
-                        let first = data["FirstName"] as? String ?? ""
-                        let last = data["LastName"] as? String ?? ""
+                        let first = (data["FirstName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                        let last = (data["LastName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
                         let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
                         if !name.isEmpty {
                             DispatchQueue.main.async { self.participantNames[id] = name }
@@ -1210,8 +1211,8 @@ class FirestoreManager: ObservableObject {
             for d in docs {
                 let data = d.data()
                 let id = d.documentID
-                let first = data["FirstName"] as? String ?? ""
-                let last = data["LastName"] as? String ?? ""
+                let first = (data["FirstName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                let last = (data["LastName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
                 let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
                 let specialties = data["Specialties"] as? [String] ?? []
                 let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
@@ -1259,8 +1260,8 @@ class FirestoreManager: ObservableObject {
                 if let n = data["name"] as? String { nameVal = n }
                 else if let n = data["Name"] as? String { nameVal = n }
                 else {
-                    let first = (data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? ""
-                    let last = (data["LastName"] as? String) ?? (data["lastName"] as? String) ?? ""
+                    let first = ((data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+                    let last = ((data["LastName"] as? String) ?? (data["lastName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
                     nameVal = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
                 }
                 // resolve photo URL if present
@@ -1347,8 +1348,8 @@ class FirestoreManager: ObservableObject {
             }
 
             let id = snap?.documentID ?? uid
-            let first = data["FirstName"] as? String ?? ""
-            let last = data["LastName"] as? String ?? ""
+            let first = (data["FirstName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let last = (data["LastName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
             let specialties = data["Specialties"] as? [String] ?? []
             let experience = data["ExperienceYears"] as? Int ?? (data["ExperienceYears"] as? Double).flatMap { Int($0) } ?? 0
@@ -4508,8 +4509,8 @@ class FirestoreManager: ObservableObject {
         ref.getDocument { snap, err in
             if let err = err { print("fetchCoachDisplayName error: \(err)"); completion(coachId); return }
             guard let data = snap?.data() else { completion(coachId); return }
-            let first = data["FirstName"] as? String ?? ""
-            let last = data["LastName"] as? String ?? ""
+            let first = (data["FirstName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+            let last = (data["LastName"] as? String ?? "").trimmingCharacters(in: .whitespaces)
             let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
             completion(name.isEmpty ? coachId : name)
         }

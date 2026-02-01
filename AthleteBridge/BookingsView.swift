@@ -454,7 +454,7 @@ struct BookingRowView: View {
                 Spacer()
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor((item.status ?? "").lowercased() == "confirmed" ? Color("LogoGreen") : .secondary)
             }
 
             // Show participant summary for group bookings
@@ -467,7 +467,7 @@ struct BookingRowView: View {
                             let accepted = item.coachAcceptances?[coachId] ?? false
                             HStack(spacing: 4) {
                                 Image(systemName: accepted ? "checkmark.circle.fill" : "clock")
-                                    .foregroundColor(accepted ? .green : .orange)
+                                    .foregroundColor(accepted ? Color("LogoGreen") : .orange)
                                     .font(.caption)
                                 Text(coachName)
                                     .font(.subheadline)
@@ -484,7 +484,7 @@ struct BookingRowView: View {
                             let confirmed = item.clientConfirmations?[clientId] ?? false
                             HStack(spacing: 4) {
                                 Image(systemName: confirmed ? "checkmark.circle.fill" : "clock")
-                                    .foregroundColor(confirmed ? .green : .orange)
+                                    .foregroundColor(confirmed ? Color("LogoGreen") : .orange)
                                     .font(.caption)
                                 Text(clientName)
                                     .font(.subheadline)
