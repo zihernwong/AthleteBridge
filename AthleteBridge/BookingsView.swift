@@ -8,6 +8,7 @@ struct BookingsView: View {
     @State private var showingNewBooking = false
     @State private var selectedBookingForAccept: FirestoreManager.BookingItem? = nil
     @State private var selectedBookingForReview: FirestoreManager.BookingItem? = nil
+    @State private var navigateToConfirmedBookings = false
     @State private var pendingDeepLinkBookingId: String? = nil
     @State private var selectedDate = Date()
     @State private var currentMonthAnchor = Date() // month displayed by calendar
@@ -112,6 +113,11 @@ struct BookingsView: View {
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
+            .navigationDestination(isPresented: $navigateToConfirmedBookings) {
+                CoachConfirmedBookingsView()
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+            }
             .sheet(item: $selectedBookingForAccept) { booking in
                 AcceptBookingView(booking: booking)
                     .environmentObject(firestore)
@@ -154,17 +160,28 @@ struct BookingsView: View {
             print("[DeepLink-Bookings]   FOUND in client bookings → opening ReviewBookingView")
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
+            deepLink.pendingBookingType = nil
             // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.selectedBookingForReview = booking
             }
         } else if let booking = firestore.coachBookings.first(where: { $0.id == bookingId }) {
-            print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
+            let notifType = deepLink.pendingBookingType
+            let status = (booking.status ?? "").lowercased()
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
-            // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.selectedBookingForAccept = booking
+            deepLink.pendingBookingType = nil
+            if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
+                print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.navigateToConfirmedBookings = true
+                }
+            } else {
+                print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
+                // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForAccept = booking
+                }
             }
         } else {
             // Booking not found — store ID for retry and trigger a fresh fetch

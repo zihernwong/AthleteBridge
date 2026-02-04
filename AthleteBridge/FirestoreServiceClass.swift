@@ -3467,6 +3467,7 @@ class FirestoreManager: ObservableObject {
                             "body": "All clients have confirmed the group session",
                             "bookingId": bookingId,
                             "senderId": clientId,
+                            "type": "booking_confirmed",
                             "isGroupBooking": true,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false

@@ -194,6 +194,7 @@ struct CoachConfirmedBookingsView: View {
                 "body": "\(coachName) has confirmed your payment.",
                 "bookingId": booking.id,
                 "senderId": coachId,
+                "type": "payment_confirmed",
                 "isGroupBooking": booking.isGroupBooking ?? false,
                 "createdAt": FieldValue.serverTimestamp(),
                 "delivered": false

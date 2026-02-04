@@ -263,6 +263,7 @@ struct ReviewBookingView: View {
                                 "body": "\(clientName) has confirmed the booking.",
                                 "bookingId": booking.id,
                                 "senderId": booking.clientID,
+                                "type": "booking_confirmed",
                                 "createdAt": FieldValue.serverTimestamp(),
                                 "delivered": false
                             ]
