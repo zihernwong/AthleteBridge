@@ -213,6 +213,7 @@ class FirestoreManager: ObservableObject {
         let creatorType: String?
         let coachAcceptances: [String: Bool]?
         let clientConfirmations: [String: Bool]?
+        let coachRates: [String: Double]?
         let coachNote: String?
 
         init(id: String,
@@ -236,6 +237,7 @@ class FirestoreManager: ObservableObject {
              creatorType: String? = nil,
              coachAcceptances: [String: Bool]? = nil,
              clientConfirmations: [String: Bool]? = nil,
+             coachRates: [String: Double]? = nil,
              coachNote: String? = nil) {
             self.id = id
             self.clientID = clientID
@@ -258,6 +260,7 @@ class FirestoreManager: ObservableObject {
             self.creatorType = creatorType
             self.coachAcceptances = coachAcceptances
             self.clientConfirmations = clientConfirmations
+            self.coachRates = coachRates
             self.coachNote = coachNote
         }
 
@@ -1683,7 +1686,8 @@ class FirestoreManager: ObservableObject {
                                 let creatorType = data["creatorType"] as? String
                                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                                let coachRates = data["CoachRates"] as? [String: Double]
+                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                                 results.append(item)
                                 group.leave()
                             }
@@ -1708,7 +1712,8 @@ class FirestoreManager: ObservableObject {
                             let creatorType = data["creatorType"] as? String
                             let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                             let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                            let coachRates = data["CoachRates"] as? [String: Double]
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                             results.append(item)
                             group.leave()
                         }
@@ -1747,7 +1752,8 @@ class FirestoreManager: ObservableObject {
                             let creatorType = data["creatorType"] as? String
                             let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                             let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                            let coachRates = data["CoachRates"] as? [String: Double]
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                             results.append(item)
                             group.leave()
                         }
@@ -1772,7 +1778,8 @@ class FirestoreManager: ObservableObject {
                         let creatorType = data["creatorType"] as? String
                         let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                         let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                        let coachRates = data["CoachRates"] as? [String: Double]
+                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                         results.append(item)
                         group.leave()
                     }
@@ -1915,7 +1922,8 @@ class FirestoreManager: ObservableObject {
                 let creatorType = data["creatorType"] as? String
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                let coachRates = data["CoachRates"] as? [String: Double]
+                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
             }
             completion(items)
         }
@@ -1957,7 +1965,8 @@ class FirestoreManager: ObservableObject {
                 let creatorType = data["creatorType"] as? String
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                let coachRates = data["CoachRates"] as? [String: Double]
+                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
             }
             completion(items)
         }
@@ -3031,7 +3040,8 @@ class FirestoreManager: ObservableObject {
                         let creatorType = data["creatorType"] as? String
                         let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                         let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                        let coachRates = data["CoachRates"] as? [String: Double]
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                         aggregated.append(item)
                     }
                     group.leave()
@@ -3282,12 +3292,18 @@ class FirestoreManager: ObservableObject {
 
             // Get existing acceptances or create new map
             var acceptances = data["CoachAcceptances"] as? [String: Bool] ?? [:]
+            var coachRates = data["CoachRates"] as? [String: Double] ?? [:]
             let coachIds = data["CoachIDs"] as? [String] ?? []
             let clientIds = data["ClientIDs"] as? [String] ?? []
             let creatorID = data["creatorID"] as? String
 
             // Mark this coach as accepted
             acceptances[coachId] = true
+
+            // Store this coach's rate in the rates dictionary
+            if let rate = rateUSD {
+                coachRates[coachId] = rate
+            }
 
             // Check if all coaches have now accepted
             let allAccepted = coachIds.allSatisfy { acceptances[$0] == true }
@@ -3297,8 +3313,10 @@ class FirestoreManager: ObservableObject {
 
             var updateData: [String: Any] = [
                 "CoachAcceptances": acceptances,
+                "CoachRates": coachRates,
                 "Status": newStatus
             ]
+            // Also store in RateUSD for backwards compatibility (will be last coach's rate)
             if let rate = rateUSD {
                 updateData["RateUSD"] = rate
             }
@@ -3809,7 +3827,8 @@ class FirestoreManager: ObservableObject {
                 let creatorType = data["creatorType"] as? String
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachNote: coachNote)
+                let coachRates = data["CoachRates"] as? [String: Double]
+                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
                 items.append(item)
             }
             completion(items)

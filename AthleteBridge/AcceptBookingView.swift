@@ -37,6 +37,17 @@ struct AcceptBookingView: View {
         (booking.clientIDs?.count ?? 0) > 1
     }
 
+    private func statusColor(for status: String) -> Color {
+        switch status.lowercased() {
+        case "confirmed":
+            return Color("LogoGreen")
+        case "requested":
+            return Color("LogoBlue")
+        default:
+            return .primary
+        }
+    }
+
     // Resolve client display name: prefer booking.clientName, else lookup by clientID from firestore.clients
     private var clientDisplayName: String {
         if isGroupBooking {
@@ -94,7 +105,12 @@ struct AcceptBookingView: View {
                     }
 
                     if let status = booking.status, !status.isEmpty {
-                        HStack { Text("Status").bold(); Spacer(); Text(status.capitalized) }
+                        HStack {
+                            Text("Status").bold()
+                            Spacer()
+                            Text(status.capitalized)
+                                .foregroundColor(statusColor(for: status))
+                        }
                     }
                     if let start = booking.startAt {
                         HStack { Text("Starts").bold(); Spacer(); Text(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short)) }

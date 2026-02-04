@@ -3,10 +3,12 @@ import SwiftUI
 struct BookingsView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var deepLink: DeepLinkManager
 
     @State private var showingNewBooking = false
     @State private var selectedBookingForAccept: FirestoreManager.BookingItem? = nil
     @State private var selectedBookingForReview: FirestoreManager.BookingItem? = nil
+    @State private var pendingDeepLinkBookingId: String? = nil
     @State private var selectedDate = Date()
     @State private var currentMonthAnchor = Date() // month displayed by calendar
 
@@ -96,6 +98,14 @@ struct BookingsView: View {
                 firestore.fetchBookingsForCurrentClientSubcollection()
                 firestore.fetchBookingsForCurrentCoachSubcollection()
                 firestore.fetchCoaches()
+
+                // Handle deep link if pendingDestination was set before this view appeared
+                if case .booking(let bookingId) = deepLink.pendingDestination {
+                    print("[DeepLink-Bookings] onAppear: detected pending booking deep link: \(bookingId)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        handleBookingDeepLink(bookingId: bookingId)
+                    }
+                }
             }
             .sheet(isPresented: $showingNewBooking) {
                 BookingEditorView(showSheet: $showingNewBooking)
@@ -112,6 +122,56 @@ struct BookingsView: View {
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
+            .onChange(of: deepLink.pendingDestination) { _old, destination in
+                guard case .booking(let bookingId) = destination else { return }
+                print("[DeepLink-Bookings] onChange: pendingDestination changed to booking: \(bookingId)")
+                // Delay to let tab switch and view settle
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    handleBookingDeepLink(bookingId: bookingId)
+                }
+            }
+            .onChange(of: firestore.bookings) { _, _ in
+                if let bid = pendingDeepLinkBookingId {
+                    print("[DeepLink-Bookings] onChange(bookings): retrying for pending ID \(bid), bookings count=\(firestore.bookings.count)")
+                    handleBookingDeepLink(bookingId: bid)
+                }
+            }
+            .onChange(of: firestore.coachBookings) { _, _ in
+                if let bid = pendingDeepLinkBookingId {
+                    print("[DeepLink-Bookings] onChange(coachBookings): retrying for pending ID \(bid), coachBookings count=\(firestore.coachBookings.count)")
+                    handleBookingDeepLink(bookingId: bid)
+                }
+            }
+        }
+    }
+
+    private func handleBookingDeepLink(bookingId: String) {
+        print("[DeepLink-Bookings] handleBookingDeepLink called for: \(bookingId)")
+        print("[DeepLink-Bookings]   bookings count: \(firestore.bookings.count), ids: \(firestore.bookings.map { $0.id })")
+        print("[DeepLink-Bookings]   coachBookings count: \(firestore.coachBookings.count), ids: \(firestore.coachBookings.map { $0.id })")
+
+        if let booking = firestore.bookings.first(where: { $0.id == bookingId }) {
+            print("[DeepLink-Bookings]   FOUND in client bookings → opening ReviewBookingView")
+            pendingDeepLinkBookingId = nil
+            deepLink.pendingDestination = nil
+            // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.selectedBookingForReview = booking
+            }
+        } else if let booking = firestore.coachBookings.first(where: { $0.id == bookingId }) {
+            print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
+            pendingDeepLinkBookingId = nil
+            deepLink.pendingDestination = nil
+            // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.selectedBookingForAccept = booking
+            }
+        } else {
+            // Booking not found — store ID for retry and trigger a fresh fetch
+            print("[DeepLink-Bookings]   NOT FOUND in either list — storing for retry and fetching fresh data")
+            pendingDeepLinkBookingId = bookingId
+            firestore.fetchBookingsForCurrentClientSubcollection()
+            firestore.fetchBookingsForCurrentCoachSubcollection()
         }
     }
 
@@ -416,6 +476,17 @@ struct BookingRowView: View {
         (item.clientIDs?.count ?? 0) > 1
     }
 
+    private func statusColor(for status: String?) -> Color {
+        switch (status ?? "").lowercased() {
+        case "confirmed":
+            return Color("LogoGreen")
+        case "requested":
+            return Color("LogoBlue")
+        default:
+            return .secondary
+        }
+    }
+
     private var displayTitle: String {
         if isGroup {
             return "Group Session"
@@ -454,7 +525,7 @@ struct BookingRowView: View {
                 Spacer()
                 Text(item.status?.capitalized ?? "")
                     .font(.caption)
-                    .foregroundColor((item.status ?? "").lowercased() == "confirmed" ? Color("LogoGreen") : .secondary)
+                    .foregroundColor(statusColor(for: item.status))
             }
 
             // Show participant summary for group bookings

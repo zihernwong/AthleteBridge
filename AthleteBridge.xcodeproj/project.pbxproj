@@ -80,8 +80,6 @@
 				"/Localized: LaunchScreen.storyboard.bak.5339",
 				"/Localized: LaunchScreen.storyboard.bak.20251130002012",
 				"/Localized: LaunchScreen.storyboard.corrupt.1764559925",
-				Base.lproj/backups/LaunchScreen.storyboard.broken.1764559925,
-				File.txt,
 				firebase.json,
 				firestore.rules,
 				"functions/athletebridge-sa.json",
@@ -3416,7 +3414,6 @@
 				functions/tsconfig.json,
 				Info.plist,
 				ReviewsView.swift.restored,
-				scripts/copy_dsyms_to_dsym_folder.sh,
 			);
 			target = 4B285B3D2ECEBBAB00241189 /* AthleteBridge */;
 		};

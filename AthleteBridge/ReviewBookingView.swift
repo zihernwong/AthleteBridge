@@ -41,6 +41,40 @@ struct ReviewBookingView: View {
         return "—"
     }
 
+    // Check if this is a group booking with multiple coaches
+    private var isMultiCoachBooking: Bool {
+        booking.isGroupBooking == true && booking.allCoachIDs.count > 1
+    }
+
+    // Get coach rates paired with names for display
+    private var coachRatesForDisplay: [(id: String, name: String, rate: Double?)] {
+        let coachIds = booking.allCoachIDs
+        let coachNames = booking.allCoachNames
+        let rates = booking.coachRates ?? [:]
+
+        return coachIds.enumerated().map { (index, coachId) in
+            let name = index < coachNames.count ? coachNames[index] : "Coach"
+            let rate = rates[coachId]
+            return (id: coachId, name: name, rate: rate)
+        }
+    }
+
+    // Calculate total cost for all coaches combined
+    private var totalCombinedCost: Double? {
+        guard durationHours > 0 else { return nil }
+        let rates = booking.coachRates ?? [:]
+        guard !rates.isEmpty else { return nil }
+        let totalRate = rates.values.reduce(0, +)
+        return totalRate * durationHours
+    }
+
+    private var totalCombinedCostDisplayText: String {
+        if let total = totalCombinedCost {
+            return String(format: "$%.2f", total)
+        }
+        return "—"
+    }
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
@@ -48,38 +82,81 @@ struct ReviewBookingView: View {
                     .font(.largeTitle)
                     .bold()
 
-                // Coach
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Coach")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(coachDisplayName)
-                        .font(.headline)
-                }
-
-                // Hourly Rate
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Hourly Rate")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(rateDisplayText)
-                        .font(.headline)
-                }
-
-                // Total Booking Cost
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Total Booking Cost")
+                if isMultiCoachBooking {
+                    // Multi-coach group booking: show each coach with their rate
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Coaches & Rates")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        if durationHours > 0 {
-                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+
+                        ForEach(coachRatesForDisplay, id: \.id) { coach in
+                            HStack {
+                                Text(coach.name)
+                                    .font(.headline)
+                                Spacer()
+                                if let rate = coach.rate {
+                                    Text(String(format: "$%.2f/hr", rate))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Rate pending")
+                                        .font(.subheadline)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                            .padding(.vertical, 4)
                         }
                     }
-                    Text(totalCostDisplayText)
-                        .font(.headline)
+
+                    // Total Combined Booking Cost
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Total Booking Cost")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            if durationHours > 0 {
+                                Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Text(totalCombinedCostDisplayText)
+                            .font(.headline)
+                    }
+                } else {
+                    // Single coach booking: show original layout
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Coach")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(coachDisplayName)
+                            .font(.headline)
+                    }
+
+                    // Hourly Rate
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Hourly Rate")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(rateDisplayText)
+                            .font(.headline)
+                    }
+
+                    // Total Booking Cost
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Total Booking Cost")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            if durationHours > 0 {
+                                Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Text(totalCostDisplayText)
+                            .font(.headline)
+                    }
                 }
 
                 if let start = booking.startAt {
