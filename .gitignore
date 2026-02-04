@@ -16,11 +16,26 @@
 # Xcode user data
 *.xcuserdatad/
 xcuserdata/
+*.xcuserstate
 
 # Build / derived
 build/
 DerivedData/
 Pods/
+
+# Backup files
+*.bak
+*.bak2*
+*.backup.*
+*.backup_*
+*.preinfobak*
+*.preprojcfg*
+*.insertbak
+*.new
+.gitignore.bak
+
+# Misc junk
+50MB
 
 # Editor files
 *.swp
