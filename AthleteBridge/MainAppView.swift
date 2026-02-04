@@ -3,6 +3,7 @@ import SwiftUI
 struct MainAppView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var deepLink: DeepLinkManager
         // Small UIImage used for the TabBar icon (loaded from firestore URLs)
     @State private var tabAvatarImage: UIImage? = nil
     @State private var selectedTab: Int = 1 // default to Home so Profile view doesn't open fullscreen by default
@@ -80,6 +81,23 @@ struct MainAppView: View {
             }
             if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
             else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
+
+            // Handle deep link on cold start
+            if let destination = deepLink.pendingDestination {
+                print("[DeepLink-Main] onAppear: detected pending destination: \(destination)")
+                switch destination {
+                case .chat: selectedTab = 4
+                case .booking: selectedTab = 3
+                }
+            }
+        }
+        .onChange(of: deepLink.pendingDestination) { _old, destination in
+            guard let destination = destination else { return }
+            print("[DeepLink-Main] onChange: destination changed to \(destination), switching tab")
+            switch destination {
+            case .chat: selectedTab = 4
+            case .booking: selectedTab = 3
+            }
         }
         .onChange(of: auth.user?.uid) { _old, _new in
             if let uid = _new {
@@ -174,11 +192,9 @@ struct MainAppView: View {
     }
 
     // Bookings tab wrapper: shows BookingsView (Input Time Away and Locations are inside BookingsView for coaches)
+    // BookingsView already contains its own NavigationStack, so we don't wrap it in another one.
     private var bookingsTab: some View {
-        NavigationStack {
-            BookingsView()
-                .navigationTitle("Bookings")
-        }
+        BookingsView()
     }
 
     @ViewBuilder

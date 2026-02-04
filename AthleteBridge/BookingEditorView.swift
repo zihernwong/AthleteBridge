@@ -79,7 +79,7 @@ struct BookingEditorView: View {
                             if let currentClient = firestore.currentClient {
                                 HStack {
                                     Image(systemName: "person.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                     Text("You: \(currentClient.name)")
                                         .font(.subheadline)
                                     Spacer()

@@ -74,6 +74,7 @@ struct AthleteBridgeApp: App {
             RootView()
                 .environmentObject(auth) // ✅ Provide environment object here
                 .environmentObject(firestore)
+                .environmentObject(DeepLinkManager.shared)
         }
     }
 }

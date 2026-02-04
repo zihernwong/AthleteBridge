@@ -41,7 +41,11 @@ struct CoachAvailabilityView: View {
                                 Text(b.clientName ?? b.clientID)
                                     .font(.headline)
                                 Spacer()
-                                if let status = b.status { Text(status.capitalized).font(.caption).foregroundColor(.secondary) }
+                                if let status = b.status {
+                                    Text(status.capitalized)
+                                        .font(.caption)
+                                        .foregroundColor(status.lowercased() == "requested" ? Color("LogoBlue") : (status.lowercased() == "confirmed" ? Color("LogoGreen") : .secondary))
+                                }
                             }
                             if let start = b.startAt, let end = b.endAt {
                                 Text("\(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short)) — \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
