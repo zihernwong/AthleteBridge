@@ -3,6 +3,7 @@ import SwiftUI
 struct MessagesView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var deepLink: DeepLinkManager
     @State private var showingNewConversation = false
     @State private var navPath = NavigationPath()
     @State private var newConvSearch: String = ""
@@ -26,6 +27,23 @@ struct MessagesView: View {
                     ChatView(chatId: chatId).environmentObject(firestore)
                 }
                 .sheet(isPresented: $showingNewConversation) { newConversationSheet }
+                .onChange(of: deepLink.pendingDestination) { _old, destination in
+                    guard case .chat(let chatId) = destination else { return }
+                    navPath = NavigationPath()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        navPath.append(chatId)
+                        deepLink.pendingDestination = nil
+                    }
+                }
+                .onAppear {
+                    // Handle deep link on cold start
+                    if case .chat(let chatId) = deepLink.pendingDestination {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            navPath.append(chatId)
+                            deepLink.pendingDestination = nil
+                        }
+                    }
+                }
         }
     }
 
@@ -85,8 +103,7 @@ struct MessagesView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarLeading) {
             Button(action: { showingNewConversation = true }) {
-                let isCoach = (firestore.currentUserType ?? "CLIENT").trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "COACH"
-                Text(isCoach ? "Message Clients" : "Message Nearby Coaches")
+                Text("New Message")
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -124,36 +141,35 @@ struct MessagesView: View {
 
     @ViewBuilder
     private var conversationList: some View {
-        let roleIsClient = (firestore.currentUserType ?? "CLIENT").uppercased() != "COACH"
-        if roleIsClient {
-            coachList
-        } else {
-            clientList
-        }
-    }
+        let currentUid = auth.user?.uid ?? ""
 
-    private var coachList: some View {
         List {
-            ForEach(filteredCoaches) { coach in
-                Button(action: { createAndOpenChat(with: coach.id) }) {
-                    HStack {
-                        AvatarView(url: firestore.coachPhotoURLs[coach.id] ?? nil, size: 36, useCurrentUser: false)
-                        Text(coach.name)
-                        Spacer()
+            // Show coaches section
+            if !filteredCoaches(excludingUid: currentUid).isEmpty {
+                Section(header: Text("Coaches")) {
+                    ForEach(filteredCoaches(excludingUid: currentUid)) { coach in
+                        Button(action: { createAndOpenChat(with: coach.id) }) {
+                            HStack {
+                                AvatarView(url: firestore.coachPhotoURLs[coach.id] ?? nil, size: 36, useCurrentUser: false)
+                                Text(coach.name)
+                                Spacer()
+                            }
+                        }
                     }
                 }
             }
-        }
-    }
 
-    private var clientList: some View {
-        List {
-            ForEach(filteredClients) { client in
-                Button(action: { createAndOpenChat(with: client.id) }) {
-                    HStack {
-                        AvatarView(url: client.photoURL, size: 36, useCurrentUser: false)
-                        Text(client.name)
-                        Spacer()
+            // Show clients section
+            if !filteredClients(excludingUid: currentUid).isEmpty {
+                Section(header: Text("Clients")) {
+                    ForEach(filteredClients(excludingUid: currentUid)) { client in
+                        Button(action: { createAndOpenChat(with: client.id) }) {
+                            HStack {
+                                AvatarView(url: client.photoURL, size: 36, useCurrentUser: false)
+                                Text(client.name)
+                                Spacer()
+                            }
+                        }
                     }
                 }
             }
@@ -162,15 +178,17 @@ struct MessagesView: View {
 
     // MARK: - Computed Properties
 
-    private var filteredCoaches: [Coach] {
+    private func filteredCoaches(excludingUid uid: String) -> [Coach] {
         firestore.coaches.filter { coach in
-            newConvSearch.isEmpty || coach.name.lowercased().contains(newConvSearch.lowercased())
+            coach.id != uid &&
+            (newConvSearch.isEmpty || coach.name.lowercased().contains(newConvSearch.lowercased()))
         }
     }
 
-    private var filteredClients: [FirestoreManager.UserSummary] {
+    private func filteredClients(excludingUid uid: String) -> [FirestoreManager.UserSummary] {
         firestore.clients.filter { client in
-            newConvSearch.isEmpty || client.name.lowercased().contains(newConvSearch.lowercased())
+            client.id != uid &&
+            (newConvSearch.isEmpty || client.name.lowercased().contains(newConvSearch.lowercased()))
         }
     }
 

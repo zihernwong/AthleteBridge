@@ -16,6 +16,7 @@ struct ConfirmBookingView: View {
     @State private var errorMessage: String? = nil
     @State private var coachAcceptances: [String: Bool] = [:]
     @State private var clientConfirmations: [String: Bool] = [:]
+    @State private var coachRates: [String: Double] = [:]
 
     // Check if this is a group booking
     private var isGroupBooking: Bool {
@@ -50,6 +51,39 @@ struct ConfirmBookingView: View {
         let clientIds = booking.allClientIDs
         guard !clientIds.isEmpty else { return true }
         return clientIds.allSatisfy { clientConfirmations[$0] == true }
+    }
+
+    // Check if this is a multi-coach booking
+    private var isMultiCoachBooking: Bool {
+        booking.allCoachIDs.count > 1
+    }
+
+    // Get coach rates paired with names for display
+    private var coachRatesForDisplay: [(id: String, name: String, rate: Double?)] {
+        let coachIds = booking.allCoachIDs
+        let coachNames = booking.allCoachNames
+
+        return coachIds.enumerated().map { (index, coachId) in
+            let name = index < coachNames.count ? coachNames[index] : "Coach"
+            let rate = coachRates[coachId]
+            return (id: coachId, name: name, rate: rate)
+        }
+    }
+
+    // Calculate duration in 0.5 hour increments
+    private var durationHours: Double {
+        guard let start = booking.startAt, let end = booking.endAt else { return 0 }
+        let totalMinutes = end.timeIntervalSince(start) / 60
+        let halfHours = (totalMinutes / 30).rounded()
+        return halfHours * 0.5
+    }
+
+    // Calculate total cost for all coaches combined
+    private var totalCombinedCost: Double? {
+        guard durationHours > 0 else { return nil }
+        guard !coachRates.isEmpty else { return nil }
+        let totalRate = coachRates.values.reduce(0, +)
+        return totalRate * durationHours
     }
 
     var body: some View {
@@ -103,7 +137,7 @@ struct ConfirmBookingView: View {
                                         Spacer()
                                         if accepted {
                                             Label("Accepted", systemImage: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
+                                                .foregroundColor(Color("LogoGreen"))
                                                 .font(.caption)
                                         } else {
                                             Label("Pending", systemImage: "clock")
@@ -137,7 +171,7 @@ struct ConfirmBookingView: View {
                                         Spacer()
                                         if confirmed {
                                             Label("Confirmed", systemImage: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
+                                                .foregroundColor(Color("LogoGreen"))
                                                 .font(.caption)
                                         } else {
                                             Label("Pending", systemImage: "clock")
@@ -161,11 +195,46 @@ struct ConfirmBookingView: View {
                             }
                         }
 
-                        Section(header: Text("Coach Price")) {
-                            if let r = rateUSD {
-                                Text(String(format: "$%.2f", r))
-                            } else {
-                                Text("Price not provided")
+                        if isMultiCoachBooking {
+                            // Multi-coach booking: show each coach with their rate
+                            Section(header: Text("Coach Rates")) {
+                                ForEach(coachRatesForDisplay, id: \.id) { coach in
+                                    HStack {
+                                        Text(coach.name)
+                                        Spacer()
+                                        if let rate = coach.rate {
+                                            Text(String(format: "$%.2f/hr", rate))
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            Text("Rate pending")
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                }
+
+                                if let total = totalCombinedCost {
+                                    HStack {
+                                        Text("Total Cost")
+                                            .bold()
+                                        if durationHours > 0 {
+                                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        Text(String(format: "$%.2f", total))
+                                            .bold()
+                                    }
+                                }
+                            }
+                        } else {
+                            // Single coach booking: original layout
+                            Section(header: Text("Coach Price")) {
+                                if let r = rateUSD {
+                                    Text(String(format: "$%.2f/hr", r))
+                                } else {
+                                    Text("Price not provided")
+                                }
                             }
                         }
 
@@ -181,9 +250,9 @@ struct ConfirmBookingView: View {
                             if currentClientAlreadyConfirmed {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                     Text("You have confirmed this booking")
-                                        .foregroundColor(.green)
+                                        .foregroundColor(Color("LogoGreen"))
                                 }
                                 if !allClientsConfirmed {
                                     Text("Waiting for other clients to confirm...")
@@ -236,6 +305,11 @@ struct ConfirmBookingView: View {
             // Load client confirmations for multi-client bookings
             if let confirmations = data["ClientConfirmations"] as? [String: Bool] {
                 self.clientConfirmations = confirmations
+            }
+
+            // Load coach rates for multi-coach bookings
+            if let rates = data["CoachRates"] as? [String: Double] {
+                self.coachRates = rates
             }
         } catch {
             self.errorMessage = "Failed to load offer: \(error.localizedDescription)"

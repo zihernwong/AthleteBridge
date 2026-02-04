@@ -204,9 +204,26 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Optional: handle user tapping on notification
+    // Handle user tapping on notification — route to the appropriate screen
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        // You can parse response.notification.request.content.userInfo to navigate in-app
+        let userInfo = response.notification.request.content.userInfo
+        print("[DeepLink] didReceive notification tap. userInfo keys: \(userInfo.keys)")
+        print("[DeepLink] userInfo: \(userInfo)")
+
+        if let chatId = userInfo["chatId"] as? String, !chatId.isEmpty {
+            print("[DeepLink] Found chatId: \(chatId)")
+            DispatchQueue.main.async {
+                DeepLinkManager.shared.pendingDestination = .chat(chatId: chatId)
+            }
+        } else if let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
+            print("[DeepLink] Found bookingId: \(bookingId)")
+            DispatchQueue.main.async {
+                DeepLinkManager.shared.pendingDestination = .booking(bookingId: bookingId)
+            }
+        } else {
+            print("[DeepLink] No chatId or bookingId found in notification payload")
+        }
+
         completionHandler()
     }
 }
