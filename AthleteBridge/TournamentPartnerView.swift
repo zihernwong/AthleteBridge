@@ -64,10 +64,8 @@ struct TournamentPartnerView: View {
     }
 
     private var canJoin: Bool {
-        !selectedEvents.isEmpty &&
-        !selectedSkillLevels.isEmpty
+        !selectedEvents.isEmpty
     }
-
     var body: some View {
         Form {
             Section(header: Text("Tournament")) {
