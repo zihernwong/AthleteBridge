@@ -255,7 +255,12 @@ struct BookingsView: View {
             // - status "pending acceptance" (all coaches accepted, waiting for client)
             // - status "partially_confirmed" AND this client hasn't confirmed yet
             let currentClientId = auth.user?.uid ?? ""
+            let startOfToday = Calendar.current.startOfDay(for: Date())
             let pending = firestore.bookings.filter { booking in
+                // Exclude bookings that occur in the past
+                if let start = booking.startAt, start < startOfToday {
+                    return false
+                }
                 let status = (booking.status ?? "").lowercased()
                 if status == "pending acceptance" {
                     return true
@@ -278,7 +283,7 @@ struct BookingsView: View {
                                     Text("Review Booking")
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .tint(.blue)
+                                .tint(Color("LogoGreen"))
                                 .padding(.top, -4)
                             }
                     }
@@ -292,7 +297,7 @@ struct BookingsView: View {
                 Text("View Requested Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoGreen"))
+            .tint(Color("LogoBlue"))
             .frame(maxWidth: .infinity, alignment: .leading)
 
             NavigationLink(destination:
@@ -302,7 +307,7 @@ struct BookingsView: View {
                 Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoBlue"))
+            .tint(Color("LogoGreen"))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
@@ -482,6 +487,10 @@ struct BookingRowView: View {
             return Color("LogoGreen")
         case "requested":
             return Color("LogoBlue")
+        case "pending acceptance", "partially_confirmed", "partially_accepted":
+            return .orange
+        case "cancelled":
+            return .red
         default:
             return .secondary
         }

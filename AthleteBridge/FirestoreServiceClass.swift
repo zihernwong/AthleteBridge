@@ -25,7 +25,9 @@ class FirestoreManager: ObservableObject {
         let id: String
         let name: String
         let photoURL: URL?
+        let tournamentSoftwareLink: String?
     }
+    @Published var tournaments: [Tournament] = []
     @Published var clients: [UserSummary] = []
     @Published var clientPhotoURLs: [String: URL?] = [:]
     @Published var currentClient: Client? = nil
@@ -1267,23 +1269,138 @@ class FirestoreManager: ObservableObject {
                     let last = ((data["LastName"] as? String) ?? (data["lastName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
                     nameVal = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
                 }
+                let tsLink = data["tournamentSoftwareLink"] as? String
                 // resolve photo URL if present
                 let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String)
                 if let ps = photoStr, !ps.isEmpty {
                     self.resolvePhotoURL(ps) { url in
                         DispatchQueue.main.async {
-                            results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: url))
+                            results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: url, tournamentSoftwareLink: tsLink))
                             // after processing all docs we'll assign below; but assign incrementally for responsiveness
                             self.clients = results.sorted { $0.name.lowercased() < $1.name.lowercased() }
                         }
                     }
                 } else {
-                    results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: nil))
+                    results.append(UserSummary(id: id, name: nameVal.isEmpty ? id : nameVal, photoURL: nil, tournamentSoftwareLink: tsLink))
                     DispatchQueue.main.async {
                         self.clients = results.sorted { $0.name.lowercased() < $1.name.lowercased() }
                     }
                 }
             }
+        }
+    }
+
+    func fetchTournaments() {
+        self.db.collection("tournaments").order(by: "startDate").getDocuments { snap, err in
+            if let err = err {
+                print("fetchTournaments error: \(err)")
+                return
+            }
+            let docs = snap?.documents ?? []
+            var results: [Tournament] = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                let name = data["name"] as? String ?? ""
+                let location = data["location"] as? String ?? ""
+                let createdBy = data["createdBy"] as? String ?? ""
+                let startDate: Date
+                if let ts = data["startDate"] as? Timestamp {
+                    startDate = ts.dateValue()
+                } else {
+                    startDate = Date()
+                }
+                let endDate: Date
+                if let ts = data["endDate"] as? Timestamp {
+                    endDate = ts.dateValue()
+                } else {
+                    endDate = Calendar.current.date(byAdding: .day, value: 1, to: startDate) ?? startDate
+                }
+                let signupLink = data["signupLink"] as? String
+                var participantsMap: [String: TournamentParticipantInfo] = [:]
+                if let raw = data["participants"] as? [String: Any] {
+                    for (uid, value) in raw {
+                        if let info = value as? [String: Any] {
+                            let gender = info["gender"] as? String ?? ""
+                            let events = info["events"] as? [String] ?? []
+                            let skillLevels = info["skillLevels"] as? [String] ?? []
+                            participantsMap[uid] = TournamentParticipantInfo(gender: gender, events: events, skillLevels: skillLevels)
+                        }
+                    }
+                }
+                results.append(Tournament(id: id, name: name, startDate: startDate, endDate: endDate, location: location, createdBy: createdBy, signupLink: signupLink, participants: participantsMap))
+            }
+            DispatchQueue.main.async {
+                self.tournaments = results
+            }
+        }
+    }
+
+    func createTournament(name: String, startDate: Date, endDate: Date, location: String, signupLink: String? = nil, completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        var data: [String: Any] = [
+            "name": name,
+            "startDate": Timestamp(date: startDate),
+            "endDate": Timestamp(date: endDate),
+            "location": location,
+            "createdBy": uid,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        if let link = signupLink, !link.isEmpty {
+            data["signupLink"] = link
+        }
+        self.db.collection("tournaments").addDocument(data: data) { err in
+            if let err = err {
+                print("createTournament error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async {
+                self.fetchTournaments()
+            }
+            completion(nil)
+        }
+    }
+
+    func joinTournament(tournamentId: String, gender: String, events: [String], skillLevels: [String], completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let info: [String: Any] = [
+            "gender": gender,
+            "events": events,
+            "skillLevels": skillLevels
+        ]
+        let ref = self.db.collection("tournaments").document(tournamentId)
+        ref.updateData(["participants.\(uid)": info]) { err in
+            if let err = err {
+                print("joinTournament error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self.fetchTournaments() }
+            completion?(nil)
+        }
+    }
+
+    func leaveTournament(tournamentId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let ref = self.db.collection("tournaments").document(tournamentId)
+        ref.updateData(["participants.\(uid)": FieldValue.delete()]) { err in
+            if let err = err {
+                print("leaveTournament error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self.fetchTournaments() }
+            completion?(nil)
         }
     }
 
@@ -1319,11 +1436,12 @@ class FirestoreManager: ObservableObject {
             let zip = data["zipCode"] as? String ?? data["ZipCode"] as? String
             let city = data["city"] as? String ?? data["City"] as? String
             let bio = data["bio"] as? String
+            let tournamentSoftwareLink = data["tournamentSoftwareLink"] as? String
 
             let photoStr = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
                 DispatchQueue.main.async {
-                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city, bio: bio)
+                    self.currentClient = Client(id: id, name: name, goals: goals, preferredAvailability: preferredArr, meetingPreference: meetingPref, skillLevel: data["skillLevel"] as? String, zipCode: zip, city: city, bio: bio, tournamentSoftwareLink: tournamentSoftwareLink)
                     self.currentClientPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: client photo resolved for \(id): \(r.absoluteString)")
@@ -1361,6 +1479,7 @@ class FirestoreManager: ObservableObject {
             let meetingPref = data["meetingPreference"] as? String
             let hourlyRate = data["HourlyRate"] as? Double
             let rateRange = data["RateRange"] as? [Double]
+            let coachTournamentSoftwareLink = data["tournamentSoftwareLink"] as? String
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
@@ -1374,7 +1493,7 @@ class FirestoreManager: ObservableObject {
                         paymentsMap = tmp.isEmpty ? nil : tmp
                     }
 
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -1453,7 +1572,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save client document using provided id
-    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, bio: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
+    func saveClient(id: String, name: String, goals: [String], preferredAvailability: [String], meetingPreference: String? = nil, meetingPreferenceClear: Bool = false, skillLevel: String? = nil, zipCode: String? = nil, city: String? = nil, bio: String? = nil, tournamentSoftwareLink: String? = nil, photoURL: String?, completion: @escaping (Error?) -> Void) {
         let docRef = self.db.collection("clients").document(id)
 
         // Base payload for updates (always set updatedAt)
@@ -1467,6 +1586,7 @@ class FirestoreManager: ObservableObject {
         if let z = zipCode { updateData["zipCode"] = z }
         if let c = city { updateData["city"] = c }
         if let b = bio { updateData["bio"] = b }
+        if let tsl = tournamentSoftwareLink { updateData["tournamentSoftwareLink"] = tsl }
         // If caller asked to clear the meetingPreference, request deletion in a merge/update operation
         if meetingPreferenceClear {
             updateData["meetingPreference"] = FieldValue.delete()
@@ -1503,7 +1623,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, rateRange: [Double]? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
         // Base payload (do not include createdAt here yet so we can control whether it is written)
         var baseData: [String: Any] = [
             "FirstName": firstName,
@@ -1520,6 +1640,7 @@ class FirestoreManager: ObservableObject {
         if let c = city { baseData["City"] = c }
         if let mp = meetingPreference { baseData["meetingPreference"] = mp }
         if let rr = rateRange { baseData["RateRange"] = rr }
+        if let tsl = tournamentSoftwareLink { baseData["tournamentSoftwareLink"] = tsl }
 
         let docRef = self.db.collection("coaches").document(id)
 
