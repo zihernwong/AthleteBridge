@@ -25,7 +25,7 @@ class FirestoreManager: ObservableObject {
         let id: String
         let name: String
         let photoURL: URL?
-        let tournamentSoftwareLink: String?
+        let tournamentSoftwareLink: String? = nil
     }
     @Published var tournaments: [Tournament] = []
     @Published var clients: [UserSummary] = []
