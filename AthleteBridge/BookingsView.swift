@@ -306,11 +306,12 @@ struct BookingsView: View {
             // - status "partially_confirmed" AND this client hasn't confirmed yet
             // - start time must be in the future
             let currentClientId = auth.user?.uid ?? ""
-            let now = Date()
+            let startOfToday = Calendar.current.startOfDay(for: Date())
             let pending = firestore.bookings.filter { booking in
-                // Filter out bookings that have already started
-                guard let startAt = booking.startAt, startAt > now else { return false }
-
+                // Exclude bookings that occur in the past
+                if let start = booking.startAt, start < startOfToday {
+                    return false
+                }
                 let status = (booking.status ?? "").lowercased()
                 if status == "pending acceptance" {
                     return true
@@ -327,14 +328,14 @@ struct BookingsView: View {
             } else {
                 ForEach(pending, id: \ .id) { b in
                     VStack(alignment: .leading, spacing: 6) {
-                        Button(action: { selectedBookingForDetail = b }) {
-                            BookingRowView(item: b)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .overlay(alignment: .trailing) {
-                            Button(action: { selectedBookingForReview = b }) {
-                                Text("Review Booking")
+                        BookingRowView(item: b)
+                            .overlay(alignment: .trailing) {
+                                Button(action: { selectedBookingForReview = b }) {
+                                    Text("Review Booking")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Color("LogoGreen"))
+                                .padding(.top, -4)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.blue)
@@ -351,7 +352,7 @@ struct BookingsView: View {
                 Text("View Requested Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoGreen"))
+            .tint(Color("LogoBlue"))
             .frame(maxWidth: .infinity, alignment: .leading)
 
             NavigationLink(destination:
@@ -361,7 +362,7 @@ struct BookingsView: View {
                 Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoBlue"))
+            .tint(Color("LogoGreen"))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
@@ -541,12 +542,10 @@ struct BookingRowView: View {
             return Color("LogoGreen")
         case "requested":
             return Color("LogoBlue")
-        case "pending acceptance":
+        case "pending acceptance", "partially_confirmed", "partially_accepted":
             return .orange
-        case "rejected", "declined", "declined_by_client":
+        case "cancelled":
             return .red
-        case "partially_accepted", "partially_confirmed":
-            return .orange
         default:
             return .secondary
         }

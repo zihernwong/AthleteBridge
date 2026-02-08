@@ -43,7 +43,6 @@ struct ClientFormView: View {
     }
 
     var body: some View {
-        NavigationView {
             ZStack {
                 if let bg = appLogoImageSwiftUI() {
                     bg
@@ -155,6 +154,20 @@ struct ClientFormView: View {
                             }
                         }
                      }
+
+                    NavigationLink("Find Upcoming Tournaments") {
+                        UpcomingTournamentsView()
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                    }
+
+                    Section(header: Text("Find a Tournament Partner")) {
+                        NavigationLink("Find Partners") {
+                            TournamentPartnerView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        }
+                    }
                 }
                 .navigationTitle("Find a Coach")
                  .onAppear {
@@ -162,9 +175,9 @@ struct ClientFormView: View {
                      if firestore.coaches.isEmpty {
                          firestore.fetchCoaches()
                      }
+                     firestore.fetchClients()
                  }
              }
-         }
      }
  }
 

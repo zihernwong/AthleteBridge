@@ -68,6 +68,7 @@ struct MainAppView: View {
                     .tag(6)
             }
         }
+        .tint(Color("LogoGreen"))
         // Track manual tab selection so we don't override the user's explicit choice.
         .onChange(of: selectedTab) { _old, _new in
             if !didAutoSelectCoachHome {

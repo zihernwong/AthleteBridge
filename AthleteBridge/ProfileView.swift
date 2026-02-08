@@ -36,6 +36,7 @@ struct ProfileView: View {
     private let availableAvailability: [String] = ["Morning", "Afternoon", "Evening"]
     // New: client biography text
     @State private var clientBioText: String = ""
+    @State private var clientTournamentSoftwareLink: String = ""
 
     // Coach fields
     @State private var experienceYears: Int = 0
@@ -49,6 +50,7 @@ struct ProfileView: View {
     // New: coach rate range (lower, upper)
     @State private var coachRateLowerText: String = ""
     @State private var coachRateUpperText: String = ""
+    @State private var coachTournamentSoftwareLink: String = ""
 
     // Location
     @State private var clientZipCode: String = ""
@@ -92,9 +94,9 @@ struct ProfileView: View {
                         emailSection
                     }
                     nameSection
-                    if role == .client { clientSection } else { coachSection }
                     photoSection
-                    if role == .coach { subscriptionSection }
+                    if role == .client { clientSection } else { coachSection }
+                    subscriptionSection
                     saveSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
@@ -224,6 +226,7 @@ struct ProfileView: View {
                     Text("Automatically add confirmed bookings to my Calendar")
                         .font(.subheadline)
                 }
+                .tint(Color("LogoGreen"))
             }
 
             VStack(alignment: .leading) {
@@ -271,6 +274,15 @@ struct ProfileView: View {
                 TextEditor(text: $clientBioText)
                     .frame(minHeight: 120)
             }
+
+            VStack(alignment: .leading) {
+                Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
+                TextField("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...", text: $clientTournamentSoftwareLink)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+            }
         }
     }
 
@@ -283,7 +295,7 @@ struct ProfileView: View {
                     .foregroundColor(.white)
                     .frame(width: 20, height: 20)
                     .padding(10)
-                    .background(Circle().fill(Color.accentColor))
+                    .background(Circle().fill(Color("LogoGreen")))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Signed in as").font(.caption).foregroundColor(.secondary)
@@ -299,7 +311,7 @@ struct ProfileView: View {
                     copyEmailToClipboard()
                 }) {
                     Image(systemName: "doc.on.doc")
-                        .foregroundColor(auth.user?.email == nil ? .gray : .blue)
+                        .foregroundColor(auth.user?.email == nil ? .gray : Color("LogoGreen"))
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(auth.user?.email == nil)
@@ -349,6 +361,7 @@ struct ProfileView: View {
                     Text("Automatically add confirmed bookings to my Calendar")
                         .font(.subheadline)
                 }
+                .tint(Color("LogoGreen"))
             }
 
             VStack(alignment: .leading) {
@@ -383,6 +396,15 @@ struct ProfileView: View {
             VStack(alignment: .leading) {
                 Text("Biography").font(.subheadline).foregroundColor(.secondary)
                 TextEditor(text: $bioText).frame(minHeight: 120)
+            }
+
+            VStack(alignment: .leading) {
+                Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
+                TextField("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...", text: $coachTournamentSoftwareLink)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
             }
         }
     }
@@ -507,12 +529,14 @@ struct ProfileView: View {
             selectedGoals = Set(client.goals)
             selectedClientAvailability = Set(client.preferredAvailability)
             clientBioText = client.bio ?? ""
+            clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
         }
         if let coach = firestore.currentCoach {
             name = coach.name
             selectedSpecialties = Set(coach.specialties)
             experienceYears = coach.experienceYears
             bioText = coach.bio ?? ""
+            coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
         }
     }
 
@@ -541,6 +565,7 @@ struct ProfileView: View {
             clientZipCode = client.zipCode ?? ""
             clientCity = client.city ?? ""
             clientBioText = client.bio ?? ""
+            clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
             isEditMode = true
             hasPopulatedFromExisting = true
         } else if let coach = firestore.currentCoach {
@@ -561,6 +586,7 @@ struct ProfileView: View {
                 coachRateLowerText = ""
                 coachRateUpperText = ""
             }
+            coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
             isEditMode = true
             hasPopulatedFromExisting = true
         } else {
@@ -580,6 +606,7 @@ struct ProfileView: View {
                 clientZipCode = client.zipCode ?? ""
                 clientCity = client.city ?? ""
                 clientBioText = client.bio ?? ""
+                clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
             } else {
                 isEditMode = false
             }
@@ -602,6 +629,7 @@ struct ProfileView: View {
                     coachRateLowerText = ""
                     coachRateUpperText = ""
                 }
+                coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
             } else {
                 isEditMode = false
             }
@@ -636,6 +664,7 @@ struct ProfileView: View {
                                           zipCode: clientZipCode.isEmpty ? nil : clientZipCode,
                                           city: clientCity.isEmpty ? nil : clientCity,
                                           bio: clientBioText.isEmpty ? nil : clientBioText,
+                                          tournamentSoftwareLink: clientTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : clientTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines),
                                           photoURL: photoURL) { err in
                                 DispatchQueue.main.async {
                                     isSaving = false
@@ -681,7 +710,8 @@ struct ProfileView: View {
                                        bio: bioText,
                                        zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
                                        city: coachCity.isEmpty ? nil : coachCity,
-                                       rateRange: rateRangeToSave) { err in
+                                       rateRange: rateRangeToSave,
+                                       tournamentSoftwareLink: coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines)) { err in
                     DispatchQueue.main.async {
                         isSaving = false
                         if let err = err {
@@ -744,7 +774,7 @@ struct ChipMultiSelect: View {
                         .foregroundColor(selection.contains(item) ? .white : .primary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(selection.contains(item) ? Color.accentColor : Color(UIColor.secondarySystemBackground))
+                        .background(selection.contains(item) ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
                         .cornerRadius(20)
                 }
                 .buttonStyle(PlainButtonStyle())
