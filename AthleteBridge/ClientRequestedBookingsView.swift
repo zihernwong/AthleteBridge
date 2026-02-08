@@ -7,6 +7,7 @@ struct ClientRequestedBookingsView: View {
 
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
+    @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
     @State private var selectedTab: Int = 0
 
     private func isRequested(_ status: String?) -> Bool {
@@ -77,7 +78,11 @@ struct ClientRequestedBookingsView: View {
                     } else {
                         ForEach(bookings, id: \.id) { b in
                             VStack(alignment: .leading, spacing: 8) {
-                                BookingRowView(item: b)
+                                Button(action: { selectedBookingForDetail = b }) {
+                                    BookingRowView(item: b)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
                                 Button(role: .destructive) {
                                     bookingToCancel = b
                                     showCancelAlert = true
@@ -113,6 +118,11 @@ struct ClientRequestedBookingsView: View {
             }
         } message: {
             Text("Are you sure you want to cancel this booking request? The coach will be notified.")
+        }
+        .sheet(item: $selectedBookingForDetail) { booking in
+            BookingDetailView(booking: booking)
+                .environmentObject(firestore)
+                .environmentObject(auth)
         }
     }
 

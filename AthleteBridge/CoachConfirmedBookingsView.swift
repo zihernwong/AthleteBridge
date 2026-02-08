@@ -7,6 +7,7 @@ struct CoachConfirmedBookingsView: View {
 
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
+    @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
     // Tab selection: 0 = Upcoming, 1 = Past
@@ -47,7 +48,11 @@ struct CoachConfirmedBookingsView: View {
                     } else {
                         ForEach(filtered, id: \.id) { b in
                             VStack(alignment: .leading, spacing: 8) {
-                                BookingRowView(item: b)
+                                Button(action: { selectedBookingForDetail = b }) {
+                                    BookingRowView(item: b)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
 
                                 if (b.paymentStatus ?? "").lowercased() != "paid" {
                                     Button(action: {
@@ -145,6 +150,11 @@ struct CoachConfirmedBookingsView: View {
             .environmentObject(firestore)
             .environmentObject(auth)
         }
+        .sheet(item: $selectedBookingForDetail) { booking in
+            BookingDetailView(booking: booking)
+                .environmentObject(firestore)
+                .environmentObject(auth)
+        }
     }
 
     private func cancelBooking(_ booking: FirestoreManager.BookingItem) {
@@ -194,6 +204,7 @@ struct CoachConfirmedBookingsView: View {
                 "body": "\(coachName) has confirmed your payment.",
                 "bookingId": booking.id,
                 "senderId": coachId,
+                "type": "payment_confirmed",
                 "isGroupBooking": booking.isGroupBooking ?? false,
                 "createdAt": FieldValue.serverTimestamp(),
                 "delivered": false

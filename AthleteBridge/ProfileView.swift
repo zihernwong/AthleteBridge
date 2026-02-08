@@ -94,7 +94,7 @@ struct ProfileView: View {
                     nameSection
                     if role == .client { clientSection } else { coachSection }
                     photoSection
-                    subscriptionSection
+                    if role == .coach { subscriptionSection }
                     saveSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
@@ -108,6 +108,8 @@ struct ProfileView: View {
                     if let uid = auth.user?.uid {
                         firestore.fetchCurrentProfiles(for: uid)
                         firestore.fetchUserType(for: uid)
+                        // Sync subscription tier for coaches
+                        firestore.syncSubscriptionTierFromStripe(for: uid)
                     }
                     loadInitial()
                     fetchSubjectIDs()
@@ -415,6 +417,17 @@ struct ProfileView: View {
 
     private var subscriptionSection: some View {
         Section("Subscription") {
+            HStack {
+                let tier = firestore.currentCoach?.subscriptionTier ?? .free
+                Text(tier.displayName)
+                    .font(.subheadline)
+                    .bold()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(tierColor(tier).opacity(0.15)))
+                    .foregroundColor(tierColor(tier))
+                Spacer()
+            }
             Button(action: { showingManageSubscription = true }) {
                 HStack {
                     Text("Manage My Subscription")
@@ -424,6 +437,14 @@ struct ProfileView: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
             }
+        }
+    }
+
+    private func tierColor(_ tier: CoachTier) -> Color {
+        switch tier {
+        case .free: return .gray
+        case .plus: return .blue
+        case .pro: return .purple
         }
     }
 

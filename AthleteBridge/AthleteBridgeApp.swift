@@ -75,6 +75,26 @@ struct AthleteBridgeApp: App {
                 .environmentObject(auth) // ✅ Provide environment object here
                 .environmentObject(firestore)
                 .environmentObject(DeepLinkManager.shared)
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
+        }
+    }
+
+    private func handleIncomingURL(_ url: URL) {
+        print("[AthleteBridgeApp] Received URL: \(url)")
+        // Handle athletebridge://stripe/success?session_id=...
+        guard url.scheme == "athletebridge" else { return }
+
+        if url.host == "stripe" && url.path.contains("success") {
+            print("[AthleteBridgeApp] Stripe payment success - syncing subscription")
+            // Sync subscription tier after successful payment
+            if let uid = Auth.auth().currentUser?.uid {
+                // Small delay to allow Stripe webhook to process
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    firestore.syncSubscriptionTierFromStripe(for: uid)
+                }
+            }
         }
     }
 }
