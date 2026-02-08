@@ -42,7 +42,7 @@ struct TournamentPartnerView: View {
                   let info = tournament.participants[client.id] else { return false }
             let partnerGender = info.gender
             // Check if at least one overlapping event passes the gender rules
-            let sharedEvents = myEvents.intersection(info.events)
+            let sharedEvents = myEvents.intersection(Set(info.events))
             if sharedEvents.isEmpty { return false }
             for event in sharedEvents {
                 switch event {
