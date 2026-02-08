@@ -19,7 +19,7 @@ struct AvailabilityChipSelect: View {
                 .padding(.vertical, 10)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.accentColor : Color(UIColor.secondarySystemBackground))
+                        .fill(isSelected ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
                 )
                 .foregroundColor(isSelected ? .white : .primary)
         }
@@ -64,7 +64,7 @@ fileprivate struct FlexibleChipWrap: View {
                 .padding(.vertical, 10)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.accentColor : Color(UIColor.secondarySystemBackground))
+                        .fill(isSelected ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
                 )
                 .foregroundColor(isSelected ? .white : .primary)
         }

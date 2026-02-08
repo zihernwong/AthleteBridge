@@ -8,6 +8,9 @@ struct BookingsView: View {
     @State private var showingNewBooking = false
     @State private var selectedBookingForAccept: FirestoreManager.BookingItem? = nil
     @State private var selectedBookingForReview: FirestoreManager.BookingItem? = nil
+    @State private var selectedBookingForRejection: FirestoreManager.BookingItem? = nil
+    @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
+    @State private var navigateToConfirmedBookings = false
     @State private var pendingDeepLinkBookingId: String? = nil
     @State private var selectedDate = Date()
     @State private var currentMonthAnchor = Date() // month displayed by calendar
@@ -37,8 +40,13 @@ struct BookingsView: View {
                             // Include bookings that need this coach's acceptance:
                             // - status "requested" (no one has accepted yet)
                             // - status "partially_accepted" AND this coach hasn't accepted yet
+                            // - start time must be in the future
                             let currentCoachId = auth.user?.uid ?? ""
+                            let now = Date()
                             let requested = firestore.coachBookings.filter { booking in
+                                // Filter out bookings that have already started
+                                guard let startAt = booking.startAt, startAt > now else { return false }
+
                                 let status = (booking.status ?? "").lowercased()
                                 if status == "requested" {
                                     return true
@@ -55,15 +63,19 @@ struct BookingsView: View {
                             } else {
                                 ForEach(requested, id: \ .id) { b in
                                     VStack(alignment: .leading, spacing: 6) {
-                                        BookingRowView(item: b)
-                                            .overlay(alignment: .trailing) {
-                                                Button(action: { self.selectedBookingForAccept = b }) {
-                                                    Text("Accept")
-                                                }
-                                                .buttonStyle(.borderedProminent)
-                                                .tint(.blue)
-                                                .padding(.top, -4) // nudge upward slightly
+                                        Button(action: { selectedBookingForDetail = b }) {
+                                            BookingRowView(item: b)
+                                                .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .overlay(alignment: .trailing) {
+                                            Button(action: { self.selectedBookingForAccept = b }) {
+                                                Text("Accept")
                                             }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(.blue)
+                                            .padding(.top, -4) // nudge upward slightly
+                                        }
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -112,6 +124,11 @@ struct BookingsView: View {
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
+            .navigationDestination(isPresented: $navigateToConfirmedBookings) {
+                CoachConfirmedBookingsView()
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+            }
             .sheet(item: $selectedBookingForAccept) { booking in
                 AcceptBookingView(booking: booking)
                     .environmentObject(firestore)
@@ -119,6 +136,15 @@ struct BookingsView: View {
             }
             .sheet(item: $selectedBookingForReview) { booking in
                 ReviewBookingView(booking: booking)
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+            }
+            .sheet(item: $selectedBookingForRejection) { booking in
+                RejectedBookingView(booking: booking)
+                    .environmentObject(firestore)
+            }
+            .sheet(item: $selectedBookingForDetail) { booking in
+                BookingDetailView(booking: booking)
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
@@ -151,20 +177,40 @@ struct BookingsView: View {
         print("[DeepLink-Bookings]   coachBookings count: \(firestore.coachBookings.count), ids: \(firestore.coachBookings.map { $0.id })")
 
         if let booking = firestore.bookings.first(where: { $0.id == bookingId }) {
-            print("[DeepLink-Bookings]   FOUND in client bookings → opening ReviewBookingView")
+            let notifType = deepLink.pendingBookingType
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
-            // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.selectedBookingForReview = booking
+            deepLink.pendingBookingType = nil
+
+            if notifType == "booking_rejected" {
+                print("[DeepLink-Bookings]   FOUND in client bookings (rejected) → opening RejectedBookingView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForRejection = booking
+                }
+            } else {
+                print("[DeepLink-Bookings]   FOUND in client bookings → opening ReviewBookingView")
+                // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForReview = booking
+                }
             }
         } else if let booking = firestore.coachBookings.first(where: { $0.id == bookingId }) {
-            print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
+            let notifType = deepLink.pendingBookingType
+            let status = (booking.status ?? "").lowercased()
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
-            // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.selectedBookingForAccept = booking
+            deepLink.pendingBookingType = nil
+            if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
+                print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.navigateToConfirmedBookings = true
+                }
+            } else {
+                print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
+                // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForAccept = booking
+                }
             }
         } else {
             // Booking not found — store ID for retry and trigger a fresh fetch
@@ -226,7 +272,11 @@ struct BookingsView: View {
                 Text("No bookings today").foregroundColor(.secondary)
             } else {
                 ForEach(todays, id: \ .id) { b in
-                    BookingRowView(item: b)
+                    Button(action: { selectedBookingForDetail = b }) {
+                        BookingRowView(item: b)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
@@ -254,8 +304,14 @@ struct BookingsView: View {
             // Include bookings that need this client's confirmation:
             // - status "pending acceptance" (all coaches accepted, waiting for client)
             // - status "partially_confirmed" AND this client hasn't confirmed yet
+            // - start time must be in the future
             let currentClientId = auth.user?.uid ?? ""
+            let startOfToday = Calendar.current.startOfDay(for: Date())
             let pending = firestore.bookings.filter { booking in
+                // Exclude bookings that occur in the past
+                if let start = booking.startAt, start < startOfToday {
+                    return false
+                }
                 let status = (booking.status ?? "").lowercased()
                 if status == "pending acceptance" {
                     return true
@@ -278,9 +334,13 @@ struct BookingsView: View {
                                     Text("Review Booking")
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .tint(.blue)
+                                .tint(Color("LogoGreen"))
                                 .padding(.top, -4)
                             }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
+                            .padding(.top, -4)
+                        }
                     }
                     .padding(.vertical, 2)
                 }
@@ -292,7 +352,7 @@ struct BookingsView: View {
                 Text("View Requested Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoGreen"))
+            .tint(Color("LogoBlue"))
             .frame(maxWidth: .infinity, alignment: .leading)
 
             NavigationLink(destination:
@@ -302,7 +362,7 @@ struct BookingsView: View {
                 Text("View Confirmed Bookings")
             }
             .buttonStyle(.borderedProminent)
-            .tint(Color("LogoBlue"))
+            .tint(Color("LogoGreen"))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
@@ -478,10 +538,14 @@ struct BookingRowView: View {
 
     private func statusColor(for status: String?) -> Color {
         switch (status ?? "").lowercased() {
-        case "confirmed":
+        case "confirmed", "fully_confirmed":
             return Color("LogoGreen")
         case "requested":
             return Color("LogoBlue")
+        case "pending acceptance", "partially_confirmed", "partially_accepted":
+            return .orange
+        case "cancelled":
+            return .red
         default:
             return .secondary
         }

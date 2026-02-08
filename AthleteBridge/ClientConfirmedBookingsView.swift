@@ -7,6 +7,7 @@ struct ClientConfirmedBookingsView: View {
 
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
+    @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
     // Tab selection: 0 = Upcoming, 1 = Past
@@ -51,7 +52,11 @@ struct ClientConfirmedBookingsView: View {
                     } else {
                         ForEach(filtered, id: \.id) { b in
                             VStack(alignment: .leading, spacing: 8) {
-                                BookingRowView(item: b)
+                                Button(action: { selectedBookingForDetail = b }) {
+                                    BookingRowView(item: b)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(PlainButtonStyle())
                                 // Hide Cancel and Reschedule buttons once payment is acknowledged
                                 if (b.paymentStatus ?? "").lowercased() != "paid" {
                                     Button(role: .destructive) {
@@ -107,6 +112,11 @@ struct ClientConfirmedBookingsView: View {
             }
             .environmentObject(firestore)
             .environmentObject(auth)
+        }
+        .sheet(item: $selectedBookingForDetail) { booking in
+            BookingDetailView(booking: booking)
+                .environmentObject(firestore)
+                .environmentObject(auth)
         }
     }
 

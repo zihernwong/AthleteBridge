@@ -68,6 +68,7 @@ struct MainAppView: View {
                     .tag(6)
             }
         }
+        .tint(Color("LogoGreen"))
         // Track manual tab selection so we don't override the user's explicit choice.
         .onChange(of: selectedTab) { _old, _new in
             if !didAutoSelectCoachHome {
@@ -88,6 +89,9 @@ struct MainAppView: View {
                 switch destination {
                 case .chat: selectedTab = 4
                 case .booking: selectedTab = 3
+                case .payments:
+                    selectedTab = isCoachUserComputed ? 1 : 5
+                    deepLink.pendingDestination = nil
                 }
             }
         }
@@ -97,6 +101,9 @@ struct MainAppView: View {
             switch destination {
             case .chat: selectedTab = 4
             case .booking: selectedTab = 3
+            case .payments:
+                selectedTab = isCoachUserComputed ? 1 : 5
+                deepLink.pendingDestination = nil
             }
         }
         .onChange(of: auth.user?.uid) { _old, _new in
