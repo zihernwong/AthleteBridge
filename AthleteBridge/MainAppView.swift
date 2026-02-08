@@ -89,6 +89,9 @@ struct MainAppView: View {
                 switch destination {
                 case .chat: selectedTab = 4
                 case .booking: selectedTab = 3
+                case .payments:
+                    selectedTab = isCoachUserComputed ? 1 : 5
+                    deepLink.pendingDestination = nil
                 }
             }
         }
@@ -98,6 +101,9 @@ struct MainAppView: View {
             switch destination {
             case .chat: selectedTab = 4
             case .booking: selectedTab = 3
+            case .payments:
+                selectedTab = isCoachUserComputed ? 1 : 5
+                deepLink.pendingDestination = nil
             }
         }
         .onChange(of: auth.user?.uid) { _old, _new in

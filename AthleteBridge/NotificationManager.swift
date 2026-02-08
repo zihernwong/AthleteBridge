@@ -216,9 +216,15 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 DeepLinkManager.shared.pendingDestination = .chat(chatId: chatId)
             }
         } else if let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
-            print("[DeepLink] Found bookingId: \(bookingId)")
+            let notifType = userInfo["type"] as? String
+            print("[DeepLink] Found bookingId: \(bookingId), type: \(notifType ?? "nil")")
             DispatchQueue.main.async {
-                DeepLinkManager.shared.pendingDestination = .booking(bookingId: bookingId)
+                if notifType == "payment_confirmed" {
+                    DeepLinkManager.shared.pendingDestination = .payments
+                } else {
+                    DeepLinkManager.shared.pendingBookingType = notifType
+                    DeepLinkManager.shared.pendingDestination = .booking(bookingId: bookingId)
+                }
             }
         } else {
             print("[DeepLink] No chatId or bookingId found in notification payload")

@@ -202,17 +202,6 @@ struct ReviewBookingView: View {
                 }
                 .padding(.top)
 
-                // Manual add-to-calendar button
-                HStack {
-                    Spacer()
-                    Button(action: { addToCalendar() }) {
-                        Label("Add to Calendar", systemImage: "calendar.badge.plus")
-                    }
-                    .buttonStyle(.bordered)
-                    Spacer()
-                }
-                .padding(.top, 8)
-
                 Spacer()
             }
             .padding()
@@ -263,6 +252,7 @@ struct ReviewBookingView: View {
                                 "body": "\(clientName) has confirmed the booking.",
                                 "bookingId": booking.id,
                                 "senderId": booking.clientID,
+                                "type": "booking_confirmed",
                                 "createdAt": FieldValue.serverTimestamp(),
                                 "delivered": false
                             ]

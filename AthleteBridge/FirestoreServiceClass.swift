@@ -217,6 +217,7 @@ class FirestoreManager: ObservableObject {
         let clientConfirmations: [String: Bool]?
         let coachRates: [String: Double]?
         let coachNote: String?
+        let rejectionReason: String?
 
         init(id: String,
              clientID: String,
@@ -240,7 +241,8 @@ class FirestoreManager: ObservableObject {
              coachAcceptances: [String: Bool]? = nil,
              clientConfirmations: [String: Bool]? = nil,
              coachRates: [String: Double]? = nil,
-             coachNote: String? = nil) {
+             coachNote: String? = nil,
+             rejectionReason: String? = nil) {
             self.id = id
             self.clientID = clientID
             self.clientName = clientName
@@ -264,6 +266,7 @@ class FirestoreManager: ObservableObject {
             self.clientConfirmations = clientConfirmations
             self.coachRates = coachRates
             self.coachNote = coachNote
+            self.rejectionReason = rejectionReason
         }
 
         // Computed properties for unified access
@@ -1225,8 +1228,10 @@ class FirestoreManager: ObservableObject {
                 let bio = data["Bio"] as? String
                 let hourlyRate = data["HourlyRate"] as? Double
                 let rateRange = data["RateRange"] as? [Double]
+                let tierRaw = data["subscriptionTier"] as? String ?? "free"
+                let subscriptionTier = CoachTier(rawValue: tierRaw) ?? .free
 
-                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange))
+                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange, subscriptionTier: subscriptionTier))
 
                 // resolve coach photo if provided and cache into coachPhotoURLs
                 let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
@@ -1504,6 +1509,119 @@ class FirestoreManager: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Subscription Tier Sync
+
+    private var subscriptionListener: ListenerRegistration?
+
+    /// Listen for real-time updates to the coach's subscriptionTier field
+    func startSubscriptionListener(for uid: String) {
+        stopSubscriptionListener()
+        subscriptionListener = db.collection("coaches").document(uid).addSnapshotListener { [weak self] snap, err in
+            guard let self = self, let data = snap?.data() else { return }
+            let tierRaw = data["subscriptionTier"] as? String ?? "free"
+            let tier = CoachTier(rawValue: tierRaw) ?? .free
+            DispatchQueue.main.async {
+                if let current = self.currentCoach, current.subscriptionTier != tier {
+                    // Update the coach with the new tier
+                    self.currentCoach = Coach(
+                        id: current.id,
+                        name: current.name,
+                        specialties: current.specialties,
+                        experienceYears: current.experienceYears,
+                        availability: current.availability,
+                        bio: current.bio,
+                        hourlyRate: current.hourlyRate,
+                        meetingPreference: current.meetingPreference,
+                        payments: current.payments,
+                        rateRange: current.rateRange,
+                        subscriptionTier: tier
+                    )
+                }
+            }
+        }
+    }
+
+    func stopSubscriptionListener() {
+        subscriptionListener?.remove()
+        subscriptionListener = nil
+    }
+
+    /// Manually sync subscription tier from Stripe's customers/{uid}/subscriptions collection.
+    /// Use this as a fallback if the Cloud Function hasn't updated the coach document yet.
+    func syncSubscriptionTierFromStripe(for uid: String, completion: ((CoachTier) -> Void)? = nil) {
+        print("syncSubscriptionTierFromStripe: starting for uid \(uid)")
+
+        // First, get ALL subscriptions without filtering to debug
+        let subsRef = db.collection("customers").document(uid).collection("subscriptions")
+        subsRef.getDocuments { [weak self] snap, err in
+            guard let self = self else { return }
+            if let err = err {
+                print("syncSubscriptionTierFromStripe error: \(err)")
+                completion?(.free)
+                return
+            }
+
+            let docs = snap?.documents ?? []
+            print("syncSubscriptionTierFromStripe: found \(docs.count) subscription documents")
+
+            let productTierMap: [String: CoachTier] = [
+                "prod_Tv0RF9Dm4KZjT2": .free,
+                "prod_Tv0JQpKyAVQGqT": .plus,
+                "prod_Tv6632i5cd5MFL": .pro
+            ]
+
+            var highestTier: CoachTier = .free
+            for doc in docs {
+                let data = doc.data()
+                let status = data["status"] as? String ?? "unknown"
+                print("syncSubscriptionTierFromStripe: doc \(doc.documentID) status=\(status) data=\(data)")
+
+                // Only consider active/trialing subscriptions
+                guard status == "active" || status == "trialing" else { continue }
+
+                // Product can be a string ID or a reference
+                var productId: String? = nil
+                if let p = data["product"] as? String {
+                    productId = p
+                } else if let ref = data["product"] as? DocumentReference {
+                    productId = ref.documentID
+                }
+                // Also check items array
+                if productId == nil, let items = data["items"] as? [[String: Any]], let first = items.first {
+                    if let price = first["price"] as? [String: Any], let prod = price["product"] as? String {
+                        productId = prod
+                    }
+                }
+
+                print("syncSubscriptionTierFromStripe: extracted productId=\(productId ?? "nil")")
+
+                if let pid = productId, let tier = productTierMap[pid] {
+                    print("syncSubscriptionTierFromStripe: mapped to tier \(tier.rawValue)")
+                    // Take the highest tier found
+                    if tier == .pro { highestTier = .pro }
+                    else if tier == .plus && highestTier != .pro { highestTier = .plus }
+                }
+            }
+
+            print("syncSubscriptionTierFromStripe: final tier = \(highestTier.rawValue)")
+
+            // Update coach document
+            self.db.collection("coaches").document(uid).updateData(["subscriptionTier": highestTier.rawValue]) { err in
+                if let err = err {
+                    print("syncSubscriptionTierFromStripe: failed to update coach: \(err)")
+                } else {
+                    print("syncSubscriptionTierFromStripe: updated coach \(uid) to tier \(highestTier.rawValue)")
+                    // Refresh the current coach
+                    DispatchQueue.main.async {
+                        self.fetchCurrentProfiles(for: uid)
+                    }
+                }
+            }
+
+            completion?(highestTier)
         }
     }
 
@@ -1808,7 +1926,8 @@ class FirestoreManager: ObservableObject {
                                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                                 let coachRates = data["CoachRates"] as? [String: Double]
-                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                                let rejectionReason = data["rejectionReason"] as? String
+                                let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                                 results.append(item)
                                 group.leave()
                             }
@@ -1834,7 +1953,8 @@ class FirestoreManager: ObservableObject {
                             let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                             let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                             let coachRates = data["CoachRates"] as? [String: Double]
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                            let rejectionReason = data["rejectionReason"] as? String
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                             results.append(item)
                             group.leave()
                         }
@@ -1874,7 +1994,8 @@ class FirestoreManager: ObservableObject {
                             let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                             let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                             let coachRates = data["CoachRates"] as? [String: Double]
-                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                            let rejectionReason = data["rejectionReason"] as? String
+                            let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                             results.append(item)
                             group.leave()
                         }
@@ -1900,7 +2021,8 @@ class FirestoreManager: ObservableObject {
                         let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                         let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                         let coachRates = data["CoachRates"] as? [String: Double]
-                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                        let rejectionReason = data["rejectionReason"] as? String
+                        let item = BookingItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNamesArr, coachIDs: coachIDs, coachNames: coachNamesArr, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                         results.append(item)
                         group.leave()
                     }
@@ -2044,7 +2166,8 @@ class FirestoreManager: ObservableObject {
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                 let coachRates = data["CoachRates"] as? [String: Double]
-                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                let rejectionReason = data["rejectionReason"] as? String
+                return BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
             }
             completion(items)
         }
@@ -2087,7 +2210,8 @@ class FirestoreManager: ObservableObject {
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                 let coachRates = data["CoachRates"] as? [String: Double]
-                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                let rejectionReason = data["rejectionReason"] as? String
+                return BookingItem(id: id, clientID: clientId, clientName: clientName, coachID: coachID, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
             }
             completion(items)
         }
@@ -3162,7 +3286,8 @@ class FirestoreManager: ObservableObject {
                         let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                         let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                         let coachRates = data["CoachRates"] as? [String: Double]
-                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                        let rejectionReason = data["rejectionReason"] as? String
+                        let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName.isEmpty ? coachId : coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: nil, RateUSD: nil, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                         aggregated.append(item)
                     }
                     group.leave()
@@ -3588,6 +3713,7 @@ class FirestoreManager: ObservableObject {
                             "body": "All clients have confirmed the group session",
                             "bookingId": bookingId,
                             "senderId": clientId,
+                            "type": "booking_confirmed",
                             "isGroupBooking": true,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
@@ -3949,7 +4075,8 @@ class FirestoreManager: ObservableObject {
                 let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
                 let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
                 let coachRates = data["CoachRates"] as? [String: Double]
-                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote)
+                let rejectionReason = data["rejectionReason"] as? String
+                let item = BookingItem(id: id, clientID: clientID, clientName: clientName, coachID: coachId, coachName: coachName, startAt: startAt, endAt: endAt, location: location, notes: notes, status: status, paymentStatus: paymentStatus, RateUSD: rate, clientIDs: clientIDs, clientNames: clientNames, coachIDs: coachIDs, coachNames: coachNames, isGroupBooking: isGroupBooking, creatorID: creatorID, creatorType: creatorType, coachAcceptances: coachAcceptances, clientConfirmations: clientConfirmations, coachRates: coachRates, coachNote: coachNote, rejectionReason: rejectionReason)
                 items.append(item)
             }
             completion(items)

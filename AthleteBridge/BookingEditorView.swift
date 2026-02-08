@@ -309,8 +309,19 @@ struct BookingEditorView: View {
 
                         // Calendar day controls
                         HStack {
-                            Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.left") }
-                                .buttonStyle(.plain)
+                            let today = Calendar.current.startOfDay(for: Date())
+                            Button(action: {
+                                let newDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate
+                                // Prevent navigating to past dates
+                                if newDate >= today {
+                                    calendarDate = newDate
+                                }
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .foregroundColor(calendarDate <= today ? .gray : .primary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(calendarDate <= today)
                             Spacer()
                             Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
                                 .font(.subheadline).bold()
@@ -685,6 +696,12 @@ struct BookingEditorView: View {
         // Validate times before saving
         if !(startAt < endAt) {
             alertMessage = "Start time must be before end time"
+            showAlert = true
+            return
+        }
+        // Prevent booking in the past
+        if startAt < Date() {
+            alertMessage = "Cannot book a time in the past. Please select a future time."
             showAlert = true
             return
         }

@@ -42,5 +42,16 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.athletebridge.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>athletebridge</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

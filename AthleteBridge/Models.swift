@@ -1,5 +1,24 @@
 import Foundation
 
+enum CoachTier: String, CaseIterable {
+    case free = "free"
+    case plus = "plus"
+    case pro = "pro"
+
+    var displayName: String {
+        switch self {
+        case .free: return "Coach Free"
+        case .plus: return "Coach Plus"
+        case .pro: return "Coach Pro"
+        }
+    }
+
+    /// Placeholder for future feature gating. Returns true for all features currently.
+    func hasAccess(to feature: String) -> Bool {
+        return true
+    }
+}
+
 struct Coach: Identifiable, Hashable {
     // Use Firestore document id (or Auth UID) as the stable identifier
     let id: String
@@ -20,6 +39,8 @@ struct Coach: Identifiable, Hashable {
     let payments: [String: String]?
     // New: optional rate range [lower, upper]
     let rateRange: [Double]?
+    // Subscription tier (synced from Stripe via Cloud Function)
+    let subscriptionTier: CoachTier
 
     init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil) {
         self.id = id
