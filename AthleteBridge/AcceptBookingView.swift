@@ -13,6 +13,10 @@ struct AcceptBookingView: View {
     @State private var note: String = ""
     @State private var isSaving: Bool = false
     @State private var errorMessage: String? = nil
+    @State private var showRejectOptions: Bool = false
+    @State private var selectedRejectReason: String = "Not Qualified"
+
+    private let rejectReasons = ["Not Qualified", "Coach Unavailable", "Other"]
 
     // Calculate duration in 0.5 hour increments
     private var durationHours: Double {
@@ -189,6 +193,32 @@ struct AcceptBookingView: View {
                         Text(err).foregroundColor(.red).font(.caption)
                     }
                 }
+
+                // Reject booking section
+                Section(header: Text("Reject Booking")) {
+                    DisclosureGroup("Reject this booking", isExpanded: $showRejectOptions) {
+                        Picker("Reason", selection: $selectedRejectReason) {
+                            ForEach(rejectReasons, id: \.self) { reason in
+                                Text(reason).tag(reason)
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        Button(role: .destructive, action: rejectBooking) {
+                            HStack {
+                                if isSaving {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle())
+                                } else {
+                                    Image(systemName: "xmark.circle.fill")
+                                    Text("Reject Booking")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .disabled(isSaving)
+                    }
+                }
             }
             .navigationTitle("Accept Booking")
             .toolbar {
@@ -218,6 +248,81 @@ struct AcceptBookingView: View {
     private func isValidRate() -> Bool {
         guard !rateText.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         return Double(rateText.replacingOccurrences(of: ",", with: ".")) != nil
+    }
+
+    private func rejectBooking() {
+        guard let currentUserId = auth.user?.uid else {
+            errorMessage = "Not authenticated"
+            return
+        }
+
+        isSaving = true
+        errorMessage = nil
+
+        let coachId = booking.coachID.isEmpty ? (booking.coachIDs?.first ?? "") : booking.coachID
+        let clientId = booking.clientID.isEmpty ? (booking.clientIDs?.first ?? "") : booking.clientID
+
+        print("[AcceptBookingView] rejectBooking: bookingId=\(booking.id), coachId=\(coachId), clientId=\(clientId)")
+
+        let updatePayload: [String: Any] = [
+            "Status": "rejected",
+            "rejectedBy": currentUserId,
+            "rejectionReason": selectedRejectReason,
+            "rejectedAt": FieldValue.serverTimestamp()
+        ]
+
+        let batch = Firestore.firestore().batch()
+
+        // Update main bookings collection
+        let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
+        batch.updateData(updatePayload, forDocument: bookingRef)
+        print("[AcceptBookingView] rejectBooking: updating bookings/\(booking.id)")
+
+        // Update coach's bookings subcollection
+        if !coachId.isEmpty {
+            let coachBookingRef = Firestore.firestore().collection("coaches").document(coachId).collection("bookings").document(booking.id)
+            batch.updateData(updatePayload, forDocument: coachBookingRef)
+            print("[AcceptBookingView] rejectBooking: updating coaches/\(coachId)/bookings/\(booking.id)")
+        }
+
+        // Update client's bookings subcollection
+        if !clientId.isEmpty {
+            let clientBookingRef = Firestore.firestore().collection("clients").document(clientId).collection("bookings").document(booking.id)
+            batch.updateData(updatePayload, forDocument: clientBookingRef)
+            print("[AcceptBookingView] rejectBooking: updating clients/\(clientId)/bookings/\(booking.id)")
+        }
+
+        batch.commit { err in
+            DispatchQueue.main.async {
+                self.isSaving = false
+                if let err = err {
+                    self.errorMessage = err.localizedDescription
+                } else {
+                    // Send notification to client about rejection
+                    if !clientId.isEmpty {
+                        let coachName = self.firestore.currentCoach?.name ?? "The coach"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Declined",
+                            "body": "\(coachName) has declined your booking request. Reason: \(self.selectedRejectReason)",
+                            "bookingId": self.booking.id,
+                            "type": "booking_rejected",
+                            "senderId": coachId,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { nerr in
+                            if let nerr = nerr {
+                                print("[AcceptBookingView] Failed to send rejection notification to client: \(nerr)")
+                            }
+                        }
+                    }
+                    self.firestore.fetchBookingsForCurrentCoachSubcollection()
+                    self.firestore.showToast("Booking rejected")
+                    dismiss()
+                }
+            }
+        }
     }
 
     private func save() {

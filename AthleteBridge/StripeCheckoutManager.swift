@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import SafariServices
 
 /// StripeCheckoutManager
@@ -96,56 +97,50 @@ final class StripeCheckoutManager {
         }
     }
 
-    /// Open Stripe Billing Portal (if firestore-stripe-payments portal_sessions is configured)
+    /// Open Stripe Billing Portal using the Firebase extension's HTTPS callable function
     func openBillingPortal(returnURL: String? = nil, completion: @escaping (Result<Void, Error>) -> Void) {
-        guard let uid = Auth.auth().currentUser?.uid else {
+        print("[StripeCheckoutManager] openBillingPortal called")
+        guard Auth.auth().currentUser != nil else {
+            print("[StripeCheckoutManager] openBillingPortal: not authenticated")
             DispatchQueue.main.async { completion(.failure(StripeError.notAuthenticated)) }
             return
         }
 
-        let sessionsRef = db.collection("customers").document(uid).collection("portal_sessions")
-        let docRef = sessionsRef.document()
+        let functions = Functions.functions()
+        let callable = functions.httpsCallable("ext-firestore-stripe-payments-createPortalLink")
 
-        var data: [String: Any] = [
-            "created": FieldValue.serverTimestamp()
-        ]
-        if let r = returnURL { data["return_url"] = r }
+        var data: [String: Any] = [:]
+        if let r = returnURL { data["returnUrl"] = r }
 
-        var listener: ListenerRegistration?
-        listener = docRef.addSnapshotListener { snapshot, error in
+        print("[StripeCheckoutManager] openBillingPortal: calling createPortalLink function")
+        callable.call(data) { result, error in
             if let error = error {
-                listener?.remove()
+                print("[StripeCheckoutManager] openBillingPortal: function error: \(error)")
                 DispatchQueue.main.async { completion(.failure(error)) }
                 return
             }
 
-            guard let snapshot = snapshot, snapshot.exists else { return }
-            let dict = snapshot.data() ?? [:]
+            guard let resultData = result?.data as? [String: Any],
+                  let urlString = resultData["url"] as? String else {
+                print("[StripeCheckoutManager] openBillingPortal: no URL in response: \(String(describing: result?.data))")
+                DispatchQueue.main.async { completion(.failure(StripeError.invalidURL)) }
+                return
+            }
 
-            if let urlString = dict["url"] as? String {
-                listener?.remove()
-                DispatchQueue.main.async {
-                    guard let url = URL(string: urlString) else { completion(.failure(StripeError.invalidURL)); return }
-                    guard let presenter = Self.topMostViewController() else { completion(.failure(StripeError.presenterNotFound)); return }
-                    let sf = SFSafariViewController(url: url)
-                    presenter.present(sf, animated: true) {
-                        completion(.success(()))
-                    }
+            print("[StripeCheckoutManager] openBillingPortal: got URL: \(urlString)")
+            DispatchQueue.main.async {
+                guard let url = URL(string: urlString) else {
+                    completion(.failure(StripeError.invalidURL))
+                    return
                 }
-                return
-            }
-
-            if let errMsg = dict["error"] as? String {
-                listener?.remove()
-                DispatchQueue.main.async { completion(.failure(StripeError.responseError(errMsg))) }
-                return
-            }
-        }
-
-        docRef.setData(data) { err in
-            if let err = err {
-                listener?.remove()
-                DispatchQueue.main.async { completion(.failure(err)) }
+                guard let presenter = Self.topMostViewController() else {
+                    completion(.failure(StripeError.presenterNotFound))
+                    return
+                }
+                let sf = SFSafariViewController(url: url)
+                presenter.present(sf, animated: true) {
+                    completion(.success(()))
+                }
             }
         }
     }
