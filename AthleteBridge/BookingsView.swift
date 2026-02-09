@@ -11,6 +11,7 @@ struct BookingsView: View {
     @State private var selectedBookingForRejection: FirestoreManager.BookingItem? = nil
     @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
     @State private var navigateToConfirmedBookings = false
+    @State private var confirmedBookingsDeepLinkId: String? = nil
     @State private var pendingDeepLinkBookingId: String? = nil
     @State private var selectedDate = Date()
     @State private var currentMonthAnchor = Date() // month displayed by calendar
@@ -125,7 +126,7 @@ struct BookingsView: View {
                     .environmentObject(auth)
             }
             .navigationDestination(isPresented: $navigateToConfirmedBookings) {
-                CoachConfirmedBookingsView()
+                CoachConfirmedBookingsView(initialBookingId: confirmedBookingsDeepLinkId)
                     .environmentObject(firestore)
                     .environmentObject(auth)
             }
@@ -201,8 +202,9 @@ struct BookingsView: View {
             deepLink.pendingDestination = nil
             deepLink.pendingBookingType = nil
             if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
-                print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView")
+                print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView with bookingId=\(bookingId)")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.confirmedBookingsDeepLinkId = bookingId
                     self.navigateToConfirmedBookings = true
                 }
             } else {
@@ -337,10 +339,6 @@ struct BookingsView: View {
                                 .tint(Color("LogoGreen"))
                                 .padding(.top, -4)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.blue)
-                            .padding(.top, -4)
-                        }
                     }
                     .padding(.vertical, 2)
                 }
@@ -542,10 +540,12 @@ struct BookingRowView: View {
             return Color("LogoGreen")
         case "requested":
             return Color("LogoBlue")
-        case "pending acceptance", "partially_confirmed", "partially_accepted":
+        case "pending acceptance":
             return .orange
-        case "cancelled":
+        case "rejected", "declined", "declined_by_client":
             return .red
+        case "partially_accepted", "partially_confirmed":
+            return .orange
         default:
             return .secondary
         }

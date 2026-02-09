@@ -5,9 +5,12 @@ struct CoachConfirmedBookingsView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
 
+    var initialBookingId: String? = nil
+
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
     @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
+    @State private var hasOpenedInitialBooking: Bool = false
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
     // Tab selection: 0 = Upcoming, 1 = Past
@@ -132,6 +135,9 @@ struct CoachConfirmedBookingsView: View {
         .onAppear {
             firestore.fetchBookingsForCurrentCoachSubcollection()
         }
+        .onChange(of: firestore.coachBookings) { _, _ in
+            openInitialBookingIfNeeded()
+        }
         .alert("Cancel Booking", isPresented: $showCancelAlert) {
             Button("Keep Booking", role: .cancel) { }
             Button("Cancel Booking", role: .destructive) {
@@ -154,6 +160,16 @@ struct CoachConfirmedBookingsView: View {
             BookingDetailView(booking: booking)
                 .environmentObject(firestore)
                 .environmentObject(auth)
+        }
+    }
+
+    private func openInitialBookingIfNeeded() {
+        guard let targetId = initialBookingId, !hasOpenedInitialBooking else { return }
+        if let booking = firestore.coachBookings.first(where: { $0.id == targetId }) {
+            hasOpenedInitialBooking = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.selectedBookingForDetail = booking
+            }
         }
     }
 

@@ -12,8 +12,18 @@ struct ReviewBookingView: View {
         booking.coachName ?? "Coach"
     }
 
+    // Resolve rate: prefer booking.RateUSD, fall back to coach's profile hourly rate
+    private var resolvedRate: Double? {
+        if let rate = booking.RateUSD { return rate }
+        if let coach = firestore.coaches.first(where: { $0.id == booking.coachID }),
+           let rate = coach.hourlyRate {
+            return rate
+        }
+        return nil
+    }
+
     private var rateDisplayText: String {
-        if let rate = booking.RateUSD {
+        if let rate = resolvedRate {
             return String(format: "$%.2f", rate)
         }
         return "—"
@@ -30,7 +40,7 @@ struct ReviewBookingView: View {
 
     // Calculate total booking cost based on hourly rate and duration
     private var totalBookingCost: Double? {
-        guard let rate = booking.RateUSD, durationHours > 0 else { return nil }
+        guard let rate = resolvedRate, durationHours > 0 else { return nil }
         return rate * durationHours
     }
 

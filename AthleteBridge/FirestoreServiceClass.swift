@@ -25,7 +25,7 @@ class FirestoreManager: ObservableObject {
         let id: String
         let name: String
         let photoURL: URL?
-        let tournamentSoftwareLink: String? = nil
+        var tournamentSoftwareLink: String? = nil
     }
     @Published var tournaments: [Tournament] = []
     @Published var clients: [UserSummary] = []
@@ -1485,6 +1485,8 @@ class FirestoreManager: ObservableObject {
             let hourlyRate = data["HourlyRate"] as? Double
             let rateRange = data["RateRange"] as? [Double]
             let coachTournamentSoftwareLink = data["tournamentSoftwareLink"] as? String
+            let coachTierRaw = data["subscriptionTier"] as? String ?? "free"
+            let coachSubscriptionTier = CoachTier(rawValue: coachTierRaw) ?? .free
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
@@ -1498,7 +1500,7 @@ class FirestoreManager: ObservableObject {
                         paymentsMap = tmp.isEmpty ? nil : tmp
                     }
 
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink, subscriptionTier: coachSubscriptionTier)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -4709,7 +4711,9 @@ class FirestoreManager: ObservableObject {
                                     zipCode: cur.zipCode,
                                     city: cur.city,
                                     payments: cur.payments,
-                                    rateRange: cur.rateRange)
+                                    rateRange: cur.rateRange,
+                                    tournamentSoftwareLink: cur.tournamentSoftwareLink,
+                                    subscriptionTier: cur.subscriptionTier)
                 self.currentCoach = updated
             }
             completion?(nil)
@@ -4740,7 +4744,10 @@ class FirestoreManager: ObservableObject {
                                     meetingPreference: cur.meetingPreference,
                                     zipCode: cur.zipCode,
                                     city: cur.city,
-                                    payments: payments)
+                                    payments: payments,
+                                    rateRange: cur.rateRange,
+                                    tournamentSoftwareLink: cur.tournamentSoftwareLink,
+                                    subscriptionTier: cur.subscriptionTier)
                 self.currentCoach = updated
             }
             completion?(nil)
