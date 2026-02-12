@@ -16,6 +16,10 @@ struct PaymentsView: View {
     @State private var selectedCoachPayments: [String: String] = [:]
     @State private var selectedCoachName: String = "Coach"
 
+    // State for selecting which coach to notify in a group booking
+    @State private var showCoachPickerForNotify: Bool = false
+    @State private var coachPickerBooking: FirestoreManager.BookingItem? = nil
+
     // State for payments summary sheet (client)
     @State private var showClientSummary: Bool = false
     // State for coach revenue summary sheet
@@ -87,21 +91,27 @@ struct PaymentsView: View {
         (booking.clientName?.isEmpty == false ? booking.clientName! : nil) ?? "Client"
     }
 
-    // Helper: send notification to coach that client has marked booking as paid
-    private func notifyCoachOfPayment(for booking: FirestoreManager.BookingItem) {
-        let coachId = booking.coachID
-        guard !coachId.isEmpty else {
-            self.errorMessage = "Missing coach ID for this booking."
-            return
+    // Helper: initiate notify-coach-of-payment flow. For group bookings with multiple coaches,
+    // presents a picker so the client can choose which coach to notify.
+    private func startNotifyCoachOfPayment(for booking: FirestoreManager.BookingItem) {
+        let coachIds = booking.allCoachIDs
+        if coachIds.count > 1 {
+            coachPickerBooking = booking
+            showCoachPickerForNotify = true
+        } else if let coachId = coachIds.first, !coachId.isEmpty {
+            sendPaymentNotification(to: coachId, for: booking)
+        } else {
+            errorMessage = "Missing coach ID for this booking."
         }
+    }
 
-        // Get client name from current client profile or fallback
+    // Send the actual payment notification to a specific coach
+    private func sendPaymentNotification(to coachId: String, for booking: FirestoreManager.BookingItem) {
         var clientName = "A client"
         if let client = firestore.currentClient, !client.name.isEmpty {
             clientName = client.name
         }
 
-        // Send notification to coach
         let db = Firestore.firestore()
         let notifRef = db.collection("pendingNotifications").document(coachId).collection("notifications").document()
         let notifPayload: [String: Any] = [
@@ -117,7 +127,8 @@ struct PaymentsView: View {
                 if let err = err {
                     errorMessage = "Failed to notify coach: \(err.localizedDescription)"
                 } else {
-                    errorMessage = "Coach has been notified of your payment."
+                    let coachName = nameForCoachId(coachId) ?? "Coach"
+                    errorMessage = "\(coachName) has been notified of your payment."
                 }
             }
         }
@@ -489,6 +500,7 @@ struct PaymentsView: View {
                     }
                 }
                 .navigationTitle("Pay \(selectedCoachName)")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showCoachPaymentsSheet = false }
@@ -510,7 +522,10 @@ struct PaymentsView: View {
                         .pickerStyle(.segmented)
                         if summaryRange == .custom {
                             DatePicker("Start", selection: $customStart, displayedComponents: [.date])
-                            DatePicker("End", selection: $customEnd, in: customStart...Date(), displayedComponents: [.date])
+                                .onChange(of: customStart) { _, newStart in
+                                    if customEnd < newStart { customEnd = newStart }
+                                }
+                            DatePicker("End", selection: $customEnd, in: customStart..., displayedComponents: [.date])
                         }
                     }
 
@@ -543,6 +558,7 @@ struct PaymentsView: View {
                     }
                 }
                 .navigationTitle("Payments Summary")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Done") { showClientSummary = false } }
                 }
@@ -562,7 +578,10 @@ struct PaymentsView: View {
                         .pickerStyle(.segmented)
                         if summaryRange == .custom {
                             DatePicker("Start", selection: $customStart, displayedComponents: [.date])
-                            DatePicker("End", selection: $customEnd, in: customStart...Date(), displayedComponents: [.date])
+                                .onChange(of: customStart) { _, newStart in
+                                    if customEnd < newStart { customEnd = newStart }
+                                }
+                            DatePicker("End", selection: $customEnd, in: customStart..., displayedComponents: [.date])
                         }
                     }
 
@@ -595,20 +614,64 @@ struct PaymentsView: View {
                     }
                 }
                 .navigationTitle("Revenue Summary")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Done") { showCoachSummary = false } }
                 }
             }
         }
+        // Coach picker for group booking payment notification
+        .sheet(isPresented: $showCoachPickerForNotify) {
+            NavigationStack {
+                List {
+                    if let booking = coachPickerBooking {
+                        let coachIds = booking.allCoachIDs
+                        let coachNames = booking.allCoachNames
+                        Section("Select a coach to notify") {
+                            ForEach(Array(coachIds.enumerated()), id: \.element) { index, coachId in
+                                let name = index < coachNames.count ? coachNames[index] : (nameForCoachId(coachId) ?? "Coach")
+                                Button(action: {
+                                    showCoachPickerForNotify = false
+                                    sendPaymentNotification(to: coachId, for: booking)
+                                }) {
+                                    Text(name)
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Notify Coach")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showCoachPickerForNotify = false }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
     }
 
+    @ViewBuilder
     private func bookingRow(for b: FirestoreManager.BookingItem) -> some View {
+        let isGroup = b.isGroupBooking == true || b.allCoachIDs.count > 1
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(coachDisplayName(for: b)).font(.headline)
+                if isGroup {
+                    Image(systemName: "person.3.fill").foregroundColor(.blue)
+                }
+                Text(isGroup ? "Group Session" : coachDisplayName(for: b)).font(.headline)
                 Spacer()
                 Text((b.paymentStatus ?? "").capitalized)
                     .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            if isGroup {
+                let names = b.allCoachNames.isEmpty
+                    ? b.allCoachIDs.map { nameForCoachId($0) ?? "Coach" }
+                    : b.allCoachNames
+                Text("Coaches: \(names.joined(separator: ", "))")
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             }
             // Show RateUSD for this booking
@@ -635,7 +698,7 @@ struct PaymentsView: View {
                     // Client-only: notify coach of payment button
                     if (firestore.currentUserType ?? "").uppercased() == "CLIENT" {
                         Button(action: {
-                            notifyCoachOfPayment(for: b)
+                            startNotifyCoachOfPayment(for: b)
                         }) {
                             Text("Notify Coach of Payment")
                         }

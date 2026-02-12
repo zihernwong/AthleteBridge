@@ -52,6 +52,14 @@
 				<string>athletebridge</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.firebase.phone-auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-107606691152-ios-403b3722f26c184d013055</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

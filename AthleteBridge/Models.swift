@@ -41,8 +41,10 @@ struct Coach: Identifiable, Hashable {
     let rateRange: [Double]?
     // Subscription tier (synced from Stripe via Cloud Function)
     let subscriptionTier: CoachTier
+    // Whether the coach has verified their phone number
+    let phoneVerified: Bool
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free, phoneVerified: Bool = false) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespaces)
         self.specialties = specialties.map { $0.trimmingCharacters(in: .whitespaces) }
@@ -57,6 +59,7 @@ struct Coach: Identifiable, Hashable {
         self.payments = payments
         self.tournamentSoftwareLink = tournamentSoftwareLink
         self.subscriptionTier = subscriptionTier
+        self.phoneVerified = phoneVerified
         // Normalize rate range: ensure min <= max, clamp negatives to 0
         if let range = rateRange, range.count >= 2 {
             let lower = max(0, range[0])
@@ -104,6 +107,8 @@ struct Client: Identifiable, Hashable {
     // Optional biography text
     let bio: String?
     let tournamentSoftwareLink: String?
+    // Whether the client has verified their phone number
+    let phoneVerified: Bool
 
     init(id: String = UUID().uuidString,
          name: String,
@@ -114,7 +119,8 @@ struct Client: Identifiable, Hashable {
          zipCode: String? = nil,
          city: String? = nil,
          bio: String? = nil,
-         tournamentSoftwareLink: String? = nil) {
+         tournamentSoftwareLink: String? = nil,
+         phoneVerified: Bool = false) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespaces)
         self.goals = goals.map { $0.trimmingCharacters(in: .whitespaces) }
@@ -125,11 +131,25 @@ struct Client: Identifiable, Hashable {
         self.city = city?.trimmingCharacters(in: .whitespaces)
         self.bio = bio?.trimmingCharacters(in: .whitespaces)
         self.tournamentSoftwareLink = tournamentSoftwareLink
+        self.phoneVerified = phoneVerified
     }
 
     /// Returns true if the client has a valid, non-empty name
     var hasValidName: Bool {
         !name.isEmpty
+    }
+}
+
+// MARK: - Verified Badge
+
+import SwiftUI
+
+/// Small blue checkmark badge shown next to names of phone-verified users.
+struct VerifiedBadge: View {
+    var body: some View {
+        Image(systemName: "checkmark.seal.fill")
+            .foregroundColor(.blue)
+            .font(.caption)
     }
 }
 
@@ -159,4 +179,48 @@ struct Tournament: Identifiable, Hashable {
         self.signupLink = signupLink
         self.participants = participants
     }
+}
+
+struct PlaceToPlay: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let address: String
+    /// Weekly schedule: day name -> time range string (e.g. "6:00 AM - 9:00 PM")
+    let playingTimes: [String: String]
+    let pricePerSession: String
+    let createdBy: String
+}
+
+struct BadmintonStringer: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let meetupLocationNames: [String]
+    /// Maps string name to additional cost (e.g. "BG65" -> "$5")
+    let stringsOffered: [String: String]
+    let createdBy: String
+}
+
+struct StringerReview: Identifiable, Hashable {
+    let id: String
+    let stringerId: String
+    let reviewerName: String
+    let rating: Int // 1-5
+    let comment: String
+    let createdBy: String
+    let createdAt: Date
+}
+
+struct StringerOrder: Identifiable, Hashable {
+    let id: String
+    let stringerId: String
+    let racketName: String
+    let hasOwnString: Bool
+    let selectedString: String? // nil if hasOwnString
+    let stringCost: String? // cost for selected string
+    let tension: Int
+    let timelinePreference: String
+    let createdBy: String
+    let createdAt: Date
+    let status: String // "placed", "accepted", "stringing", "completed", "declined"
+    let buyerName: String
 }

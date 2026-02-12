@@ -49,6 +49,7 @@ struct UpcomingTournamentsView: View {
             }
         }
         .navigationTitle("Upcoming Tournaments")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: { showTournamentInput = true }) {

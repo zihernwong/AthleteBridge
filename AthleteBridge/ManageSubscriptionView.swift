@@ -63,6 +63,7 @@ struct ManageSubscriptionView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Subscription")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

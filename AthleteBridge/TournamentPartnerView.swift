@@ -255,6 +255,7 @@ struct TournamentPartnerView: View {
             }
         }
         .navigationTitle("Find a Tournament Partner")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $presentedChat) { sheet in
             NavigationStack {
                 ChatView(chatId: sheet.id)

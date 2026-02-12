@@ -99,6 +99,7 @@ struct BookingsView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Bookings")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     if currentUserRole == "CLIENT" {
@@ -169,6 +170,10 @@ struct BookingsView: View {
                     handleBookingDeepLink(bookingId: bid)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: NotificationManager.didReceiveForegroundNotification)) { _ in
+                firestore.fetchBookingsForCurrentClientSubcollection()
+                firestore.fetchBookingsForCurrentCoachSubcollection()
+            }
         }
     }
 
@@ -179,18 +184,24 @@ struct BookingsView: View {
 
         if let booking = firestore.bookings.first(where: { $0.id == bookingId }) {
             let notifType = deepLink.pendingBookingType
+            let status = (booking.status ?? "").lowercased()
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
             deepLink.pendingBookingType = nil
 
-            if notifType == "booking_rejected" {
+            if notifType == "booking_rejected" || status == "rejected" || status == "declined" || status == "declined_by_client" {
                 print("[DeepLink-Bookings]   FOUND in client bookings (rejected) → opening RejectedBookingView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForRejection = booking
                 }
+            } else if status == "confirmed" || status == "fully_confirmed" || status == "accepted" || status == "approved" {
+                print("[DeepLink-Bookings]   FOUND in client bookings (confirmed) → opening BookingDetailView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForDetail = booking
+                }
             } else {
-                print("[DeepLink-Bookings]   FOUND in client bookings → opening ReviewBookingView")
-                // Use asyncAfter to ensure SwiftUI state is settled before presenting sheet
+                // Status is "pending acceptance" or "partially_confirmed" — client needs to review
+                print("[DeepLink-Bookings]   FOUND in client bookings (pending) → opening ReviewBookingView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForReview = booking
                 }
@@ -578,6 +589,21 @@ struct BookingRowView: View {
         }
     }
 
+    private var isDisplayedPersonVerified: Bool {
+        let role = firestore.currentUserType?.uppercased()
+        if role == "COACH" {
+            // Showing client name — check client's phoneVerified status is not available in UserSummary,
+            // so skip for now (clients shown to coaches)
+            return false
+        } else {
+            // Showing coach name — look up coach's phoneVerified
+            if let coach = firestore.coaches.first(where: { $0.id == item.coachID }) {
+                return coach.phoneVerified
+            }
+            return false
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -586,8 +612,9 @@ struct BookingRowView: View {
                         .foregroundColor(.blue)
                 }
                 Text(displayTitle).font(.headline)
+                if !isGroup && isDisplayedPersonVerified { VerifiedBadge() }
                 Spacer()
-                Text(item.status?.capitalized ?? "")
+                Text(item.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "")
                     .font(.caption)
                     .foregroundColor(statusColor(for: item.status))
             }
@@ -596,17 +623,29 @@ struct BookingRowView: View {
             if isGroup {
                 // Show coaches with their acceptance status
                 if !item.allCoachIDs.isEmpty {
+                    let bookingRejected = (item.status ?? "").lowercased() == "rejected"
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Coaches:").font(.subheadline).foregroundColor(.secondary)
                         ForEach(Array(zip(item.allCoachIDs, item.allCoachNames)), id: \.0) { coachId, coachName in
                             let accepted = item.coachAcceptances?[coachId] ?? false
+                            let isRejector = item.rejectedBy == coachId
                             HStack(spacing: 4) {
-                                Image(systemName: accepted ? "checkmark.circle.fill" : "clock")
-                                    .foregroundColor(accepted ? Color("LogoGreen") : .orange)
-                                    .font(.caption)
+                                if isRejector || (bookingRejected && !accepted) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                } else if accepted {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(Color("LogoGreen"))
+                                        .font(.caption)
+                                } else {
+                                    Image(systemName: "clock")
+                                        .foregroundColor(.orange)
+                                        .font(.caption)
+                                }
                                 Text(coachName)
                                     .font(.subheadline)
-                                    .foregroundColor(accepted ? .primary : .secondary)
+                                    .foregroundColor(isRejector || (bookingRejected && !accepted) ? .red : (accepted ? .primary : .secondary))
                             }
                         }
                     }

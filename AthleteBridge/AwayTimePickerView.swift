@@ -88,6 +88,7 @@ struct AwayTimePickerView: View {
             }
         }
         .navigationTitle("Input Time Away")
+        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: startAt) { _old, newVal in
             let snapped = snappedTo30Floor(newVal)
             if snapped != newVal { startAt = snapped }

@@ -139,6 +139,7 @@ struct MainAppView: View {
         NavigationStack {
             PaymentsView()
                 .navigationTitle("Payments")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -160,15 +161,18 @@ struct MainAppView: View {
     private func RequiresProfile<Content: View>(content: @escaping () -> Content, selectedTab: Binding<Int>) -> some View {
         let needsProfile: Bool = {
             guard auth.user != nil else { return false }
-            // If we haven't finished loading the user's type/profile yet, avoid blocking the UI.
-            // We only want to show the "Create Profile" blur once we've confirmed there is no profile.
-            if !firestore.userTypeLoaded && firestore.currentClient == nil && firestore.currentCoach == nil {
-                // Still checking; do not require profile yet to prevent a brief flash
+            // Wait until both userType and profiles have finished loading before deciding.
+            // This prevents a brief flash of the "Create Profile" overlay while data is still being fetched.
+            if !firestore.userTypeLoaded || !firestore.profilesLoaded {
                 return false
             }
 
-            // Otherwise evaluate normally: non-coach users without either profile need to create one.
-            return !isCoachUserComputed && (firestore.currentClient == nil && firestore.currentCoach == nil)
+            // Coach without a coach profile
+            if isCoachUserComputed {
+                return firestore.currentCoach == nil
+            }
+            // Client (or unknown role) without any profile
+            return firestore.currentClient == nil && firestore.currentCoach == nil
         }()
 
         ZStack {

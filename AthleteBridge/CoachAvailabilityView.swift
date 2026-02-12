@@ -42,7 +42,7 @@ struct CoachAvailabilityView: View {
                                     .font(.headline)
                                 Spacer()
                                 if let status = b.status {
-                                    Text(status.capitalized)
+                                    Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
                                         .font(.caption)
                                         .foregroundColor(status.lowercased() == "requested" ? Color("LogoBlue") : (status.lowercased() == "confirmed" ? Color("LogoGreen") : .secondary))
                                 }
@@ -63,6 +63,7 @@ struct CoachAvailabilityView: View {
             }
         }
         .navigationTitle("Availability")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             selectedAvailability = Set(coach.availability)
             loading = true

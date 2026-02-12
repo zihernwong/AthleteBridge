@@ -113,6 +113,7 @@ struct LocationsView: View {
                 }
             }
             .navigationTitle("Locations")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 /* refresh button removed */
             }

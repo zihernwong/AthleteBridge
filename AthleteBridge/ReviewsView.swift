@@ -159,6 +159,7 @@ struct ReviewsView: View {
                 }
             }
             .navigationTitle("Reviews")
+            .navigationBarTitleDisplayMode(.inline)
             .listStyle(InsetGroupedListStyle())
             .toolbar {
                 // No edit or refresh buttons needed for Reviews view per request.

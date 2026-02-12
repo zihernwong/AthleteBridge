@@ -15,6 +15,7 @@ struct MessagesView: View {
         NavigationStack(path: $navPath) {
             mainContent
                 .navigationTitle("Messages")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .onAppear(perform: handleOnAppear)
                 .onDisappear { refreshTask?.cancel() }
@@ -49,9 +50,18 @@ struct MessagesView: View {
 
     // MARK: - Extracted Views
 
+    /// Chats that have at least one message sent.
+    private var chatsWithMessages: [FirestoreManager.ChatItem] {
+        firestore.chats.filter { chat in
+            if let preview = firestore.previewTexts[chat.id], !preview.isEmpty { return true }
+            if let last = chat.lastMessageText, !last.isEmpty { return true }
+            return false
+        }
+    }
+
     @ViewBuilder
     private var mainContent: some View {
-        if firestore.chats.isEmpty {
+        if chatsWithMessages.isEmpty {
             emptyStateView
         } else {
             chatListView
@@ -84,7 +94,7 @@ struct MessagesView: View {
 
     private var chatListView: some View {
         List {
-            ForEach(firestore.chats) { chat in
+            ForEach(chatsWithMessages) { chat in
                 NavigationLink(value: chat.id) {
                     ChatRow(chat: chat)
                         .environmentObject(firestore)
@@ -101,11 +111,6 @@ struct MessagesView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarLeading) {
-            Button(action: { showingNewConversation = true }) {
-                Text("New Message")
-            }
-        }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { showingNewConversation = true }) {
                 Image(systemName: "plus")
@@ -123,6 +128,7 @@ struct MessagesView: View {
                 }
             }
             .navigationTitle("New Conversation")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
             firestore.fetchCoaches()

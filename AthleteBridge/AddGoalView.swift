@@ -32,6 +32,7 @@ struct AddGoalView: View {
                 }
             }
             .navigationTitle("Add Goal")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }

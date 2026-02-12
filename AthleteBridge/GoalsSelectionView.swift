@@ -96,6 +96,7 @@ struct GoalsSelectionView: View {
                 }
             }
             .navigationTitle("Select Goals")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -119,6 +120,7 @@ struct GoalsSelectionView: View {
                         }
                     }
                     .navigationTitle("Suggest Goal")
+                    .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Close") { showingSuggestSheet = false } } }
                 }
             }

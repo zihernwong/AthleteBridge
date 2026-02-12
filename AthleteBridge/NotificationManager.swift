@@ -9,6 +9,10 @@ import FirebaseAuth
 final class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate, MessagingDelegate {
     static let shared = NotificationManager()
 
+    /// Posted when a push notification arrives while the app is in the foreground.
+    /// Views can observe this to refresh their data.
+    static let didReceiveForegroundNotification = Notification.Name("didReceiveForegroundNotification")
+
     /// Cached FCM token - stored here in case it arrives before user authenticates
     private var cachedFCMToken: String?
     /// Previously saved token so we can remove it when a new one arrives
@@ -202,6 +206,13 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         // Show banner, sound, and badge while in foreground
         completionHandler([.banner, .sound, .badge])
+
+        // Broadcast so any visible view can refresh its data
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NotificationManager.didReceiveForegroundNotification,
+                                            object: nil,
+                                            userInfo: notification.request.content.userInfo)
+        }
     }
 
     // Handle user tapping on notification — route to the appropriate screen

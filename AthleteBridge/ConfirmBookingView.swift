@@ -130,12 +130,18 @@ struct ConfirmBookingView: View {
                         // Show coach acceptances for group bookings
                         if isGroupBooking {
                             Section(header: Text("Coach Acceptances")) {
+                                let bookingRejected = (booking.status ?? "").lowercased() == "rejected"
                                 ForEach(Array(zip(booking.allCoachIDs, booking.allCoachNames)), id: \.0) { coachId, coachName in
                                     let accepted = coachAcceptances[coachId] ?? false
+                                    let isRejector = booking.rejectedBy == coachId
                                     HStack {
                                         Text(coachName)
                                         Spacer()
-                                        if accepted {
+                                        if isRejector || (bookingRejected && !accepted) {
+                                            Label("Rejected", systemImage: "xmark.circle.fill")
+                                                .foregroundColor(.red)
+                                                .font(.caption)
+                                        } else if accepted {
                                             Label("Accepted", systemImage: "checkmark.circle.fill")
                                                 .foregroundColor(Color("LogoGreen"))
                                                 .font(.caption)
@@ -275,6 +281,7 @@ struct ConfirmBookingView: View {
                 }
             }
             .navigationTitle("Review Offer")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") { dismiss() }

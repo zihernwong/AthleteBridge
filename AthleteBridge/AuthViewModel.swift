@@ -77,6 +77,66 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Phone Verification
+    @Published var verificationID: String?
+    @Published var phoneVerificationInProgress = false
+
+    /// Send an SMS verification code to the given phone number (E.164 format, e.g. "+15551234567").
+    func sendPhoneVerification(phoneNumber: String) {
+        phoneVerificationInProgress = true
+        errorMessage = nil
+        PhoneAuthProvider.provider().verifyPhoneNumber(phoneNumber, uiDelegate: nil) { [weak self] verificationID, error in
+            DispatchQueue.main.async {
+                self?.phoneVerificationInProgress = false
+                if let error = error {
+                    self?.errorMessage = self?.handleAuthError(error)
+                    return
+                }
+                self?.verificationID = verificationID
+            }
+        }
+    }
+
+    /// Confirm the 6-digit SMS code and link the phone credential to the current user.
+    func confirmPhoneCode(_ code: String, firestore: FirestoreManager, completion: @escaping (Bool) -> Void) {
+        guard let verificationID = verificationID else {
+            errorMessage = "No verification in progress."
+            completion(false)
+            return
+        }
+        phoneVerificationInProgress = true
+        errorMessage = nil
+
+        let credential = PhoneAuthProvider.provider().credential(withVerificationID: verificationID, verificationCode: code)
+
+        guard let currentUser = Auth.auth().currentUser else {
+            phoneVerificationInProgress = false
+            errorMessage = "Not signed in."
+            completion(false)
+            return
+        }
+
+        currentUser.link(with: credential) { [weak self] _, error in
+            DispatchQueue.main.async {
+                self?.phoneVerificationInProgress = false
+                if let error = error {
+                    let nsError = error as NSError
+                    // If phone is already linked, treat as success
+                    if AuthErrorCode(rawValue: nsError.code) == .providerAlreadyLinked {
+                        firestore.setPhoneVerified { _ in completion(true) }
+                        return
+                    }
+                    self?.errorMessage = self?.handleAuthError(error)
+                    completion(false)
+                    return
+                }
+                // Success — persist to Firestore
+                firestore.setPhoneVerified { _ in completion(true) }
+                self?.verificationID = nil
+            }
+        }
+    }
+
     // MARK: - Error handling
     private func handleAuthError(_ error: Error) -> String {
         let nsError = error as NSError

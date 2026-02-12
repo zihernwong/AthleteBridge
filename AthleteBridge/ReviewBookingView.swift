@@ -176,12 +176,24 @@ struct ReviewBookingView: View {
                     Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                 }
 
+                if let notes = booking.notes, !notes.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notes")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(notes)
+                            .font(.body)
+                    }
+                }
+
                 if let note = booking.coachNote, !note.isEmpty {
-                    Text("Note from coach:")
-                        .font(.subheadline).bold()
-                    Text(note)
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Coach Note")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(note)
+                            .font(.body)
+                    }
                 }
 
                 Spacer()
@@ -246,8 +258,21 @@ struct ReviewBookingView: View {
                     }
                 }
             }
+        } else if booking.isGroupBooking == true && status == "declined_by_client" {
+            // Group booking decline: update all mirrors (root + coaches + clients)
+            firestore.updateGroupBookingStatus(bookingId: booking.id, status: "declined_by_client") { err in
+                DispatchQueue.main.async {
+                    if let err = err {
+                        firestore.showToast("Failed to update booking: \(err.localizedDescription)")
+                    } else {
+                        firestore.showToast("Group booking declined")
+                        firestore.fetchBookingsForCurrentClientSubcollection()
+                        dismiss()
+                    }
+                }
+            }
         } else {
-            // Non-group booking or decline
+            // Non-group booking
             firestore.updateBookingStatus(bookingId: booking.id, status: status) { err in
                 DispatchQueue.main.async {
                     if let err = err {

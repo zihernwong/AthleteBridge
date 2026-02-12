@@ -102,6 +102,7 @@ struct ClientRequestedBookingsView: View {
             }
         }
         .navigationTitle("Requested Bookings")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if let uid = auth.user?.uid {
                 firestore.fetchBookingsFromClientSubcollection(clientId: uid)
@@ -123,6 +124,13 @@ struct ClientRequestedBookingsView: View {
             BookingDetailView(booking: booking)
                 .environmentObject(firestore)
                 .environmentObject(auth)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NotificationManager.didReceiveForegroundNotification)) { _ in
+            if let uid = auth.user?.uid {
+                firestore.fetchBookingsFromClientSubcollection(clientId: uid)
+            } else {
+                firestore.fetchBookingsForCurrentClientSubcollection()
+            }
         }
     }
 

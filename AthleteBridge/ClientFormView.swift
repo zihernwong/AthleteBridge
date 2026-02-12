@@ -161,6 +161,14 @@ struct ClientFormView: View {
                             .environmentObject(auth)
                     }
 
+                    Section(header: Text("Places to Play")) {
+                        NavigationLink("Browse Places") {
+                            PlacesToPlayView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        }
+                    }
+
                     Section(header: Text("Find a Tournament Partner")) {
                         NavigationLink("Find Partners") {
                             TournamentPartnerView()
@@ -168,8 +176,17 @@ struct ClientFormView: View {
                                 .environmentObject(auth)
                         }
                     }
+
+                    Section(header: Text("Find Badminton Stringers")) {
+                        NavigationLink("Browse Stringers") {
+                            StringersView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        }
+                    }
                 }
                 .navigationTitle("Find a Coach")
+                .navigationBarTitleDisplayMode(.inline)
                  .onAppear {
                      // ensure coaches list is loaded so suggestions work
                      if firestore.coaches.isEmpty {
@@ -202,5 +219,6 @@ struct CoachLogoView: View {
             Spacer()
         }
         .navigationTitle("AthleteBridge")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

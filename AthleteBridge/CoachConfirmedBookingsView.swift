@@ -101,16 +101,6 @@ struct CoachConfirmedBookingsView: View {
 
                                 // Hide Cancel and Reschedule buttons once payment is acknowledged
                                 if (b.paymentStatus ?? "").lowercased() != "paid" {
-                                    // Cancel booking button
-                                    Button(role: .destructive) {
-                                        bookingToCancel = b
-                                        showCancelAlert = true
-                                    } label: {
-                                        Text("Cancel Booking")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-
                                     // Reschedule booking button
                                     Button {
                                         bookingToReschedule = b
@@ -120,6 +110,16 @@ struct CoachConfirmedBookingsView: View {
                                     }
                                     .buttonStyle(.bordered)
                                     .tint(.blue)
+
+                                    // Cancel booking button
+                                    Button(role: .destructive) {
+                                        bookingToCancel = b
+                                        showCancelAlert = true
+                                    } label: {
+                                        Text("Cancel Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -132,6 +132,7 @@ struct CoachConfirmedBookingsView: View {
             }
         }
         .navigationTitle("Confirmed Bookings")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             firestore.fetchBookingsForCurrentCoachSubcollection()
         }
@@ -160,6 +161,9 @@ struct CoachConfirmedBookingsView: View {
             BookingDetailView(booking: booking)
                 .environmentObject(firestore)
                 .environmentObject(auth)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NotificationManager.didReceiveForegroundNotification)) { _ in
+            firestore.fetchBookingsForCurrentCoachSubcollection()
         }
     }
 
@@ -292,6 +296,7 @@ struct CoachRescheduleView: View {
                 }
             }
             .navigationTitle("Reschedule Booking")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

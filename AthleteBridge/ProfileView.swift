@@ -71,6 +71,7 @@ struct ProfileView: View {
     @State private var isEditMode: Bool = false
     // Tracks whether the form has been populated from existing data (prevents overwriting user input)
     @State private var hasPopulatedFromExisting: Bool = false
+    @State private var showTournamentLinkInfo: Bool = false
     @State private var searchText: String = ""
     @State private var showingGoalsPicker: Bool = false
 
@@ -82,6 +83,12 @@ struct ProfileView: View {
 
     // Manage subscription sheet
     @State private var showingManageSubscription: Bool = false
+
+    // Phone verification
+    @State private var phoneNumber: String = ""
+    @State private var phoneCode: String = ""
+    @State private var phoneSent: Bool = false
+    @State private var phoneVerifySuccess: Bool = false
 
     @Environment(\.presentationMode) private var presentationMode
 
@@ -95,11 +102,13 @@ struct ProfileView: View {
                     }
                     nameSection
                     photoSection
+                    phoneVerificationSection
                     if role == .client { clientSection } else { coachSection }
                     subscriptionSection
                     saveSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Logout") { auth.logout(); presentationMode.wrappedValue.dismiss() }
@@ -188,9 +197,82 @@ struct ProfileView: View {
         }
     }
 
+    private var isPhoneVerified: Bool {
+        if role == .coach { return firestore.currentCoach?.phoneVerified ?? false }
+        return firestore.currentClient?.phoneVerified ?? false
+    }
+
     private var nameSection: some View {
         Section("Full Name") {
-            TextField("Full Name", text: $name)
+            HStack {
+                TextField("Full Name", text: $name)
+                if isPhoneVerified {
+                    VerifiedBadge()
+                }
+            }
+        }
+    }
+
+    private var phoneVerificationSection: some View {
+        Section("Phone Verification") {
+            if isPhoneVerified {
+                HStack {
+                    VerifiedBadge()
+                    Text("Phone Verified")
+                        .foregroundColor(Color("LogoGreen"))
+                }
+            } else if phoneVerifySuccess {
+                HStack {
+                    VerifiedBadge()
+                    Text("Phone Verified!")
+                        .foregroundColor(Color("LogoGreen"))
+                }
+            } else if phoneSent {
+                // Code entry step
+                TextField("6-digit code", text: $phoneCode)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                Button(action: {
+                    auth.errorMessage = nil
+                    auth.confirmPhoneCode(phoneCode, firestore: firestore) { success in
+                        if success { phoneVerifySuccess = true }
+                    }
+                }) {
+                    if auth.phoneVerificationInProgress {
+                        ProgressView()
+                    } else {
+                        Text("Verify Code")
+                    }
+                }
+                .disabled(phoneCode.count < 6 || auth.phoneVerificationInProgress)
+                if let err = auth.errorMessage {
+                    Text(err).font(.caption).foregroundColor(.red)
+                }
+                Button("Resend Code") {
+                    auth.sendPhoneVerification(phoneNumber: phoneNumber)
+                }
+                .font(.caption)
+            } else {
+                // Phone number entry step
+                TextField("Phone number (e.g. +15551234567)", text: $phoneNumber)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                Button(action: {
+                    auth.errorMessage = nil
+                    auth.sendPhoneVerification(phoneNumber: phoneNumber)
+                    phoneSent = true
+                }) {
+                    if auth.phoneVerificationInProgress {
+                        ProgressView()
+                    } else {
+                        Text("Send Verification Code")
+                    }
+                }
+                .disabled(phoneNumber.count < 10 || auth.phoneVerificationInProgress)
+                if let err = auth.errorMessage {
+                    Text(err).font(.caption).foregroundColor(.red)
+                }
+            }
         }
     }
 
@@ -276,8 +358,21 @@ struct ProfileView: View {
             }
 
             VStack(alignment: .leading) {
-                Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
-                TextField("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...", text: $clientTournamentSoftwareLink)
+                HStack(spacing: 4) {
+                    Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
+                    Button(action: { showTournamentLinkInfo.toggle() }) {
+                        Image(systemName: "info.circle")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .popover(isPresented: $showTournamentLinkInfo) {
+                        Text("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...")
+                            .font(.caption)
+                            .padding()
+                            .presentationCompactAdaptation(.popover)
+                    }
+                }
+                TextField("Paste your profile link", text: $clientTournamentSoftwareLink)
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
@@ -399,8 +494,21 @@ struct ProfileView: View {
             }
 
             VStack(alignment: .leading) {
-                Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
-                TextField("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...", text: $coachTournamentSoftwareLink)
+                HStack(spacing: 4) {
+                    Text("Tournamentsoftware Profile Link").font(.subheadline).foregroundColor(.secondary)
+                    Button(action: { showTournamentLinkInfo.toggle() }) {
+                        Image(systemName: "info.circle")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .popover(isPresented: $showTournamentLinkInfo) {
+                        Text("e.g. https://www.tournamentsoftware.com/sport/player.aspx?id=...")
+                            .font(.caption)
+                            .padding()
+                            .presentationCompactAdaptation(.popover)
+                    }
+                }
+                TextField("Paste your profile link", text: $coachTournamentSoftwareLink)
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)

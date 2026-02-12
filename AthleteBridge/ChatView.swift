@@ -97,7 +97,8 @@ struct ChatView: View {
                 Spacer()
             }
             .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
 
             Divider()
 
@@ -128,8 +129,16 @@ struct ChatView: View {
                         }
                         .padding()
                     }
+                    .onAppear {
+                        // scroll to bottom on initial load
+                        if let last = messages.last {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
                     .onChange(of: messages.count) { _, _ in
-                        // scroll to bottom when messages change
+                        // scroll to bottom when new messages arrive
                         if let last = messages.last {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }

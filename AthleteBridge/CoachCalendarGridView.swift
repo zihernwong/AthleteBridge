@@ -137,6 +137,7 @@ import FirebaseAuth
              }
          }
          .navigationTitle("Your Matches")
+         .navigationBarTitleDisplayMode(.inline)
          .onAppear { firestore.fetchCoaches() }
          // Modal fallback when programmatic NavigationLink doesn't trigger inside List rows
          .sheet(item: $presentedChat) { sheet in
@@ -191,7 +192,10 @@ import FirebaseAuth
                         AvatarView(url: coachURL ?? nil, size: 56, useCurrentUser: false)
 
                         VStack(alignment: .leading) {
-                            Text(coach.name).font(.headline)
+                            HStack(spacing: 4) {
+                                Text(coach.name).font(.headline)
+                                if coach.phoneVerified { VerifiedBadge() }
+                            }
                             if !coach.specialties.isEmpty {
                                 Text(coach.specialties.joined(separator: ", ")).font(.subheadline).foregroundColor(.secondary)
                             }
@@ -403,7 +407,12 @@ import FirebaseAuth
                     }
                 }
                 .padding(.top, 8)
-            } header: { Text(coach.name).font(.title2) }
+            } header: {
+                HStack(spacing: 4) {
+                    Text(coach.name).font(.title2)
+                    if coach.phoneVerified { VerifiedBadge().font(.body) }
+                }
+            }
 
             Section {
                 HStack {
@@ -431,6 +440,7 @@ import FirebaseAuth
             } header: { Text("Calendar") }
         }
         .navigationTitle("Coach")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             firestore.fetchReviewsForCoach(coachId: coach.id) { items in
                 DispatchQueue.main.async { self.reviews = items }
@@ -610,8 +620,9 @@ import FirebaseAuth
                  if let coachBookings = allCoachBookings[coachId] {
                      if let overlapping = coachBookings.first(where: { b in
                          guard let s = b.startAt, let e = b.endAt else { return false }
-                         // Skip cancelled bookings - those time slots are available
-                         if b.status?.lowercased() == "cancelled" { return false }
+                         // Skip cancelled/declined bookings - those time slots are available
+                         let st = (b.status ?? "").lowercased()
+                         if st == "cancelled" || st == "declined" || st == "declined_by_client" || st == "rejected" { return false }
                          return (s < slotEnd) && (e > slotStart)
                      }) {
                          return overlapping
@@ -623,8 +634,9 @@ import FirebaseAuth
          // Single coach - use existing bookings array
          return bookings.first { b in
              guard let s = b.startAt, let e = b.endAt else { return false }
-             // Skip cancelled bookings - those time slots are available
-             if b.status?.lowercased() == "cancelled" { return false }
+             // Skip cancelled/declined bookings - those time slots are available
+             let st = (b.status ?? "").lowercased()
+             if st == "cancelled" || st == "declined" || st == "declined_by_client" || st == "rejected" { return false }
              return (s < slotEnd) && (e > slotStart)
          }
      }
@@ -692,7 +704,7 @@ import FirebaseAuth
                             .padding(.leading, 10)
                             Spacer()
                             if let status = b.status {
-                                Text(status.capitalized)
+                                Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.9))
                                     .padding(.trailing, 10)
@@ -924,5 +936,6 @@ struct CoachReviewsListView: View {
             }
         }
         .navigationTitle("\(coach.name)'s Reviews")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -41,6 +41,7 @@ struct ReviewsByUserView: View {
             }
         }
         .navigationTitle("My Reviews")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: { dismiss() }) {

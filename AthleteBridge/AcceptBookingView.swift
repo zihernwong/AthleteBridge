@@ -112,7 +112,7 @@ struct AcceptBookingView: View {
                         HStack {
                             Text("Status").bold()
                             Spacer()
-                            Text(status.capitalized)
+                            Text(status.replacingOccurrences(of: "_", with: " ").capitalized)
                                 .foregroundColor(statusColor(for: status))
                         }
                     }
@@ -129,7 +129,7 @@ struct AcceptBookingView: View {
                 }
 
                 // Show coach acceptance status for group bookings
-                if isGroupBooking, let acceptances = booking.coachAcceptances {
+                if isGroupBooking {
                     Section(header: Text("Coach Acceptances")) {
                         ForEach(booking.allCoachIDs, id: \.self) { coachId in
                             let coachName = booking.coachNames?.first(where: { name in
@@ -137,11 +137,17 @@ struct AcceptBookingView: View {
                                     booking.coachNames?.indices.contains(idx) == true && booking.coachNames?[idx] == name
                                 } ?? false
                             }) ?? coachId
-                            let accepted = acceptances[coachId] ?? false
+                            let accepted = booking.coachAcceptances?[coachId] ?? false
+                            let isRejector = booking.rejectedBy == coachId
+                            let bookingRejected = (booking.status ?? "").lowercased() == "rejected"
                             HStack {
                                 Text(coachName)
                                 Spacer()
-                                if accepted {
+                                if isRejector || (bookingRejected && !accepted) {
+                                    Label("Rejected", systemImage: "xmark.circle.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                } else if accepted {
                                     Label("Accepted", systemImage: "checkmark.circle.fill")
                                         .foregroundColor(Color("LogoGreen"))
                                         .font(.caption)
@@ -221,6 +227,7 @@ struct AcceptBookingView: View {
                 }
             }
             .navigationTitle("Accept Booking")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -259,17 +266,22 @@ struct AcceptBookingView: View {
         isSaving = true
         errorMessage = nil
 
-        let coachId = booking.coachID.isEmpty ? (booking.coachIDs?.first ?? "") : booking.coachID
-        let clientId = booking.clientID.isEmpty ? (booking.clientIDs?.first ?? "") : booking.clientID
+        let allCoachIds = booking.allCoachIDs
+        let allClientIds = booking.allClientIDs
 
-        print("[AcceptBookingView] rejectBooking: bookingId=\(booking.id), coachId=\(coachId), clientId=\(clientId)")
+        print("[AcceptBookingView] rejectBooking: bookingId=\(booking.id), rejectedBy=\(currentUserId), coaches=\(allCoachIds), clients=\(allClientIds)")
 
-        let updatePayload: [String: Any] = [
+        var updatePayload: [String: Any] = [
             "Status": "rejected",
             "rejectedBy": currentUserId,
             "rejectionReason": selectedRejectReason,
             "rejectedAt": FieldValue.serverTimestamp()
         ]
+
+        // For group bookings, also update the CoachAcceptances map so the rejecting coach shows as rejected
+        if isGroupBooking {
+            updatePayload["CoachAcceptances.\(currentUserId)"] = false
+        }
 
         let batch = Firestore.firestore().batch()
 
@@ -278,15 +290,15 @@ struct AcceptBookingView: View {
         batch.updateData(updatePayload, forDocument: bookingRef)
         print("[AcceptBookingView] rejectBooking: updating bookings/\(booking.id)")
 
-        // Update coach's bookings subcollection
-        if !coachId.isEmpty {
+        // Update ALL coaches' bookings subcollections
+        for coachId in allCoachIds where !coachId.isEmpty {
             let coachBookingRef = Firestore.firestore().collection("coaches").document(coachId).collection("bookings").document(booking.id)
             batch.updateData(updatePayload, forDocument: coachBookingRef)
             print("[AcceptBookingView] rejectBooking: updating coaches/\(coachId)/bookings/\(booking.id)")
         }
 
-        // Update client's bookings subcollection
-        if !clientId.isEmpty {
+        // Update ALL clients' bookings subcollections
+        for clientId in allClientIds where !clientId.isEmpty {
             let clientBookingRef = Firestore.firestore().collection("clients").document(clientId).collection("bookings").document(booking.id)
             batch.updateData(updatePayload, forDocument: clientBookingRef)
             print("[AcceptBookingView] rejectBooking: updating clients/\(clientId)/bookings/\(booking.id)")
@@ -298,22 +310,23 @@ struct AcceptBookingView: View {
                 if let err = err {
                     self.errorMessage = err.localizedDescription
                 } else {
-                    // Send notification to client about rejection
-                    if !clientId.isEmpty {
-                        let coachName = self.firestore.currentCoach?.name ?? "The coach"
+                    // Send notification to ALL clients about rejection
+                    let coachName = self.firestore.currentCoach?.name ?? "The coach"
+                    for clientId in allClientIds where !clientId.isEmpty {
                         let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
                         let notifPayload: [String: Any] = [
                             "title": "Booking Declined",
                             "body": "\(coachName) has declined your booking request. Reason: \(self.selectedRejectReason)",
                             "bookingId": self.booking.id,
                             "type": "booking_rejected",
-                            "senderId": coachId,
+                            "senderId": currentUserId,
+                            "isGroupBooking": self.isGroupBooking,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
                         ]
                         notifRef.setData(notifPayload) { nerr in
                             if let nerr = nerr {
-                                print("[AcceptBookingView] Failed to send rejection notification to client: \(nerr)")
+                                print("[AcceptBookingView] Failed to send rejection notification to \(clientId): \(nerr)")
                             }
                         }
                     }

@@ -131,7 +131,7 @@ struct BookingDetailView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Spacer()
-            Text(booking.status?.capitalized ?? "Unknown")
+            Text(booking.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Unknown")
                 .font(.headline)
                 .foregroundColor(statusColor(for: booking.status))
         }
@@ -167,16 +167,26 @@ struct BookingDetailView: View {
                     .foregroundColor(.secondary)
 
                 if isGroupBooking && booking.allCoachIDs.count > 1 {
+                    let bookingRejected = (booking.status ?? "").lowercased() == "rejected"
                     ForEach(Array(zip(booking.allCoachIDs, booking.allCoachNames)), id: \.0) { coachId, coachName in
                         HStack {
                             Text(coachName)
                                 .font(.body)
                             Spacer()
-                            if let acceptances = booking.coachAcceptances {
-                                let accepted = acceptances[coachId] ?? false
-                                Label(accepted ? "Accepted" : "Pending", systemImage: accepted ? "checkmark.circle.fill" : "clock")
+                            let accepted = booking.coachAcceptances?[coachId] ?? false
+                            let isRejector = booking.rejectedBy == coachId
+                            if isRejector || (bookingRejected && !accepted) {
+                                Label("Rejected", systemImage: "xmark.circle.fill")
                                     .font(.caption)
-                                    .foregroundColor(accepted ? Color("LogoGreen") : .orange)
+                                    .foregroundColor(.red)
+                            } else if accepted {
+                                Label("Accepted", systemImage: "checkmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(Color("LogoGreen"))
+                            } else {
+                                Label("Pending", systemImage: "clock")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
                             }
                             if let rates = booking.coachRates, let rate = rates[coachId] {
                                 Text(String(format: "$%.2f/hr", rate))
@@ -250,6 +260,7 @@ struct BookingDetailView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
@@ -265,6 +276,7 @@ struct BookingDetailView: View {
                 Text(location)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
@@ -324,30 +336,40 @@ struct BookingDetailView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
 
+    private var hasNotes: Bool {
+        let hasClientNotes = !(booking.notes ?? "").isEmpty
+        let hasCoachNote = !(booking.coachNote ?? "").isEmpty
+        return hasClientNotes || hasCoachNote
+    }
+
+    @ViewBuilder
     private var notesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let notes = booking.notes, !notes.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Notes")
-                        .font(.headline)
+        if hasNotes {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Notes")
+                    .font(.headline)
+
+                if let notes = booking.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
-            }
 
-            if let coachNote = booking.coachNote, !coachNote.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Coach Note")
-                        .font(.headline)
-                    Text(coachNote)
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                if let coachNote = booking.coachNote, !coachNote.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Coach Note")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(coachNote)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
         }
-        .padding()
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
 
     private func rejectionSection(_ reason: String) -> some View {

@@ -404,6 +404,7 @@ struct BookingEditorView: View {
                 if isSaving { ProgressView().frame(maxWidth: .infinity, alignment: .center) }
             }
             .navigationTitle("New Booking")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showSheet = false } }
                 ToolbarItem(placement: .confirmationAction) {

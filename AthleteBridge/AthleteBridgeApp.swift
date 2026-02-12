@@ -26,6 +26,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         print("[AppDelegate] Failed to register for remote notifications: \(error)")
     }
+
+    // Forward silent push notifications to Firebase Auth for Phone Auth verification
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        if Auth.auth().canHandleNotification(userInfo) {
+            print("[AppDelegate] Firebase Auth handled silent push notification")
+            completionHandler(.noData)
+            return
+        }
+        print("[AppDelegate] didReceiveRemoteNotification - not handled by Auth")
+        completionHandler(.noData)
+    }
 }
 
 @main

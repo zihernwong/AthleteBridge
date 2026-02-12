@@ -59,15 +59,6 @@ struct ClientConfirmedBookingsView: View {
                                 .buttonStyle(PlainButtonStyle())
                                 // Hide Cancel and Reschedule buttons once payment is acknowledged
                                 if (b.paymentStatus ?? "").lowercased() != "paid" {
-                                    Button(role: .destructive) {
-                                        bookingToCancel = b
-                                        showCancelAlert = true
-                                    } label: {
-                                        Text("Cancel Booking")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .buttonStyle(.bordered)
-
                                     Button {
                                         bookingToReschedule = b
                                     } label: {
@@ -76,6 +67,15 @@ struct ClientConfirmedBookingsView: View {
                                     }
                                     .buttonStyle(.bordered)
                                     .tint(.blue)
+
+                                    Button(role: .destructive) {
+                                        bookingToCancel = b
+                                        showCancelAlert = true
+                                    } label: {
+                                        Text("Cancel Booking")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -88,6 +88,7 @@ struct ClientConfirmedBookingsView: View {
             }
         }
         .navigationTitle("Confirmed Bookings")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if let uid = auth.user?.uid {
                 firestore.fetchBookingsFromClientSubcollection(clientId: uid)
@@ -117,6 +118,13 @@ struct ClientConfirmedBookingsView: View {
             BookingDetailView(booking: booking)
                 .environmentObject(firestore)
                 .environmentObject(auth)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NotificationManager.didReceiveForegroundNotification)) { _ in
+            if let uid = auth.user?.uid {
+                firestore.fetchBookingsFromClientSubcollection(clientId: uid)
+            } else {
+                firestore.fetchBookingsForCurrentClientSubcollection()
+            }
         }
     }
 
@@ -219,6 +227,7 @@ struct ClientRescheduleView: View {
                     .id(calendarDate)
             }
             .navigationTitle("Reschedule Booking")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
