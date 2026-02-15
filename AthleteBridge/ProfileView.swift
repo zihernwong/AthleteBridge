@@ -14,6 +14,8 @@ struct ProfileView: View {
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var firestore: FirestoreManager
     @State private var role: Role = .client
+    @State private var selectedAdditionalTypes: Set<AdditionalUserType> = []
+    @State private var showingAdditionalTypesSheet: Bool = false
 
     // Common
     @State private var name: String = ""
@@ -85,10 +87,18 @@ struct ProfileView: View {
     @State private var showingManageSubscription: Bool = false
 
     // Phone verification
-    @State private var phoneNumber: String = ""
+    @State private var selectedCountryCode: CountryCode = .us
+    @State private var localPhoneNumber: String = ""
     @State private var phoneCode: String = ""
+    @FocusState private var phoneCodeFocused: Bool
     @State private var phoneSent: Bool = false
     @State private var phoneVerifySuccess: Bool = false
+
+    /// Full E.164 phone number combining country code + local number
+    private var phoneNumber: String {
+        let digits = localPhoneNumber.filter { $0.isNumber }
+        return selectedCountryCode.dialCode + digits
+    }
 
     @Environment(\.presentationMode) private var presentationMode
 
@@ -103,6 +113,7 @@ struct ProfileView: View {
                     nameSection
                     photoSection
                     phoneVerificationSection
+                    additionalTypesSection
                     if role == .client { clientSection } else { coachSection }
                     subscriptionSection
                     saveSection
@@ -159,6 +170,14 @@ struct ProfileView: View {
                 .sheet(isPresented: $showingManageSubscription) {
                     ManageSubscriptionView()
                 }
+                .sheet(isPresented: $showingAdditionalTypesSheet) {
+                    AdditionalTypesEditorView(
+                        selectedTypes: $selectedAdditionalTypes,
+                        onSave: { newTypes in
+                            saveAdditionalTypes(newTypes)
+                        }
+                    )
+                }
             }
 
             // Copied confirmation toast (appears above the form)
@@ -198,6 +217,8 @@ struct ProfileView: View {
     }
 
     private var isPhoneVerified: Bool {
+        // Check user-level flag first (persists in userType/{uid}), then fall back to profile-level
+        if firestore.currentUserPhoneVerified { return true }
         if role == .coach { return firestore.currentCoach?.phoneVerified ?? false }
         return firestore.currentClient?.phoneVerified ?? false
     }
@@ -232,7 +253,9 @@ struct ProfileView: View {
                 TextField("6-digit code", text: $phoneCode)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
+                    .focused($phoneCodeFocused)
                 Button(action: {
+                    phoneCodeFocused = false
                     auth.errorMessage = nil
                     auth.confirmPhoneCode(phoneCode, firestore: firestore) { success in
                         if success { phoneVerifySuccess = true }
@@ -242,33 +265,66 @@ struct ProfileView: View {
                         ProgressView()
                     } else {
                         Text("Verify Code")
+                            .frame(maxWidth: .infinity)
                     }
                 }
+                .buttonStyle(.borderedProminent)
                 .disabled(phoneCode.count < 6 || auth.phoneVerificationInProgress)
                 if let err = auth.errorMessage {
                     Text(err).font(.caption).foregroundColor(.red)
                 }
                 Button("Resend Code") {
-                    auth.sendPhoneVerification(phoneNumber: phoneNumber)
+                    auth.sendPhoneVerification(phoneNumber: phoneNumber) { success in
+                        if !success { phoneSent = false }
+                    }
                 }
                 .font(.caption)
             } else {
-                // Phone number entry step
-                TextField("Phone number (e.g. +15551234567)", text: $phoneNumber)
-                    .keyboardType(.phonePad)
-                    .textContentType(.telephoneNumber)
+                // Phone number entry step with country code picker
+                HStack(spacing: 8) {
+                    // Country code dropdown with flag
+                    Menu {
+                        ForEach(CountryCode.allCases) { country in
+                            Button(action: { selectedCountryCode = country }) {
+                                Text("\(country.flag) \(country.name) (\(country.dialCode))")
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(selectedCountryCode.flag)
+                                .font(.title3)
+                            Text(selectedCountryCode.dialCode)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                    }
+
+                    TextField("Phone number", text: $localPhoneNumber)
+                        .keyboardType(.phonePad)
+                        .textContentType(.telephoneNumber)
+                }
                 Button(action: {
                     auth.errorMessage = nil
-                    auth.sendPhoneVerification(phoneNumber: phoneNumber)
-                    phoneSent = true
+                    auth.sendPhoneVerification(phoneNumber: phoneNumber) { success in
+                        if success { phoneSent = true }
+                    }
                 }) {
                     if auth.phoneVerificationInProgress {
                         ProgressView()
                     } else {
                         Text("Send Verification Code")
+                            .frame(maxWidth: .infinity)
                     }
                 }
-                .disabled(phoneNumber.count < 10 || auth.phoneVerificationInProgress)
+                .buttonStyle(.borderedProminent)
+                .disabled(localPhoneNumber.filter { $0.isNumber }.count < 4 || auth.phoneVerificationInProgress)
                 if let err = auth.errorMessage {
                     Text(err).font(.caption).foregroundColor(.red)
                 }
@@ -545,6 +601,49 @@ struct ProfileView: View {
         }
     }
 
+    private var additionalTypesSection: some View {
+        Section("Additional Roles") {
+            if selectedAdditionalTypes.isEmpty {
+                Text("No additional roles selected")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            } else {
+                WrappingHStack(spacing: 8) {
+                    ForEach(Array(selectedAdditionalTypes).sorted(by: { $0.rawValue < $1.rawValue }), id: \.self) { type in
+                        AdditionalTypeBadge(type: type)
+                    }
+                }
+            }
+            Button(action: { showingAdditionalTypesSheet = true }) {
+                HStack {
+                    Text("Manage Additional Roles")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    private func saveAdditionalTypes(_ newTypes: Set<AdditionalUserType>) {
+        let newTypesArray = Set(newTypes.map { $0.rawValue })
+        let currentTypesArray = Set(firestore.currentAdditionalTypes)
+        let toAdd = Array(newTypesArray.subtracting(currentTypesArray))
+        let toRemove = Array(currentTypesArray.subtracting(newTypesArray))
+        guard !toAdd.isEmpty || !toRemove.isEmpty else { return }
+
+        firestore.updateAdditionalTypes(add: toAdd, remove: toRemove) { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self.saveMessage = "Failed to update roles: \(error.localizedDescription)"
+                } else {
+                    self.selectedAdditionalTypes = newTypes
+                    firestore.showToast("Additional roles updated")
+                }
+            }
+        }
+    }
+
     private var subscriptionSection: some View {
         Section("Subscription") {
             HStack {
@@ -662,6 +761,11 @@ struct ProfileView: View {
     private func populateFromExisting() {
         // Only populate once to avoid overwriting user input
         guard !hasPopulatedFromExisting else { return }
+
+        // Populate additional types from Firestore
+        selectedAdditionalTypes = Set(
+            firestore.currentAdditionalTypes.compactMap { AdditionalUserType(rawValue: $0) }
+        )
 
         if let client = firestore.currentClient {
             role = .client
@@ -950,4 +1054,124 @@ fileprivate func resizedImage(_ image: UIImage, _ maxDimension: CGFloat) -> UIIm
     let resized = UIGraphicsGetImageFromCurrentImageContext()
     UIGraphicsEndImageContext()
     return resized
+}
+
+// MARK: - Additional Types Editor Sheet
+
+struct AdditionalTypesEditorView: View {
+    @Binding var selectedTypes: Set<AdditionalUserType>
+    let onSave: (Set<AdditionalUserType>) -> Void
+
+    @State private var localSelection: Set<AdditionalUserType>
+    @Environment(\.dismiss) private var dismiss
+
+    init(selectedTypes: Binding<Set<AdditionalUserType>>, onSave: @escaping (Set<AdditionalUserType>) -> Void) {
+        self._selectedTypes = selectedTypes
+        self.onSave = onSave
+        self._localSelection = State(initialValue: selectedTypes.wrappedValue)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Select Additional Roles")) {
+                    ForEach(AdditionalUserType.allCases) { type in
+                        Button(action: {
+                            if localSelection.contains(type) {
+                                localSelection.remove(type)
+                            } else {
+                                localSelection.insert(type)
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: localSelection.contains(type) ? "checkmark.square.fill" : "square")
+                                    .foregroundColor(localSelection.contains(type) ? Color("LogoGreen") : .secondary)
+                                    .font(.title3)
+                                AdditionalTypeBadge(type: type)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+
+                Section {
+                    Text("These roles appear as badges on your profile and help others identify your capabilities.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("Additional Roles")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(localSelection)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Wrapping HStack Layout
+
+/// Simple wrapping layout for badges that flow to the next line when space runs out.
+struct WrappingHStack: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        let width = proposal.replacingUnspecifiedDimensions().width
+        let height = rows.reduce(CGFloat(0)) { $0 + $1.height } + CGFloat(max(0, rows.count - 1)) * spacing
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = computeRows(proposal: proposal, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for view in row.views {
+                let size = view.sizeThatFits(.unspecified)
+                view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private func computeRows(proposal: ProposedViewSize, subviews: Subviews) -> [Row] {
+        let width = proposal.replacingUnspecifiedDimensions().width
+        var rows: [Row] = []
+        var currentRow: [LayoutSubview] = []
+        var currentWidth: CGFloat = 0
+
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if currentWidth + size.width > width && !currentRow.isEmpty {
+                rows.append(Row(views: currentRow, height: currentRow.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0))
+                currentRow = []
+                currentWidth = 0
+            }
+            currentRow.append(view)
+            currentWidth += size.width + spacing
+        }
+
+        if !currentRow.isEmpty {
+            rows.append(Row(views: currentRow, height: currentRow.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0))
+        }
+
+        return rows
+    }
+
+    struct Row {
+        let views: [LayoutSubview]
+        let height: CGFloat
+    }
 }

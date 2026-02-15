@@ -99,8 +99,8 @@ struct CoachConfirmedBookingsView: View {
                                         .foregroundColor(Color("LogoGreen"))
                                 }
 
-                                // Hide Cancel and Reschedule buttons once payment is acknowledged
-                                if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                // Hide Cancel and Reschedule buttons for past bookings or once payment is acknowledged
+                                if (b.paymentStatus ?? "").lowercased() != "paid" && isUpcoming(b) {
                                     // Reschedule booking button
                                     Button {
                                         bookingToReschedule = b
@@ -112,14 +112,17 @@ struct CoachConfirmedBookingsView: View {
                                     .tint(.blue)
 
                                     // Cancel booking button
-                                    Button(role: .destructive) {
+                                    Button {
                                         bookingToCancel = b
                                         showCancelAlert = true
                                     } label: {
                                         Text("Cancel Booking")
+                                            .foregroundColor(.red)
                                             .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(.ultraThinMaterial)
+                                            .cornerRadius(8)
                                     }
-                                    .buttonStyle(.bordered)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -183,9 +186,12 @@ struct CoachConfirmedBookingsView: View {
                 if let err = err {
                     firestore.showToast("Failed to cancel: \(err.localizedDescription)")
                 } else {
+                    // Remove Apple Calendar entry for the cancelling coach
+                    self.firestore.removeBookingFromAppleCalendar(bookingId: booking.id) { _ in }
+
                     // Send notification to client
                     if !booking.clientID.isEmpty {
-                        let coachName = firestore.currentCoach?.name ?? "Coach"
+                        let coachName = self.firestore.currentCoach?.name ?? "Coach"
                         let notifRef = Firestore.firestore().collection("pendingNotifications").document(booking.clientID).collection("notifications").document()
                         let notifPayload: [String: Any] = [
                             "title": "Booking Cancelled",
@@ -197,8 +203,8 @@ struct CoachConfirmedBookingsView: View {
                         ]
                         notifRef.setData(notifPayload) { _ in }
                     }
-                    firestore.showToast("Booking cancelled")
-                    firestore.fetchBookingsForCurrentCoachSubcollection()
+                    self.firestore.showToast("Booking cancelled")
+                    self.firestore.fetchBookingsForCurrentCoachSubcollection()
                 }
             }
         }

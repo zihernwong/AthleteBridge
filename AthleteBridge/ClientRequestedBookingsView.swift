@@ -150,6 +150,9 @@ struct ClientRequestedBookingsView: View {
                 if let err = err {
                     self.firestore.showToast("Failed to cancel: \(err.localizedDescription)")
                 } else {
+                    // Remove Apple Calendar entry
+                    self.firestore.removeBookingFromAppleCalendar(bookingId: booking.id) { _ in }
+
                     let clientName = self.firestore.currentClient?.name ?? "Client"
                     let coachIds = booking.allCoachIDs
                     for coachId in coachIds {
@@ -159,6 +162,7 @@ struct ClientRequestedBookingsView: View {
                             "body": "\(clientName) has cancelled their \(isGroup ? "group " : "")booking request.",
                             "bookingId": booking.id,
                             "senderId": booking.clientID,
+                            "type": "booking_cancelled",
                             "isGroupBooking": isGroup,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false

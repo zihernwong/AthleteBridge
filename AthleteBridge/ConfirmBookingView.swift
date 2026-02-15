@@ -17,6 +17,10 @@ struct ConfirmBookingView: View {
     @State private var coachAcceptances: [String: Bool] = [:]
     @State private var clientConfirmations: [String: Bool] = [:]
     @State private var coachRates: [String: Double] = [:]
+    @State private var showDeclineSheet: Bool = false
+    @State private var selectedDeclineReason: String = "Too Expensive"
+    @State private var customDeclineReason: String = ""
+    private let declineReasons = ["Too Expensive", "Schedule Conflict", "Found Another Coach", "No Longer Needed", "Other"]
 
     // Check if this is a group booking
     private var isGroupBooking: Bool {
@@ -70,12 +74,17 @@ struct ConfirmBookingView: View {
         }
     }
 
-    // Calculate duration in 0.5 hour increments
+    // Calculate duration in 0.5 hour increments (used for cost calculation)
     private var durationHours: Double {
         guard let start = booking.startAt, let end = booking.endAt else { return 0 }
         let totalMinutes = end.timeIntervalSince(start) / 60
         let halfHours = (totalMinutes / 30).rounded()
         return halfHours * 0.5
+    }
+
+    private var durationMinutes: Int {
+        guard let start = booking.startAt, let end = booking.endAt else { return 0 }
+        return Int(end.timeIntervalSince(start) / 60)
     }
 
     // Calculate total cost for all coaches combined
@@ -209,7 +218,7 @@ struct ConfirmBookingView: View {
                                         Text(coach.name)
                                         Spacer()
                                         if let rate = coach.rate {
-                                            Text(String(format: "$%.2f/hr", rate))
+                                            Text(String(format: "$%.2f", rate))
                                                 .foregroundColor(.secondary)
                                         } else {
                                             Text("Rate pending")
@@ -222,8 +231,8 @@ struct ConfirmBookingView: View {
                                     HStack {
                                         Text("Total Cost")
                                             .bold()
-                                        if durationHours > 0 {
-                                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                                        if durationMinutes > 0 {
+                                            Text("(\(durationMinutes) mins)")
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
                                         }
@@ -237,7 +246,7 @@ struct ConfirmBookingView: View {
                             // Single coach booking: original layout
                             Section(header: Text("Coach Price")) {
                                 if let r = rateUSD {
-                                    Text(String(format: "$%.2f/hr", r))
+                                    Text(String(format: "$%.2f", r))
                                 } else {
                                     Text("Price not provided")
                                 }
@@ -272,7 +281,9 @@ struct ConfirmBookingView: View {
                                 .disabled(isProcessing || rateUSD == nil || (isGroupBooking && !allCoachesAccepted))
                             }
 
-                            Button(role: .destructive, action: decline) {
+                            Button(role: .destructive) {
+                                showDeclineSheet = true
+                            } label: {
                                 Text("Decline")
                             }
                             .disabled(isProcessing || currentClientAlreadyConfirmed)
@@ -289,6 +300,48 @@ struct ConfirmBookingView: View {
             }
             .task {
                 await loadBookingDetails()
+            }
+            .sheet(isPresented: $showDeclineSheet) {
+                NavigationStack {
+                    Form {
+                        Section(header: Text("Reason for Declining")) {
+                            Picker("Reason", selection: $selectedDeclineReason) {
+                                ForEach(declineReasons, id: \.self) { reason in
+                                    Text(reason).tag(reason)
+                                }
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+
+                            if selectedDeclineReason == "Other" {
+                                TextField("Please specify...", text: $customDeclineReason)
+                            }
+                        }
+
+                        Section {
+                            Button(role: .destructive) {
+                                showDeclineSheet = false
+                                decline()
+                            } label: {
+                                if isProcessing {
+                                    ProgressView()
+                                } else {
+                                    Text("Confirm Decline")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .disabled(isProcessing || (selectedDeclineReason == "Other" && customDeclineReason.trimmingCharacters(in: .whitespaces).isEmpty))
+                        }
+                    }
+                    .navigationTitle("Decline Booking")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Cancel") { showDeclineSheet = false }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
             }
         }
     }
@@ -380,22 +433,58 @@ struct ConfirmBookingView: View {
         }
     }
 
+    private var declineReasonText: String {
+        if selectedDeclineReason == "Other" {
+            return customDeclineReason.trimmingCharacters(in: .whitespaces)
+        }
+        return selectedDeclineReason
+    }
+
     private func decline() {
         guard let clientId = auth.user?.uid else { errorMessage = "Not authenticated"; return }
         isProcessing = true
         errorMessage = nil
+        let reason = declineReasonText
 
         // Use group booking status update for group bookings
         if isGroupBooking {
+            // Update reason on all mirrors via batch
+            let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
+            let reasonPayload: [String: Any] = ["clientDeclineReason": reason, "declinedByClient": clientId, "declinedAt": FieldValue.serverTimestamp()]
+            let batch = Firestore.firestore().batch()
+            batch.updateData(reasonPayload, forDocument: bookingRef)
+            for coachId in booking.allCoachIDs where !coachId.isEmpty {
+                batch.updateData(reasonPayload, forDocument: Firestore.firestore().collection("coaches").document(coachId).collection("bookings").document(booking.id))
+            }
+            for cId in booking.allClientIDs where !cId.isEmpty {
+                batch.updateData(reasonPayload, forDocument: Firestore.firestore().collection("clients").document(cId).collection("bookings").document(booking.id))
+            }
+            batch.commit { _ in }
+
             firestore.updateGroupBookingStatus(bookingId: booking.id, status: "declined_by_client") { err in
                 DispatchQueue.main.async {
                     self.isProcessing = false
                     if let err = err {
                         self.errorMessage = err.localizedDescription
                     } else {
+                        // Notify coaches
+                        let clientName = self.firestore.currentClient?.name ?? "Client"
+                        for coachId in self.booking.allCoachIDs where !coachId.isEmpty {
+                            let notifRef = Firestore.firestore().collection("pendingNotifications").document(coachId).collection("notifications").document()
+                            let notifPayload: [String: Any] = [
+                                "title": "Group Booking Declined",
+                                "body": "\(clientName) has declined the group booking. Reason: \(reason)",
+                                "bookingId": self.booking.id,
+                                "senderId": clientId,
+                                "isGroupBooking": true,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                            notifRef.setData(notifPayload) { _ in }
+                        }
                         self.firestore.fetchBookingsForCurrentClientSubcollection()
                         self.firestore.showToast("Group booking declined")
-                        dismiss()
+                        self.dismiss()
                     }
                 }
             }
@@ -406,7 +495,12 @@ struct ConfirmBookingView: View {
         let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
         let coachId = booking.coachID
 
-        let updatePayload: [String: Any] = ["Status": "declined_by_client", "declinedAt": FieldValue.serverTimestamp(), "declinedByClient": clientId]
+        let updatePayload: [String: Any] = [
+            "Status": "declined_by_client",
+            "declinedAt": FieldValue.serverTimestamp(),
+            "declinedByClient": clientId,
+            "clientDeclineReason": reason
+        ]
         let batch = Firestore.firestore().batch()
         batch.updateData(updatePayload, forDocument: bookingRef)
         if !coachId.isEmpty {
@@ -424,10 +518,24 @@ struct ConfirmBookingView: View {
                 if let err = err {
                     self.errorMessage = err.localizedDescription
                 } else {
+                    // Notify coach with reason
+                    if !coachId.isEmpty {
+                        let clientName = self.firestore.currentClient?.name ?? "Client"
+                        let notifRef = Firestore.firestore().collection("pendingNotifications").document(coachId).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Declined",
+                            "body": "\(clientName) has declined your booking offer. Reason: \(reason)",
+                            "bookingId": self.booking.id,
+                            "senderId": clientId,
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
                     self.firestore.fetchBookingsForCurrentClientSubcollection()
                     self.firestore.fetchBookingsForCurrentCoachSubcollection()
                     self.firestore.showToast("Booking declined")
-                    dismiss()
+                    self.dismiss()
                 }
             }
         }

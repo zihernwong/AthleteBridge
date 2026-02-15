@@ -18,11 +18,11 @@ class AuthViewModel: ObservableObject {
     }
 
     // MARK: - Sign Up
-    func signUp(email: String, password: String, userType: String? = nil) async {
+    func signUp(email: String, password: String, userType: String? = nil, additionalTypes: [String] = []) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false } // ensure we always clear loading
-        
+
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             self.user = result.user
@@ -30,7 +30,11 @@ class AuthViewModel: ObservableObject {
             // After creating the auth user, write the chosen user type to Firestore
             if let uid = result.user.uid as String?, let type = userType {
                 let db = Firestore.firestore()
-                db.collection("userType").document(uid).setData(["type": type]) { err in
+                var data: [String: Any] = ["type": type]
+                if !additionalTypes.isEmpty {
+                    data["additionalTypes"] = additionalTypes
+                }
+                db.collection("userType").document(uid).setData(data) { err in
                     if let err = err {
                         print("AuthViewModel: failed to write userType for uid=\(uid): \(err)")
                         // Don't treat Firestore write failure as fatal for signup; surface warning
@@ -38,7 +42,7 @@ class AuthViewModel: ObservableObject {
                             self.errorMessage = "Account created but failed to save user type. Please try again later."
                         }
                     } else {
-                        print("AuthViewModel: userType \(type) written for uid=\(uid)")
+                        print("AuthViewModel: userType \(type) with additionalTypes \(additionalTypes) written for uid=\(uid)")
                     }
                 }
             }
@@ -82,7 +86,7 @@ class AuthViewModel: ObservableObject {
     @Published var phoneVerificationInProgress = false
 
     /// Send an SMS verification code to the given phone number (E.164 format, e.g. "+15551234567").
-    func sendPhoneVerification(phoneNumber: String) {
+    func sendPhoneVerification(phoneNumber: String, completion: ((Bool) -> Void)? = nil) {
         phoneVerificationInProgress = true
         errorMessage = nil
         PhoneAuthProvider.provider().verifyPhoneNumber(phoneNumber, uiDelegate: nil) { [weak self] verificationID, error in
@@ -90,9 +94,11 @@ class AuthViewModel: ObservableObject {
                 self?.phoneVerificationInProgress = false
                 if let error = error {
                     self?.errorMessage = self?.handleAuthError(error)
+                    completion?(false)
                     return
                 }
                 self?.verificationID = verificationID
+                completion?(true)
             }
         }
     }

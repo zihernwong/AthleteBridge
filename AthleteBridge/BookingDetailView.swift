@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct BookingDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -6,6 +7,13 @@ struct BookingDetailView: View {
     @EnvironmentObject var auth: AuthViewModel
 
     let booking: FirestoreManager.BookingItem
+
+    // Payment-related state variables
+    @State private var showCoachPaymentsSheet: Bool = false
+    @State private var selectedCoachPayments: [String: String] = [:]
+    @State private var selectedCoachName: String = "Coach"
+    @State private var errorMessage: String? = nil
+    @State private var showCoachPickerForNotify: Bool = false
 
     private var currentUserRole: String? {
         firestore.currentUserType?.uppercased()
@@ -31,6 +39,14 @@ struct BookingDetailView: View {
         return booking.clientName ?? "Client"
     }
 
+    private func displayStatus(for status: String?) -> String {
+        let raw = status ?? "Unknown"
+        if raw.lowercased() == "declined_by_client" {
+            return currentUserRole == "COACH" ? "Declined By Client" : "Declined"
+        }
+        return raw.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
     private func statusColor(for status: String?) -> Color {
         switch (status ?? "").lowercased() {
         case "confirmed", "fully_confirmed":
@@ -39,7 +55,7 @@ struct BookingDetailView: View {
             return Color("LogoBlue")
         case "pending acceptance":
             return .orange
-        case "rejected", "declined", "declined_by_client":
+        case "rejected", "declined", "declined_by_client", "cancelled":
             return .red
         case "partially_accepted", "partially_confirmed":
             return .orange
@@ -101,12 +117,24 @@ struct BookingDetailView: View {
                     // Rate & Cost Section
                     rateSection
 
+                    // Payment Section (for unpaid confirmed bookings - client only)
+                    if currentUserRole == "CLIENT" && 
+                       (booking.status ?? "").lowercased() == "confirmed" &&
+                       (booking.paymentStatus ?? "").lowercased() != "paid" {
+                        paymentActionsSection
+                    }
+
                     // Notes Section
                     notesSection
 
                     // Rejection Reason (if applicable)
                     if let reason = booking.rejectionReason, !reason.isEmpty {
                         rejectionSection(reason)
+                    }
+
+                    // Client Decline Reason (if applicable)
+                    if let reason = booking.clientDeclineReason, !reason.isEmpty {
+                        clientDeclineSection(reason)
                     }
 
                     Spacer()
@@ -120,6 +148,27 @@ struct BookingDetailView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .sheet(isPresented: $showCoachPaymentsSheet) {
+                CoachPaymentMethodsSheet(
+                    coachName: selectedCoachName,
+                    payments: selectedCoachPayments
+                )
+            }
+            .sheet(isPresented: $showCoachPickerForNotify) {
+                CoachPickerForNotifySheet(
+                    booking: booking,
+                    onCoachSelected: { coachId in
+                        showCoachPickerForNotify = false
+                        sendPaymentNotification(to: coachId)
+                    }
+                )
+                .environmentObject(firestore)
+            }
+            .alert("Payment Notification", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 
@@ -131,7 +180,7 @@ struct BookingDetailView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Spacer()
-            Text(booking.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "Unknown")
+            Text(displayStatus(for: booking.status))
                 .font(.headline)
                 .foregroundColor(statusColor(for: booking.status))
         }
@@ -189,7 +238,7 @@ struct BookingDetailView: View {
                                     .foregroundColor(.orange)
                             }
                             if let rates = booking.coachRates, let rate = rates[coachId] {
-                                Text(String(format: "$%.2f/hr", rate))
+                                Text(String(format: "$%.2f", rate))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -256,7 +305,7 @@ struct BookingDetailView: View {
                 HStack {
                     Image(systemName: "hourglass")
                         .foregroundColor(.secondary)
-                    Text("\(durationMinutes) minutes (\(String(format: "%.1f", durationHours)) hours)")
+                    Text("\(durationMinutes) minutes")
                 }
             }
         }
@@ -294,7 +343,7 @@ struct BookingDetailView: View {
                                 Text(coachName)
                                     .font(.body)
                                 Spacer()
-                                Text(String(format: "$%.2f/hr", rate))
+                                Text(String(format: "$%.2f", rate))
                                     .foregroundColor(.secondary)
                             }
                         }
@@ -305,7 +354,7 @@ struct BookingDetailView: View {
                 }
             } else {
                 HStack {
-                    Text("Hourly Rate")
+                    Text("Rate")
                     Spacer()
                     if let rate = booking.RateUSD {
                         Text(String(format: "$%.2f", rate))
@@ -386,6 +435,223 @@ struct BookingDetailView: View {
         }
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.red.opacity(0.1)))
+    }
+
+    private func clientDeclineSection(_ reason: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.red)
+                Text("Client Decline Reason")
+                    .font(.headline)
+            }
+            Text(reason)
+                .font(.body)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.red.opacity(0.1)))
+    }
+
+    // MARK: - Payment Actions Section
+
+    private var paymentActionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Payment")
+                .font(.headline)
+
+            HStack {
+                Button(action: { startNotifyCoachOfPayment() }) {
+                    Text("Notify Coach of Payment")
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Button(action: { makePayment() }) {
+                    Text("Make Payment")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+    }
+
+    // MARK: - Payment Helper Functions
+
+    private func startNotifyCoachOfPayment() {
+        let coachIds = booking.allCoachIDs
+        if coachIds.count > 1 {
+            showCoachPickerForNotify = true
+        } else if let coachId = coachIds.first, !coachId.isEmpty {
+            sendPaymentNotification(to: coachId)
+        } else {
+            errorMessage = "Missing coach ID for this booking."
+        }
+    }
+
+    private func sendPaymentNotification(to coachId: String) {
+        var clientName = "A client"
+        if let client = firestore.currentClient, !client.name.isEmpty {
+            clientName = client.name
+        }
+
+        let db = Firestore.firestore()
+        let notifRef = db.collection("pendingNotifications").document(coachId).collection("notifications").document()
+        let notifPayload: [String: Any] = [
+            "title": "Payment Notification",
+            "body": "\(clientName) has marked booking as paid. Please confirm",
+            "bookingId": booking.id,
+            "senderId": auth.user?.uid ?? "",
+            "createdAt": FieldValue.serverTimestamp(),
+            "delivered": false
+        ]
+        notifRef.setData(notifPayload) { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    errorMessage = "Failed to notify coach: \(err.localizedDescription)"
+                } else {
+                    let coachName = nameForCoachId(coachId) ?? "Coach"
+                    errorMessage = "\(coachName) has been notified of your payment."
+                }
+            }
+        }
+    }
+
+    private func makePayment() {
+        let coachId = booking.coachID
+        guard !coachId.isEmpty else {
+            self.errorMessage = "Missing coach ID for this booking."
+            return
+        }
+        // Fetch payments and coach name, then present sheet
+        FirestoreManager.shared.fetchCoachPayments(coachIdOrPath: coachId) { map in
+            DispatchQueue.main.async {
+                self.selectedCoachPayments = map
+                self.selectedCoachName = booking.coachName ?? "Coach"
+                self.showCoachPaymentsSheet = true
+            }
+        }
+        // Optionally also refresh name from Firestore if local cache lacked it
+        FirestoreManager.shared.fetchCoachDisplayName(coachIdOrPath: coachId) { name in
+            DispatchQueue.main.async {
+                if !name.isEmpty { self.selectedCoachName = name }
+            }
+        }
+    }
+
+    private func nameForCoachId(_ coachId: String?) -> String? {
+        guard let id = coachId, !id.isEmpty else { return nil }
+        if let coach = firestore.coaches.first(where: { $0.id == id }) {
+            return coach.name
+        }
+        return nil
+    }
+}
+
+// MARK: - Coach Payment Methods Sheet
+
+struct CoachPaymentMethodsSheet: View {
+    let coachName: String
+    let payments: [String: String]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Pay \(coachName)")
+                    .font(.title2)
+                    .bold()
+                    .padding(.top)
+
+                if payments.isEmpty {
+                    Text("No payment methods available for this coach.")
+                        .foregroundColor(.secondary)
+                        .padding()
+                } else {
+                    ForEach(payments.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                        HStack {
+                            Text(key.capitalized)
+                                .font(.headline)
+                            Spacer()
+                            Text(value)
+                                .foregroundColor(.secondary)
+                            if let url = paymentDeepLink(for: key, value: value) {
+                                Link(destination: url) {
+                                    Image(systemName: "arrow.up.right.square")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(UIColor.secondarySystemBackground)))
+                    }
+                }
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Payment Methods")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func paymentDeepLink(for key: String, value: String) -> URL? {
+        let k = key.lowercased()
+        var v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if v.isEmpty { return nil }
+        switch k {
+        case "venmo":
+            if v.hasPrefix("@") { v.removeFirst() }
+            return URL(string: "https://venmo.com/u/\(v)")
+        case "paypal":
+            if v.range(of: "^[A-Za-z0-9.-_]+$", options: .regularExpression) != nil {
+                return URL(string: "https://paypal.me/\(v)")
+            }
+            return nil
+        case "cashapp":
+            return URL(string: "https://cash.app/\(v)")
+        case "zelle":
+            return nil
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Coach Picker for Notify Sheet
+
+struct CoachPickerForNotifySheet: View {
+    let booking: FirestoreManager.BookingItem
+    let onCoachSelected: (String) -> Void
+    @EnvironmentObject var firestore: FirestoreManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(Array(zip(booking.allCoachIDs, booking.allCoachNames)), id: \.0) { coachId, coachName in
+                    Button(action: {
+                        onCoachSelected(coachId)
+                    }) {
+                        Text(coachName)
+                    }
+                }
+            }
+            .navigationTitle("Select Coach to Notify")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
     }
 }
 

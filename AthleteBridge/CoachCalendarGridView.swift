@@ -309,6 +309,7 @@ import FirebaseAuth
     @State private var gridRefreshToken: UUID = UUID()
     @State private var showOverlapAlert: Bool = false
     @State private var showMinDurationAlert: Bool = false
+    @State private var showPastDateAlert: Bool = false
 
     // For presenting chat sheet
     private struct ChatSheetId: Identifiable { let id: String }
@@ -416,8 +417,18 @@ import FirebaseAuth
 
             Section {
                 HStack {
-                    Button(action: { selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate }) { Image(systemName: "chevron.left").font(.headline) }
-                        .buttonStyle(.plain)
+                    let today = Calendar.current.startOfDay(for: Date())
+                    Button(action: {
+                        let newDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+                        if newDate >= today {
+                            selectedDate = newDate
+                        }
+                    }) {
+                        Image(systemName: "chevron.left").font(.headline)
+                            .foregroundColor(selectedDate <= today ? .gray : .primary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(selectedDate <= today)
                     Spacer()
                     Text(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none)).font(.subheadline).bold()
                     Spacer()
@@ -499,6 +510,11 @@ import FirebaseAuth
                                 .buttonStyle(.bordered)
                                 Button {
                                     guard let uid = Auth.auth().currentUser?.uid else { return }
+                                    // Prevent booking in the past
+                                    if startAt < Date() {
+                                        showPastDateAlert = true
+                                        return
+                                    }
                                     // Enforce minimum 1-hour booking
                                     if endAt.timeIntervalSince(startAt) < 3600 {
                                         showMinDurationAlert = true
@@ -563,6 +579,11 @@ import FirebaseAuth
             Button("OK", role: .cancel) { }
         } message: {
             Text("Minimum booking length is 1 hour. Please select a longer time range.")
+        }
+        .alert("Past Date", isPresented: $showPastDateAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Cannot book a time in the past. Please select a future time.")
         }
     }
  }
@@ -691,7 +712,7 @@ import FirebaseAuth
                     if isBlocked {
                         if let b = overlappingBooking {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(timeRangeString(for: b))
+                                Text(timeRangeString(for: b, slotStart: slot.start, slotEnd: slot.end))
                                     .font(.subheadline)
                                     .foregroundColor(.white)
                                 // Show coach name when multiple coaches selected
@@ -878,10 +899,12 @@ import FirebaseAuth
          return slots
      }
 
-     private func timeRangeString(for booking: FirestoreManager.BookingItem) -> String {
+     private func timeRangeString(for booking: FirestoreManager.BookingItem, slotStart: Date? = nil, slotEnd: Date? = nil) -> String {
          if let s = booking.startAt, let e = booking.endAt {
-             let sstr = DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)
-             let estr = DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short)
+             let displayStart = (slotStart != nil) ? max(s, slotStart!) : s
+             let displayEnd = (slotEnd != nil) ? min(e, slotEnd!) : e
+             let sstr = DateFormatter.localizedString(from: displayStart, dateStyle: .none, timeStyle: .short)
+             let estr = DateFormatter.localizedString(from: displayEnd, dateStyle: .none, timeStyle: .short)
              return "\(sstr) - \(estr)"
          }
          return ""

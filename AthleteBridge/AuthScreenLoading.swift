@@ -6,6 +6,7 @@ struct AuthScreenLoading: View {
     @State private var password = ""
     @State private var isLogin = true
     @State private var selectedRole: String = "CLIENT" // default for signups
+    @State private var selectedAdditionalTypes: Set<String> = []
 
     var body: some View {
         ZStack {
@@ -35,6 +36,34 @@ struct AuthScreenLoading: View {
                         Text("Coach").tag("COACH")
                     }
                     .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+
+                    // Additional types selection
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("I am also a... (optional)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        ForEach(AdditionalUserType.allCases) { type in
+                            Button(action: {
+                                if selectedAdditionalTypes.contains(type.rawValue) {
+                                    selectedAdditionalTypes.remove(type.rawValue)
+                                } else {
+                                    selectedAdditionalTypes.insert(type.rawValue)
+                                }
+                            }) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: selectedAdditionalTypes.contains(type.rawValue) ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(selectedAdditionalTypes.contains(type.rawValue) ? Color("LogoGreen") : .secondary)
+                                    Image(systemName: type.iconName)
+                                        .foregroundColor(type.badgeColor)
+                                    Text(type.displayName)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
                     .padding(.horizontal)
                 }
 
@@ -75,7 +104,7 @@ struct AuthScreenLoading: View {
                         if isLogin {
                             await auth.login(email: trimmedEmail, password: trimmedPassword)
                         } else {
-                            await auth.signUp(email: trimmedEmail, password: trimmedPassword, userType: selectedRole)
+                            await auth.signUp(email: trimmedEmail, password: trimmedPassword, userType: selectedRole, additionalTypes: Array(selectedAdditionalTypes))
                         }
                     }
                 }) {

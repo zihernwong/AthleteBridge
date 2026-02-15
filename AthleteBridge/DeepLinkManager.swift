@@ -6,6 +6,7 @@ enum DeepLinkDestination: Equatable {
     case chat(chatId: String)
     case booking(bookingId: String)
     case payments
+    case stringing
 }
 
 /// Observable bridge between NotificationManager (singleton, outside SwiftUI)

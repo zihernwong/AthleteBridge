@@ -13,9 +13,14 @@ struct RejectedBookingView: View {
         return booking.coachName ?? "Coach"
     }
 
+    private var isClientDecline: Bool {
+        (booking.status ?? "").lowercased() == "declined_by_client"
+    }
+
     private var rejectionReason: String {
-        // Try to get rejection reason from booking data
-        // This would need to be added to BookingItem if not already there
+        if isClientDecline {
+            return booking.clientDeclineReason ?? "No reason provided"
+        }
         return booking.rejectionReason ?? "No reason provided"
     }
 
@@ -32,7 +37,9 @@ struct RejectedBookingView: View {
                     .font(.title)
                     .bold()
 
-                Text("\(coachDisplayName) has declined your booking request.")
+                Text(isClientDecline
+                     ? "\(booking.clientName ?? "Client") has declined this booking."
+                     : "\(coachDisplayName) has declined your booking request.")
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)

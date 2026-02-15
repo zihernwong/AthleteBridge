@@ -39,11 +39,11 @@ struct MainAppView: View {
                 }
                 .tag(1)
 
-            // For coaches, keep Reviews as a primary tab; for clients, move it to More
+            // For coaches, Profile tab goes here (swapped with Reviews)
             if isCoachUserComputed {
-                RequiresProfile(content: { NavigationStack { ReviewsView() } }, selectedTab: $selectedTab)
-                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
-                    .tag(2)
+                ProfileView()
+                    .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                    .tag(0)
             }
 
             // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
@@ -51,10 +51,24 @@ struct MainAppView: View {
                 .tabItem { Label("Bookings", systemImage: "calendar") }
                 .tag(3)
 
-            // Profile tab (use system icon to avoid layout issues)
-            ProfileView()
-                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-                .tag(0)
+            // For clients, Profile tab goes here (swapped with Stringing)
+            if !isCoachUserComputed {
+                ProfileView()
+                    .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                    .tag(0)
+            }
+
+            // Stringing tab
+            RequiresProfile(content: { stringingTab }, selectedTab: $selectedTab)
+                .tabItem { Label("Stringing", systemImage: "scissors") }
+                .tag(7)
+
+            // For coaches, Reviews goes here (swapped with Profile)
+            if isCoachUserComputed {
+                RequiresProfile(content: { NavigationStack { ReviewsView() } }, selectedTab: $selectedTab)
+                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
+                    .tag(2)
+            }
 
             // Additional Payments tab for clients (keep Home intact and all existing tabs)
             if !isCoachUserComputed {
@@ -92,6 +106,9 @@ struct MainAppView: View {
                 case .payments:
                     selectedTab = isCoachUserComputed ? 1 : 5
                     deepLink.pendingDestination = nil
+                case .stringing:
+                    selectedTab = 7
+                    deepLink.pendingDestination = nil
                 }
             }
         }
@@ -103,6 +120,9 @@ struct MainAppView: View {
             case .booking: selectedTab = 3
             case .payments:
                 selectedTab = isCoachUserComputed ? 1 : 5
+                deepLink.pendingDestination = nil
+            case .stringing:
+                selectedTab = 7
                 deepLink.pendingDestination = nil
             }
         }
@@ -206,6 +226,15 @@ struct MainAppView: View {
     // BookingsView already contains its own NavigationStack, so we don't wrap it in another one.
     private var bookingsTab: some View {
         BookingsView()
+    }
+
+    // Stringing tab
+    private var stringingTab: some View {
+        NavigationStack {
+            StringingTabView()
+                .environmentObject(firestore)
+                .environmentObject(auth)
+        }
     }
 
     @ViewBuilder

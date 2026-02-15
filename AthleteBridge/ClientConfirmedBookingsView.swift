@@ -57,8 +57,8 @@ struct ClientConfirmedBookingsView: View {
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                                // Hide Cancel and Reschedule buttons once payment is acknowledged
-                                if (b.paymentStatus ?? "").lowercased() != "paid" {
+                                // Hide Cancel and Reschedule buttons for past bookings or once payment is acknowledged
+                                if (b.paymentStatus ?? "").lowercased() != "paid" && isUpcoming(b) {
                                     Button {
                                         bookingToReschedule = b
                                     } label: {
@@ -68,14 +68,17 @@ struct ClientConfirmedBookingsView: View {
                                     .buttonStyle(.bordered)
                                     .tint(.blue)
 
-                                    Button(role: .destructive) {
+                                    Button {
                                         bookingToCancel = b
                                         showCancelAlert = true
                                     } label: {
                                         Text("Cancel Booking")
+                                            .foregroundColor(.red)
                                             .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(.ultraThinMaterial)
+                                            .cornerRadius(8)
                                     }
-                                    .buttonStyle(.bordered)
                                 }
                             }
                             .padding(.vertical, 4)
@@ -145,6 +148,9 @@ struct ClientConfirmedBookingsView: View {
                 if let err = err {
                     self.firestore.showToast("Failed to cancel: \(err.localizedDescription)")
                 } else {
+                    // Remove Apple Calendar entry for the cancelling client
+                    self.firestore.removeBookingFromAppleCalendar(bookingId: booking.id) { _ in }
+
                     // Notify all coaches in the booking
                     let clientName = self.firestore.currentClient?.name ?? "Client"
                     let coachIds = booking.allCoachIDs
@@ -155,6 +161,7 @@ struct ClientConfirmedBookingsView: View {
                             "body": "\(clientName) has cancelled the \(isGroup ? "group " : "")booking.",
                             "bookingId": booking.id,
                             "senderId": booking.clientID,
+                            "type": "booking_cancelled",
                             "isGroupBooking": isGroup,
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false

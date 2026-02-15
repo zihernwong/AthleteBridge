@@ -22,17 +22,17 @@ struct BookingsView: View {
         NavigationStack {
             // Replace List with ScrollView + VStack to avoid UICollectionView feedback loop on device
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 16) {
                     // Coach-specific header with Input Time Away and Locations links
                     if currentUserRole == "COACH" {
                         coachHeaderSection
                     }
 
-                    // === Today's Bookings (for both roles) ===
-                    todaysBookingsSection
-
-                    // === Month Calendar === (below Today and above My/ Accepted Bookings)
+                    // === Month Calendar (first) ===
                     monthCalendarSection
+
+                    // === Bookings for selected date ===
+                    selectedDateBookingsSection
 
                     // Requested bookings section for coaches
                     if currentUserRole == "COACH" {
@@ -194,6 +194,27 @@ struct BookingsView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForRejection = booking
                 }
+            } else if notifType == "booking_cancelled" || status == "cancelled" {
+                print("[DeepLink-Bookings]   FOUND in client bookings (cancelled) → opening BookingDetailView")
+                let corrected = FirestoreManager.BookingItem(
+                    id: booking.id, clientID: booking.clientID, clientName: booking.clientName,
+                    coachID: booking.coachID, coachName: booking.coachName,
+                    startAt: booking.startAt, endAt: booking.endAt,
+                    location: booking.location, notes: booking.notes,
+                    status: "cancelled", paymentStatus: booking.paymentStatus,
+                    RateUSD: booking.RateUSD, clientIDs: booking.clientIDs,
+                    clientNames: booking.clientNames, coachIDs: booking.coachIDs,
+                    coachNames: booking.coachNames, isGroupBooking: booking.isGroupBooking,
+                    creatorID: booking.creatorID, creatorType: booking.creatorType,
+                    coachAcceptances: booking.coachAcceptances,
+                    clientConfirmations: booking.clientConfirmations,
+                    coachRates: booking.coachRates, coachNote: booking.coachNote,
+                    rejectionReason: booking.rejectionReason, rejectedBy: booking.rejectedBy,
+                    clientDeclineReason: booking.clientDeclineReason
+                )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForDetail = corrected
+                }
             } else if status == "confirmed" || status == "fully_confirmed" || status == "accepted" || status == "approved" {
                 print("[DeepLink-Bookings]   FOUND in client bookings (confirmed) → opening BookingDetailView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -212,11 +233,38 @@ struct BookingsView: View {
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
             deepLink.pendingBookingType = nil
-            if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
+            if notifType == "booking_cancelled" || status == "cancelled" {
+                print("[DeepLink-Bookings]   FOUND in coach bookings (cancelled) → opening BookingDetailView")
+                // Use corrected status in case local cache is stale
+                let corrected = FirestoreManager.BookingItem(
+                    id: booking.id, clientID: booking.clientID, clientName: booking.clientName,
+                    coachID: booking.coachID, coachName: booking.coachName,
+                    startAt: booking.startAt, endAt: booking.endAt,
+                    location: booking.location, notes: booking.notes,
+                    status: "cancelled", paymentStatus: booking.paymentStatus,
+                    RateUSD: booking.RateUSD, clientIDs: booking.clientIDs,
+                    clientNames: booking.clientNames, coachIDs: booking.coachIDs,
+                    coachNames: booking.coachNames, isGroupBooking: booking.isGroupBooking,
+                    creatorID: booking.creatorID, creatorType: booking.creatorType,
+                    coachAcceptances: booking.coachAcceptances,
+                    clientConfirmations: booking.clientConfirmations,
+                    coachRates: booking.coachRates, coachNote: booking.coachNote,
+                    rejectionReason: booking.rejectionReason, rejectedBy: booking.rejectedBy,
+                    clientDeclineReason: booking.clientDeclineReason
+                )
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForDetail = corrected
+                }
+            } else if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
                 print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView with bookingId=\(bookingId)")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.confirmedBookingsDeepLinkId = bookingId
                     self.navigateToConfirmedBookings = true
+                }
+            } else if status == "declined_by_client" || status == "rejected" || status == "declined" {
+                print("[DeepLink-Bookings]   FOUND in coach bookings (declined/cancelled) → opening BookingDetailView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForDetail = booking
                 }
             } else {
                 print("[DeepLink-Bookings]   FOUND in coach bookings → opening AcceptBookingView")
@@ -272,19 +320,20 @@ struct BookingsView: View {
         .padding(.horizontal)
     }
 
-    // === Today's Bookings Section ===
-    private var todaysBookingsSection: some View {
-        let today = Date()
-        let todays = allRelevantBookings.filter { b in
-            if let start = b.startAt { return isSameDay(start, today) }
+    // === Bookings for Selected Date ===
+    private var selectedDateBookingsSection: some View {
+        let isToday = isSameDay(selectedDate, Date())
+        let headerText = isToday ? "Today" : DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none)
+        let dayBookings = allRelevantBookings.filter { b in
+            if let start = b.startAt { return isSameDay(start, selectedDate) }
             return false
         }
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Today").font(.headline)
-            if todays.isEmpty {
-                Text("No bookings today").foregroundColor(.secondary)
+            Text(headerText).font(.headline)
+            if dayBookings.isEmpty {
+                Text("No bookings \(isToday ? "today" : "on this date")").foregroundColor(.secondary)
             } else {
-                ForEach(todays, id: \ .id) { b in
+                ForEach(dayBookings, id: \ .id) { b in
                     Button(action: { selectedBookingForDetail = b }) {
                         BookingRowView(item: b)
                             .contentShape(Rectangle())
@@ -400,21 +449,6 @@ struct BookingsView: View {
             MonthCalendarView(monthAnchor: $currentMonthAnchor,
                               selectedDate: $selectedDate,
                               bookings: allRelevantBookings)
-            // Selected date details
-            let dayBookings = allRelevantBookings.filter { b in
-                if let start = b.startAt { return isSameDay(start, selectedDate) }
-                return false
-            }
-//            if !dayBookings.isEmpty {
-//                VStack(alignment: .leading, spacing: 8) {
-//                    Text("Bookings on \(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none))")
-//                        .font(.headline)
-//                    ForEach(dayBookings, id: \ .id) { b in
-//                        BookingRowView(item: b)
-//                    }
-//                }
-//                .padding(.vertical, 4)
-//            }
         }
         .padding(.horizontal)
     }
@@ -496,6 +530,7 @@ struct MonthCalendarView: View {
                     DayCell(date: d,
                             isCurrentMonth: calendar.isDate(d, equalTo: monthAnchor, toGranularity: .month),
                             isSelected: calendar.isDate(d, inSameDayAs: selectedDate),
+                            isToday: calendar.isDateInToday(d),
                             count: bookingsCount(on: d))
                     .onTapGesture { selectedDate = d }
                 }
@@ -508,6 +543,7 @@ struct DayCell: View {
     let date: Date
     let isCurrentMonth: Bool
     let isSelected: Bool
+    let isToday: Bool
     let count: Int
 
     var body: some View {
@@ -515,9 +551,14 @@ struct DayCell: View {
         VStack(spacing: 4) {
             Text("\(day)")
                 .font(.subheadline)
-                .fontWeight(isSelected ? .bold : .regular)
+                .fontWeight(isSelected || isToday ? .bold : .regular)
                 .foregroundColor(isCurrentMonth ? .primary : .secondary)
-                .frame(maxWidth: .infinity)
+                .frame(width: 28, height: 28)
+                .overlay(
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 2)
+                        .opacity(isToday ? 1 : 0)
+                )
             if count > 0 {
                 Text("\(count)")
                     .font(.caption2)
@@ -543,6 +584,15 @@ struct BookingRowView: View {
         item.isGroupBooking ?? false ||
         (item.coachIDs?.count ?? 0) > 1 ||
         (item.clientIDs?.count ?? 0) > 1
+    }
+
+    private func displayStatus(for status: String?) -> String {
+        let raw = status ?? ""
+        if raw.lowercased() == "declined_by_client" {
+            let role = firestore.currentUserType?.uppercased()
+            return role == "COACH" ? "Declined By Client" : "Declined"
+        }
+        return raw.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private func statusColor(for status: String?) -> Color {
@@ -614,7 +664,7 @@ struct BookingRowView: View {
                 Text(displayTitle).font(.headline)
                 if !isGroup && isDisplayedPersonVerified { VerifiedBadge() }
                 Spacer()
-                Text(item.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "")
+                Text(displayStatus(for: item.status))
                     .font(.caption)
                     .foregroundColor(statusColor(for: item.status))
             }
@@ -685,6 +735,40 @@ struct BookingRowView: View {
                 Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+            }
+
+            // Show proposed rate for pending acceptance, confirmed, declined, and cancelled bookings
+            if let s = item.status?.lowercased(),
+               ["pending acceptance", "confirmed", "fully_confirmed", "partially_accepted", "partially_confirmed", "rejected", "declined", "declined_by_client", "cancelled"].contains(s) {
+                if isGroup, let rates = item.coachRates, !rates.isEmpty {
+                    ForEach(Array(zip(item.allCoachIDs, item.allCoachNames)), id: \.0) { coachId, coachName in
+                        if let rate = rates[coachId] {
+                            Text("\(coachName): \(String(format: "$%.2f", rate))")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } else if let rate = item.RateUSD, rate > 0 {
+                    Text("Rate: \(String(format: "$%.2f", rate))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Show rejection reason (declined by coach)
+            if let s = item.status?.lowercased(), s == "rejected",
+               let reason = item.rejectionReason, !reason.isEmpty {
+                Text("Reason: \(reason)")
+                    .font(.subheadline)
+                    .foregroundColor(.red)
+            }
+
+            // Show decline reason (declined by client)
+            if let s = item.status?.lowercased(), ["declined_by_client", "declined"].contains(s),
+               let reason = item.clientDeclineReason, !reason.isEmpty {
+                Text("Reason: \(reason)")
+                    .font(.subheadline)
+                    .foregroundColor(.red)
             }
 
             if let location = item.location {

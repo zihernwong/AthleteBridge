@@ -71,7 +71,7 @@ struct StringersView: View {
                 .onDelete { indexSet in
                     for index in indexSet {
                         let stringer = firestore.stringers[index]
-                        if stringer.createdBy == currentUid {
+                        if stringer.id == currentUid {
                             firestore.deleteStringer(id: stringer.id)
                         }
                     }

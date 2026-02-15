@@ -18,13 +18,17 @@ struct AcceptBookingView: View {
 
     private let rejectReasons = ["Not Qualified", "Coach Unavailable", "Other"]
 
-    // Calculate duration in 0.5 hour increments
+    // Calculate duration in 0.5 hour increments (used for cost calculation)
     private var durationHours: Double {
         guard let start = booking.startAt, let end = booking.endAt else { return 0 }
         let totalMinutes = end.timeIntervalSince(start) / 60
-        // Round to nearest 0.5 hour increment
         let halfHours = (totalMinutes / 30).rounded()
         return halfHours * 0.5
+    }
+
+    private var durationMinutes: Int {
+        guard let start = booking.startAt, let end = booking.endAt else { return 0 }
+        return Int(end.timeIntervalSince(start) / 60)
     }
 
     // Calculate total booking cost based on hourly rate and duration
@@ -161,7 +165,7 @@ struct AcceptBookingView: View {
                     }
                 }
 
-                Section(header: Text("Hourly Rate")) {
+                Section(header: Text("Rate")) {
                     HStack {
                         Text("$")
                         TextField("e.g. 45.00", text: $rateText)
@@ -181,8 +185,8 @@ struct AcceptBookingView: View {
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
-                        if durationHours > 0 {
-                            Text("(\(String(format: "%.1f", durationHours)) hrs)")
+                        if durationMinutes > 0 {
+                            Text("(\(durationMinutes) mins)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

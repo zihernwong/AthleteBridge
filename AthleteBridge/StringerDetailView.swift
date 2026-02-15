@@ -28,7 +28,7 @@ struct StringerDetailView: View {
             // Stringer info with profile link
             Section {
                 HStack(alignment: .top, spacing: 12) {
-                    let photoURL = firestore.coachPhotoURLs[stringer.createdBy] ?? firestore.clientPhotoURLs[stringer.createdBy] ?? nil
+                    let photoURL = firestore.coachPhotoURLs[stringer.id] ?? firestore.clientPhotoURLs[stringer.id] ?? nil
                     AvatarView(url: photoURL, size: 56, useCurrentUser: false)
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -127,7 +127,7 @@ struct StringerDetailView: View {
             }
 
             // Manage Orders (only visible to stringer owner)
-            if stringer.createdBy == currentUid {
+            if stringer.id == currentUid {
                 Section {
                     NavigationLink {
                         StringerIncomingOrdersView(stringer: stringer)
@@ -166,10 +166,10 @@ struct StringerDetailView: View {
         .onAppear {
             firestore.fetchStringerReviews(stringerId: stringer.id)
             if firestore.coaches.isEmpty { firestore.fetchCoaches() }
-            linkedCoach = firestore.coaches.first(where: { $0.id == stringer.createdBy })
+            linkedCoach = firestore.coaches.first(where: { $0.id == stringer.id })
         }
         .onChange(of: firestore.coaches) { _, newCoaches in
-            linkedCoach = newCoaches.first(where: { $0.id == stringer.createdBy })
+            linkedCoach = newCoaches.first(where: { $0.id == stringer.id })
         }
         .sheet(isPresented: $showReviewSheet) {
             AddStringerReviewView(stringer: stringer)
@@ -424,7 +424,7 @@ struct StringerOrderFormView: View {
                             stringCost: cost,
                             tension: tension,
                             timelinePreference: timelinePreference,
-                            stringerCreatedBy: stringer.createdBy
+                            stringerCreatedBy: stringer.id
                         ) { err in
                             DispatchQueue.main.async {
                                 isSaving = false

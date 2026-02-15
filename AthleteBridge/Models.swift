@@ -153,6 +153,150 @@ struct VerifiedBadge: View {
     }
 }
 
+// MARK: - Country Codes for Phone Verification
+
+enum CountryCode: String, CaseIterable, Identifiable {
+    case us, ca, gb, au, nz, my, sg, ph, hk, cn, jp, kr, `in`, id, th, vn, de, fr, es, it, br, mx
+
+    var id: String { rawValue }
+
+    var dialCode: String {
+        switch self {
+        case .us: return "+1"
+        case .ca: return "+1"
+        case .gb: return "+44"
+        case .au: return "+61"
+        case .nz: return "+64"
+        case .my: return "+60"
+        case .sg: return "+65"
+        case .ph: return "+63"
+        case .hk: return "+852"
+        case .cn: return "+86"
+        case .jp: return "+81"
+        case .kr: return "+82"
+        case .in: return "+91"
+        case .id: return "+62"
+        case .th: return "+66"
+        case .vn: return "+84"
+        case .de: return "+49"
+        case .fr: return "+33"
+        case .es: return "+34"
+        case .it: return "+39"
+        case .br: return "+55"
+        case .mx: return "+52"
+        }
+    }
+
+    var flag: String {
+        switch self {
+        case .us: return "🇺🇸"
+        case .ca: return "🇨🇦"
+        case .gb: return "🇬🇧"
+        case .au: return "🇦🇺"
+        case .nz: return "🇳🇿"
+        case .my: return "🇲🇾"
+        case .sg: return "🇸🇬"
+        case .ph: return "🇵🇭"
+        case .hk: return "🇭🇰"
+        case .cn: return "🇨🇳"
+        case .jp: return "🇯🇵"
+        case .kr: return "🇰🇷"
+        case .in: return "🇮🇳"
+        case .id: return "🇮🇩"
+        case .th: return "🇹🇭"
+        case .vn: return "🇻🇳"
+        case .de: return "🇩🇪"
+        case .fr: return "🇫🇷"
+        case .es: return "🇪🇸"
+        case .it: return "🇮🇹"
+        case .br: return "🇧🇷"
+        case .mx: return "🇲🇽"
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .us: return "United States"
+        case .ca: return "Canada"
+        case .gb: return "United Kingdom"
+        case .au: return "Australia"
+        case .nz: return "New Zealand"
+        case .my: return "Malaysia"
+        case .sg: return "Singapore"
+        case .ph: return "Philippines"
+        case .hk: return "Hong Kong"
+        case .cn: return "China"
+        case .jp: return "Japan"
+        case .kr: return "South Korea"
+        case .in: return "India"
+        case .id: return "Indonesia"
+        case .th: return "Thailand"
+        case .vn: return "Vietnam"
+        case .de: return "Germany"
+        case .fr: return "France"
+        case .es: return "Spain"
+        case .it: return "Italy"
+        case .br: return "Brazil"
+        case .mx: return "Mexico"
+        }
+    }
+}
+
+// MARK: - Additional User Types
+
+/// Additional user types that can be combined (not mutually exclusive like COACH/CLIENT)
+enum AdditionalUserType: String, CaseIterable, Identifiable {
+    case stringer = "Stringer"
+    case tournamentOrganizer = "TournamentOrganizer"
+    case placesToPlayContact = "PlacesToPlayContact"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .stringer: return "Badminton Stringer"
+        case .tournamentOrganizer: return "Tournament Organizer"
+        case .placesToPlayContact: return "Place to Play Contact"
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .stringer: return .orange
+        case .tournamentOrganizer: return .purple
+        case .placesToPlayContact: return .green
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .stringer: return "scissors"
+        case .tournamentOrganizer: return "trophy"
+        case .placesToPlayContact: return "location.fill"
+        }
+    }
+}
+
+/// Small colored chip badge for additional user types.
+struct AdditionalTypeBadge: View {
+    let type: AdditionalUserType
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: type.iconName)
+                .font(.caption2)
+            Text(type.displayName)
+                .font(.caption2)
+                .fontWeight(.medium)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(type.badgeColor.opacity(0.15))
+        .foregroundColor(type.badgeColor)
+        .cornerRadius(12)
+    }
+}
+
 struct TournamentParticipantInfo: Hashable {
     let gender: String
     let events: [String]
