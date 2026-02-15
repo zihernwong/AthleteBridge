@@ -76,9 +76,21 @@ struct StringerDetailView: View {
                 }
             }
 
-            // Strings offered
-            if !stringer.stringsOffered.isEmpty {
-                Section(header: Text("Strings Offered")) {
+            // Labor cost & Strings offered
+            Section(header: Text("Pricing")) {
+                if !stringer.laborCost.isEmpty {
+                    HStack {
+                        Text("Labor Per Racket")
+                            .font(.body)
+                        Spacer()
+                        Text(stringer.laborCost)
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .foregroundColor(Color("LogoGreen"))
+                    }
+                }
+
+                if !stringer.stringsOffered.isEmpty {
                     ForEach(sortedStringKeys(stringer.stringsOffered), id: \.self) { name in
                         HStack {
                             Text(name)
@@ -144,21 +156,23 @@ struct StringerDetailView: View {
                 }
             }
 
-            // Order form button
-            Section {
-                Button(action: { showOrderSheet = true }) {
-                    HStack {
-                        Spacer()
-                        Label("Place Stringing Order", systemImage: "cart")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Spacer()
+            // Order form button (hidden for the stringer themselves)
+            if stringer.id != currentUid {
+                Section {
+                    Button(action: { showOrderSheet = true }) {
+                        HStack {
+                            Spacer()
+                            Label("Place Stringing Order", systemImage: "cart")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .background(Color("LogoGreen"))
+                        .cornerRadius(10)
                     }
-                    .padding(.vertical, 8)
-                    .background(Color("LogoGreen"))
-                    .cornerRadius(10)
+                    .listRowBackground(Color.clear)
                 }
-                .listRowBackground(Color.clear)
             }
         }
         .navigationTitle(stringer.name)
@@ -352,6 +366,31 @@ struct StringerOrderFormView: View {
         (hasOwnString || selectedString != nil)
     }
 
+    /// Parse a dollar amount from strings like "$5", "$5.00", or "5"
+    private func parseDollars(_ str: String) -> Double? {
+        let cleaned = str.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "$", with: "")
+        return Double(cleaned)
+    }
+
+    private var laborAmount: Double {
+        parseDollars(stringer.laborCost) ?? 0
+    }
+
+    private var stringAmount: Double {
+        guard !hasOwnString, let sel = selectedString,
+              let costStr = stringer.stringsOffered[sel] else { return 0 }
+        return parseDollars(costStr) ?? 0
+    }
+
+    private var computedTotal: Double {
+        laborAmount + stringAmount
+    }
+
+    private var formattedTotal: String {
+        String(format: "$%.2f", computedTotal)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -404,6 +443,42 @@ struct StringerOrderFormView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
+
+                // Order Total
+                Section(header: Text("Order Total")) {
+                    if !stringer.laborCost.isEmpty {
+                        HStack {
+                            Text("Labor")
+                            Spacer()
+                            Text(stringer.laborCost)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    if !hasOwnString, let sel = selectedString,
+                       let costStr = stringer.stringsOffered[sel], !costStr.isEmpty {
+                        HStack {
+                            Text("String (\(sel))")
+                            Spacer()
+                            Text(costStr)
+                                .foregroundColor(.secondary)
+                        }
+                    } else if hasOwnString {
+                        HStack {
+                            Text("String")
+                            Spacer()
+                            Text("Own string")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    HStack {
+                        Text("Total")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text(formattedTotal)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color("LogoGreen"))
+                    }
+                }
             }
             .navigationTitle("Stringing Order")
             .navigationBarTitleDisplayMode(.inline)
@@ -422,6 +497,8 @@ struct StringerOrderFormView: View {
                             hasOwnString: hasOwnString,
                             selectedString: chosenString,
                             stringCost: cost,
+                            laborCost: stringer.laborCost.isEmpty ? nil : stringer.laborCost,
+                            orderTotal: formattedTotal,
                             tension: tension,
                             timelinePreference: timelinePreference,
                             stringerCreatedBy: stringer.id

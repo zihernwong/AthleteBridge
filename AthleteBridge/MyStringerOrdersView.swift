@@ -10,7 +10,16 @@ struct MyStringerOrdersView: View {
                     .foregroundColor(.secondary)
             } else {
                 ForEach(firestore.myStringerOrders) { order in
-                    MyOrderRow(order: order, firestore: firestore)
+                    NavigationLink {
+                        StringerOrderDetailView(
+                            order: order,
+                            stringer: firestore.stringers.first(where: { $0.id == order.stringerId }),
+                            isStringerView: false
+                        )
+                        .environmentObject(firestore)
+                    } label: {
+                        MyOrderRow(order: order, firestore: firestore)
+                    }
                 }
             }
         }
@@ -87,6 +96,18 @@ private struct MyOrderRow: View {
                     Text(order.timelinePreference)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+            }
+
+            if let total = order.orderTotal, !total.isEmpty {
+                HStack(spacing: 4) {
+                    Text("Order Total:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    Text(total)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color("LogoGreen"))
                 }
             }
 

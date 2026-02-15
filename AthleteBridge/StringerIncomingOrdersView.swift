@@ -26,7 +26,12 @@ struct StringerIncomingOrdersView: View {
             if !pendingOrders.isEmpty {
                 Section(header: Text("Pending")) {
                     ForEach(pendingOrders) { order in
-                        StringerOrderRow(order: order, stringer: stringer, firestore: firestore)
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
+                        }
                     }
                 }
             }
@@ -34,7 +39,12 @@ struct StringerIncomingOrdersView: View {
             if !activeOrders.isEmpty {
                 Section(header: Text("Active")) {
                     ForEach(activeOrders) { order in
-                        StringerOrderRow(order: order, stringer: stringer, firestore: firestore)
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
+                        }
                     }
                 }
             }
@@ -42,7 +52,12 @@ struct StringerIncomingOrdersView: View {
             if !historyOrders.isEmpty {
                 Section(header: Text("History")) {
                     ForEach(historyOrders) { order in
-                        StringerOrderRow(order: order, stringer: stringer, firestore: firestore)
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
+                        }
                     }
                 }
             }
@@ -55,13 +70,10 @@ struct StringerIncomingOrdersView: View {
     }
 }
 
-// MARK: - Order Row with Actions
+// MARK: - Order Row (summary only, no action buttons)
 
 private struct StringerOrderRow: View {
     let order: StringerOrder
-    let stringer: BadmintonStringer
-    let firestore: FirestoreManager
-    @State private var isUpdating = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -119,97 +131,23 @@ private struct StringerOrderRow: View {
                 }
             }
 
+            if let total = order.orderTotal, !total.isEmpty {
+                HStack(spacing: 4) {
+                    Text("Order Total:")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                    Text(total)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color("LogoGreen"))
+                }
+            }
+
             Text(order.createdAt, style: .date)
                 .font(.caption2)
                 .foregroundColor(.secondary)
-
-            // Action buttons
-            if !isUpdating {
-                actionButtons
-            } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-            }
         }
         .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private var actionButtons: some View {
-        switch order.status {
-        case "placed":
-            HStack(spacing: 12) {
-                Button(action: { updateStatus("accepted") }) {
-                    Text("Accept")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color("LogoGreen"))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Button(action: { updateStatus("declined") }) {
-                    Text("Decline")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Color.red.opacity(0.1))
-                        .foregroundColor(.red)
-                        .cornerRadius(8)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-
-        case "accepted":
-            Button(action: { updateStatus("stringing") }) {
-                Text("Mark as Stringing")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color.purple.opacity(0.15))
-                    .foregroundColor(.purple)
-                    .cornerRadius(8)
-            }
-            .buttonStyle(PlainButtonStyle())
-
-        case "stringing":
-            Button(action: { updateStatus("completed") }) {
-                Text("Mark as Completed")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color("LogoGreen").opacity(0.15))
-                    .foregroundColor(Color("LogoGreen"))
-                    .cornerRadius(8)
-            }
-            .buttonStyle(PlainButtonStyle())
-
-        default:
-            EmptyView()
-        }
-    }
-
-    private func updateStatus(_ newStatus: String) {
-        isUpdating = true
-        firestore.updateStringerOrderStatus(
-            orderId: order.id,
-            status: newStatus,
-            buyerUid: order.createdBy,
-            stringerName: stringer.name
-        ) { err in
-            DispatchQueue.main.async {
-                isUpdating = false
-                if err == nil {
-                    firestore.fetchOrdersForStringer(stringerId: stringer.id)
-                }
-            }
-        }
     }
 }
 

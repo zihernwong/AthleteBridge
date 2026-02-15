@@ -81,6 +81,13 @@ struct MainAppView: View {
                     .tabItem { Label("Reviews", systemImage: "star.bubble") }
                     .tag(6)
             }
+
+            // Places to Play Contact tab (only when role is selected)
+            if firestore.currentAdditionalTypes.contains(AdditionalUserType.placesToPlayContact.rawValue) {
+                RequiresProfile(content: { placesToPlayContactTab }, selectedTab: $selectedTab)
+                    .tabItem { Label("Places Contact", systemImage: "location.fill") }
+                    .tag(8)
+            }
         }
         .tint(Color("LogoGreen"))
         // Track manual tab selection so we don't override the user's explicit choice.
@@ -106,9 +113,9 @@ struct MainAppView: View {
                 case .payments:
                     selectedTab = isCoachUserComputed ? 1 : 5
                     deepLink.pendingDestination = nil
-                case .stringing:
+                case .stringing(let orderId):
                     selectedTab = 7
-                    deepLink.pendingDestination = nil
+                    if orderId == nil { deepLink.pendingDestination = nil }
                 }
             }
         }
@@ -121,9 +128,9 @@ struct MainAppView: View {
             case .payments:
                 selectedTab = isCoachUserComputed ? 1 : 5
                 deepLink.pendingDestination = nil
-            case .stringing:
+            case .stringing(let orderId):
                 selectedTab = 7
-                deepLink.pendingDestination = nil
+                if orderId == nil { deepLink.pendingDestination = nil }
             }
         }
         .onChange(of: auth.user?.uid) { _old, _new in
@@ -234,6 +241,13 @@ struct MainAppView: View {
             StringingTabView()
                 .environmentObject(firestore)
                 .environmentObject(auth)
+        }
+    }
+
+    private var placesToPlayContactTab: some View {
+        NavigationStack {
+            PlacesToPlayContactView()
+                .environmentObject(firestore)
         }
     }
 

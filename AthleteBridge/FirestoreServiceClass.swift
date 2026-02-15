@@ -1454,7 +1454,9 @@ class FirestoreManager: ObservableObject {
                     address: data["address"] as? String ?? "",
                     playingTimes: timesMap,
                     pricePerSession: data["pricePerSession"] as? String ?? "",
-                    createdBy: data["createdBy"] as? String ?? ""
+                    createdBy: data["createdBy"] as? String ?? "",
+                    contactUid: data["contactUid"] as? String,
+                    contactName: data["contactName"] as? String
                 )
             }
             DispatchQueue.main.async {
@@ -1499,6 +1501,45 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    func assignPlaceContact(placeId: String, completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let contactName: String = {
+            if let name = self.currentClient?.name, !name.isEmpty { return name }
+            if let coach = self.currentCoach, !coach.name.isEmpty { return coach.name }
+            return "Contact"
+        }()
+        self.db.collection("placesToPlay").document(placeId).updateData([
+            "contactUid": uid,
+            "contactName": contactName
+        ]) { [weak self] err in
+            if let err = err {
+                print("assignPlaceContact error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion(nil)
+        }
+    }
+
+    func removePlaceContact(placeId: String, completion: @escaping (Error?) -> Void) {
+        self.db.collection("placesToPlay").document(placeId).updateData([
+            "contactUid": FieldValue.delete(),
+            "contactName": FieldValue.delete()
+        ]) { [weak self] err in
+            if let err = err {
+                print("removePlaceContact error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion(nil)
+        }
+    }
+
     // MARK: - Badminton Stringers
 
     func fetchStringers() {
@@ -1523,6 +1564,7 @@ class FirestoreManager: ObservableObject {
                     name: name,
                     meetupLocationNames: data["meetupLocationNames"] as? [String] ?? [],
                     stringsOffered: stringsMap,
+                    laborCost: data["laborCost"] as? String ?? "",
                     createdBy: data["createdBy"] as? String ?? ""
                 )
             }
@@ -1532,7 +1574,7 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func addStringer(name: String, meetupLocationNames: [String], stringsOffered: [String: String], completion: @escaping (Error?) -> Void) {
+    func addStringer(name: String, meetupLocationNames: [String], stringsOffered: [String: String], laborCost: String, completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -1541,6 +1583,7 @@ class FirestoreManager: ObservableObject {
             "name": name,
             "meetupLocationNames": meetupLocationNames,
             "stringsOffered": stringsOffered,
+            "laborCost": laborCost,
             "createdBy": uid,
             "createdAt": FieldValue.serverTimestamp()
         ]
@@ -5245,7 +5288,7 @@ extension FirestoreManager {
 
     // MARK: - Stringer Orders
 
-    func submitStringerOrder(stringerId: String, racketName: String, hasOwnString: Bool, selectedString: String?, stringCost: String?, tension: Int, timelinePreference: String, stringerCreatedBy: String, completion: @escaping (Error?) -> Void) {
+    func submitStringerOrder(stringerId: String, racketName: String, hasOwnString: Bool, selectedString: String?, stringCost: String?, laborCost: String?, orderTotal: String?, tension: Int, timelinePreference: String, stringerCreatedBy: String, completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -5268,6 +5311,8 @@ extension FirestoreManager {
         ]
         if let s = selectedString { data["selectedString"] = s }
         if let c = stringCost { data["stringCost"] = c }
+        if let l = laborCost { data["laborCost"] = l }
+        if let t = orderTotal { data["orderTotal"] = t }
         let newDocRef = self.db.collection("stringerOrders").document()
         newDocRef.setData(data) { err in
             if let err = err {
@@ -5380,6 +5425,8 @@ extension FirestoreManager {
             hasOwnString: data["hasOwnString"] as? Bool ?? false,
             selectedString: data["selectedString"] as? String,
             stringCost: data["stringCost"] as? String,
+            laborCost: data["laborCost"] as? String,
+            orderTotal: data["orderTotal"] as? String,
             tension: data["tension"] as? Int ?? 24,
             timelinePreference: data["timelinePreference"] as? String ?? "",
             createdBy: data["createdBy"] as? String ?? "",

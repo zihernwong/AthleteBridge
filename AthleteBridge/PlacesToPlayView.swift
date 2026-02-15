@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 private let weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 private let weekdayAbbrev: [String: String] = [
@@ -10,6 +11,9 @@ struct PlacesToPlayView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
     @State private var showAddSheet = false
+
+    private struct ChatSheetId: Identifiable { let id: String }
+    @State private var presentedChat: ChatSheetId? = nil
 
     private var currentUid: String { auth.user?.uid ?? "" }
 
@@ -47,6 +51,40 @@ struct PlacesToPlayView: View {
                         if !place.playingTimes.isEmpty {
                             WeeklyScheduleDisplay(schedule: place.playingTimes)
                         }
+
+                        // Contact card
+                        if let contactName = place.contactName, let contactUid = place.contactUid, !contactUid.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Divider()
+                                HStack(spacing: 8) {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(Color("LogoGreen"))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Contact")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                        Text(contactName)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
+                                    Spacer()
+                                    if contactUid != currentUid {
+                                        Button(action: { openChat(withUid: contactUid) }) {
+                                            Label("Message", systemImage: "message.fill")
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(Color("LogoBlue"))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(8)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -73,8 +111,31 @@ struct PlacesToPlayView: View {
             AddPlaceToPlayView()
                 .environmentObject(firestore)
         }
+        .sheet(item: $presentedChat) { sheet in
+            NavigationStack {
+                ChatView(chatId: sheet.id)
+                    .environmentObject(firestore)
+            }
+        }
         .onAppear {
             firestore.fetchPlacesToPlay()
+        }
+    }
+
+    private func openChat(withUid otherUid: String) {
+        guard !currentUid.isEmpty else {
+            firestore.showToast("Please sign in to message")
+            return
+        }
+        let expectedChatId = [currentUid, otherUid].sorted().joined(separator: "_")
+        presentedChat = ChatSheetId(id: expectedChatId)
+        firestore.createOrGetChat(withCoachId: otherUid) { chatId in
+            DispatchQueue.main.async {
+                let target = chatId ?? expectedChatId
+                if target != expectedChatId {
+                    presentedChat = ChatSheetId(id: target)
+                }
+            }
         }
     }
 }

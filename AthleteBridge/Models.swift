@@ -333,6 +333,8 @@ struct PlaceToPlay: Identifiable, Hashable {
     let playingTimes: [String: String]
     let pricePerSession: String
     let createdBy: String
+    let contactUid: String?
+    let contactName: String?
 }
 
 struct BadmintonStringer: Identifiable, Hashable {
@@ -341,6 +343,7 @@ struct BadmintonStringer: Identifiable, Hashable {
     let meetupLocationNames: [String]
     /// Maps string name to additional cost (e.g. "BG65" -> "$5")
     let stringsOffered: [String: String]
+    let laborCost: String // labor price per racket (e.g. "$10")
     let createdBy: String
 }
 
@@ -361,6 +364,8 @@ struct StringerOrder: Identifiable, Hashable {
     let hasOwnString: Bool
     let selectedString: String? // nil if hasOwnString
     let stringCost: String? // cost for selected string
+    let laborCost: String? // labor price per racket
+    let orderTotal: String? // labor + string cost
     let tension: Int
     let timelinePreference: String
     let createdBy: String

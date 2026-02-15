@@ -240,7 +240,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         } else if let orderId = userInfo["stringerOrderId"] as? String, !orderId.isEmpty {
             print("[DeepLink] Found stringerOrderId: \(orderId)")
             DispatchQueue.main.async {
-                DeepLinkManager.shared.pendingDestination = .stringing
+                DeepLinkManager.shared.pendingDestination = .stringing(orderId: orderId)
             }
         } else {
             print("[DeepLink] No chatId, bookingId, or stringerOrderId found in notification payload")

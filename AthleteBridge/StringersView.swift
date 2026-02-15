@@ -52,6 +52,16 @@ struct StringersView: View {
                                 }
                             }
 
+                            if !stringer.laborCost.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .foregroundColor(.secondary)
+                                    Text("Labor: \(stringer.laborCost)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
                             if !stringer.stringsOffered.isEmpty {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 4) {
@@ -140,6 +150,7 @@ struct AddStringerView: View {
     @State private var stringCosts: [String: String] = [:]
     @State private var customString = ""
     @State private var customStrings: [String] = []
+    @State private var laborCost = ""
     @State private var isSaving = false
 
     // Meetup locations
@@ -164,6 +175,7 @@ struct AddStringerView: View {
 
     private var isValid: Bool {
         !stringerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !laborCost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !allOfferedStrings.isEmpty
     }
 
@@ -172,6 +184,7 @@ struct AddStringerView: View {
             Form {
                 Section(header: Text("Stringer Details")) {
                     TextField("Stringer Name", text: $stringerName)
+                    TextField("Labor Cost Per Racket (e.g. $10)", text: $laborCost)
                 }
 
                 Section(header: Text("Meetup Locations")) {
@@ -267,7 +280,8 @@ struct AddStringerView: View {
                         firestore.addStringer(
                             name: stringerName.trimmingCharacters(in: .whitespacesAndNewlines),
                             meetupLocationNames: names,
-                            stringsOffered: allOfferedStrings
+                            stringsOffered: allOfferedStrings,
+                            laborCost: laborCost.trimmingCharacters(in: .whitespacesAndNewlines)
                         ) { err in
                             DispatchQueue.main.async {
                                 isSaving = false

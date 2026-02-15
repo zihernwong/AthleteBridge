@@ -3,6 +3,12 @@ import SwiftUI
 struct StringingTabView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var deepLink: DeepLinkManager
+
+    // Deep link state
+    @State private var pendingDeepLinkOrderId: String? = nil
+    @State private var deepLinkedOrder: StringerOrder? = nil
+    @State private var navigateToDeepLinkedOrder = false
 
     /// Whether the current user has the Stringer additional role.
     /// Checks both the additionalTypes array and the stringers collection (source of truth).
@@ -28,11 +34,66 @@ struct StringingTabView: View {
         }
         .navigationTitle("Stringing")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: $navigateToDeepLinkedOrder) {
+            if let order = deepLinkedOrder {
+                let isStringer = currentUserStringer != nil && order.stringerId == currentUserStringer?.id
+                StringerOrderDetailView(
+                    order: order,
+                    stringer: isStringer ? currentUserStringer : firestore.stringers.first(where: { $0.id == order.stringerId }),
+                    isStringerView: isStringer
+                )
+                .environmentObject(firestore)
+            }
+        }
         .onAppear {
             firestore.fetchOrdersForBuyer()
             if firestore.stringers.isEmpty {
                 firestore.fetchStringers()
             }
+            if let stringer = currentUserStringer {
+                firestore.fetchOrdersForStringer(stringerId: stringer.id)
+            }
+
+            // Handle deep link on cold start
+            if case .stringing(let orderId) = deepLink.pendingDestination, let orderId = orderId {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    handleStringerOrderDeepLink(orderId: orderId)
+                }
+            }
+        }
+        .onChange(of: deepLink.pendingDestination) { _old, destination in
+            guard case .stringing(let orderId) = destination, let orderId = orderId else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                handleStringerOrderDeepLink(orderId: orderId)
+            }
+        }
+        .onChange(of: firestore.stringerIncomingOrders) { _, _ in
+            if let oid = pendingDeepLinkOrderId {
+                handleStringerOrderDeepLink(orderId: oid)
+            }
+        }
+        .onChange(of: firestore.myStringerOrders) { _, _ in
+            if let oid = pendingDeepLinkOrderId {
+                handleStringerOrderDeepLink(orderId: oid)
+            }
+        }
+    }
+
+    // MARK: - Deep Link Handler
+
+    private func handleStringerOrderDeepLink(orderId: String) {
+        if let order = firestore.stringerIncomingOrders.first(where: { $0.id == orderId })
+            ?? firestore.myStringerOrders.first(where: { $0.id == orderId }) {
+            pendingDeepLinkOrderId = nil
+            deepLink.pendingDestination = nil
+            deepLinkedOrder = order
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                navigateToDeepLinkedOrder = true
+            }
+        } else {
+            // Not found yet — store for retry and fetch fresh data
+            pendingDeepLinkOrderId = orderId
+            firestore.fetchOrdersForBuyer()
             if let stringer = currentUserStringer {
                 firestore.fetchOrdersForStringer(stringerId: stringer.id)
             }
