@@ -72,7 +72,7 @@ struct StringerIncomingOrdersView: View {
 
 // MARK: - Order Row (summary only, no action buttons)
 
-private struct StringerOrderRow: View {
+struct StringerOrderRow: View {
     let order: StringerOrder
 
     var body: some View {
@@ -162,13 +162,23 @@ struct StatusBadge: View {
         case "accepted": return .orange
         case "stringing": return .purple
         case "completed": return Color("LogoGreen")
+        case "ready_for_pickup": return .teal
+        case "picked_up": return Color("LogoGreen")
         case "declined": return .red
         default: return .gray
         }
     }
 
+    private var displayText: String {
+        switch status {
+        case "ready_for_pickup": return "Ready For Pickup"
+        case "picked_up": return "Picked Up"
+        default: return status.capitalized
+        }
+    }
+
     var body: some View {
-        Text(status.capitalized)
+        Text(displayText)
             .font(.caption)
             .fontWeight(.medium)
             .padding(.horizontal, 8)

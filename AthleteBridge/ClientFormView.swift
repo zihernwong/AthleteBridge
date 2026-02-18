@@ -3,10 +3,22 @@ import SwiftUI
 struct ClientFormView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @EnvironmentObject var deepLink: DeepLinkManager
     @State private var goals = ""
     // Support multi-select availability
     @State private var selectedAvailability: Set<String> = []
     @State private var searchText: String = ""
+
+    // Deep link state for stringing orders
+    @State private var pendingDeepLinkOrderId: String? = nil
+    @State private var deepLinkedOrder: StringerOrder? = nil
+    @State private var navigateToDeepLinkedOrder = false
+
+    // Deep link state for club notifications
+    @State private var clubDeepLinkPlace: PlaceToPlay? = nil
+    @State private var clubDeepLinkType: String? = nil // "joinRequest", "members", or "announcement"
+    @State private var clubDeepLinkAnnouncementId: String? = nil
+    @State private var navigateToClubDeepLink = false
     
     let availabilityOptions = ["Morning", "Afternoon", "Evening"]
     
@@ -17,6 +29,13 @@ struct ClientFormView: View {
         let names = firestore.coaches.map { $0.name }
         let filtered = names.filter { $0.lowercased().hasPrefix(typed) }
         return Array(filtered.prefix(6))
+    }
+
+    /// Returns the count of active stringing orders (accepted or stringing) for the current user
+    private var activeStringingOrdersCount: Int {
+        guard let uid = auth.user?.uid else { return 0 }
+        guard firestore.stringers.contains(where: { $0.id == uid }) else { return 0 }
+        return firestore.stringerIncomingOrders.filter { $0.status == "accepted" || $0.status == "stringing" }.count
     }
 
     // Computed suggestions for improvement areas based on coaches' specialties
@@ -155,47 +174,281 @@ struct ClientFormView: View {
                         }
                      }
 
-                    NavigationLink("Find Upcoming Tournaments") {
-                        UpcomingTournamentsView()
-                            .environmentObject(firestore)
-                            .environmentObject(auth)
-                    }
-
-                    Section(header: Text("Places to Play")) {
-                        NavigationLink("Browse Places") {
-                            PlacesToPlayView()
+                    Section(header: Text("Tournaments")) {
+                        NavigationLink {
+                            UpcomingTournamentsView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "trophy")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("Find Upcoming Tournaments")
+                            }
                         }
-                    }
 
-                    Section(header: Text("Find a Tournament Partner")) {
-                        NavigationLink("Find Partners") {
+                        NavigationLink {
                             TournamentPartnerView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2")
+                                    .foregroundColor(Color("LogoBlue"))
+                                Text("Find a Tournament Partner")
+                            }
                         }
                     }
 
-                    Section(header: Text("Find Badminton Stringers")) {
-                        NavigationLink("Browse Stringers") {
+                    Section(header: Text("My Clubs")) {
+                        NavigationLink {
+                            MyClubsView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                                .environmentObject(deepLink)
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.3")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("View My Clubs")
+                            }
+                        }
+                    }
+
+                    Section(header: Text("Places to Play")) {
+                        NavigationLink {
+                            PlacesToPlayView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("Browse Places")
+                            }
+                        }
+
+                        NavigationLink {
+                            PlayersToPlayWithView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2.fill")
+                                    .foregroundColor(Color("LogoBlue"))
+                                Text("Players to Play With")
+                            }
+                        }
+
+                        if firestore.currentAdditionalTypes.contains(AdditionalUserType.placesToPlayContact.rawValue) {
+                            NavigationLink {
+                                PlacesToPlayContactView()
+                                    .environmentObject(firestore)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "location.fill")
+                                        .foregroundColor(Color("LogoGreen"))
+                                    Text("Manage Places Contact")
+                                }
+                            }
+                        }
+                    }
+
+                    Section(header: Text("Stringing").font(.subheadline).fontWeight(.semibold)) {
+                        NavigationLink {
+                            StringingTabView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "scissors")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("View Stringer Dashboard")
+                                    .font(.body)
+                                Spacer()
+                                let activeCount = activeStringingOrdersCount
+                                if activeCount > 0 {
+                                    Text("\(activeCount) active")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+
+                        NavigationLink {
                             StringersView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(.secondary)
+                                Text("Browse Stringers")
+                                    .font(.body)
+                            }
+                        }
+                    }
+
+                    Section(header: Text("Reviews")) {
+                        NavigationLink {
+                            ReviewsView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "star.bubble")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("Write & View Reviews")
+                            }
                         }
                     }
                 }
                 .navigationTitle("Find a Coach")
                 .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(isPresented: $navigateToDeepLinkedOrder) {
+                    if let order = deepLinkedOrder {
+                        let uid = auth.user?.uid ?? ""
+                        let isStringer = order.stringerId == uid
+                        StringerOrderDetailView(
+                            order: order,
+                            stringer: firestore.stringers.first(where: { $0.id == order.stringerId }),
+                            isStringerView: isStringer
+                        )
+                        .environmentObject(firestore)
+                    }
+                }
                  .onAppear {
                      // ensure coaches list is loaded so suggestions work
                      if firestore.coaches.isEmpty {
                          firestore.fetchCoaches()
                      }
                      firestore.fetchClients()
+                     firestore.fetchOrdersForBuyer()
+                     if firestore.stringers.isEmpty {
+                         firestore.fetchStringers()
+                     }
+                     if let uid = auth.user?.uid,
+                        let stringer = firestore.stringers.first(where: { $0.id == uid }) {
+                         firestore.fetchOrdersForStringer(stringerId: stringer.id)
+                     }
+                     // Fetch places for club deep links
+                     firestore.fetchPlacesToPlay()
+
+                     // Handle stringing deep link
+                     if case .stringing(let orderId) = deepLink.pendingDestination, let orderId = orderId {
+                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                             handleStringerOrderDeepLink(orderId: orderId)
+                         }
+                     }
+                     // Handle club deep link
+                     handleClubDeepLink(deepLink.pendingDestination)
+                 }
+                 .onChange(of: deepLink.pendingDestination) { _old, destination in
+                     if case .stringing(let orderId) = destination, let orderId = orderId {
+                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                             handleStringerOrderDeepLink(orderId: orderId)
+                         }
+                     }
+                     // Also handle club deep links
+                     handleClubDeepLink(destination)
+                 }
+                 .onChange(of: firestore.stringerIncomingOrders) { _, _ in
+                     if let oid = pendingDeepLinkOrderId {
+                         handleStringerOrderDeepLink(orderId: oid)
+                     }
+                 }
+                 .onChange(of: firestore.myStringerOrders) { _, _ in
+                     if let oid = pendingDeepLinkOrderId {
+                         handleStringerOrderDeepLink(orderId: oid)
+                     }
+                 }
+                 .onChange(of: firestore.placesToPlay) { _, _ in
+                     if deepLink.pendingDestination != nil {
+                         handleClubDeepLink(deepLink.pendingDestination)
+                     }
+                 }
+                 .navigationDestination(isPresented: $navigateToClubDeepLink) {
+                     if let place = clubDeepLinkPlace {
+                         if clubDeepLinkType == "joinRequest" {
+                             PlacesToPlayContactView()
+                                 .environmentObject(firestore)
+                         } else if clubDeepLinkType == "announcement" {
+                             ClubAnnouncementsView(
+                                 place: place,
+                                 highlightAnnouncementId: clubDeepLinkAnnouncementId
+                             )
+                             .environmentObject(firestore)
+                         } else {
+                             PlaceDetailView(place: place)
+                                 .environmentObject(firestore)
+                                 .environmentObject(auth)
+                         }
+                     }
                  }
              }
      }
+
+    private func handleStringerOrderDeepLink(orderId: String) {
+        if let order = firestore.stringerIncomingOrders.first(where: { $0.id == orderId })
+            ?? firestore.myStringerOrders.first(where: { $0.id == orderId }) {
+            pendingDeepLinkOrderId = nil
+            deepLink.pendingDestination = nil
+            deepLinkedOrder = order
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                navigateToDeepLinkedOrder = true
+            }
+        } else {
+            pendingDeepLinkOrderId = orderId
+            firestore.fetchOrdersForBuyer()
+            if let uid = auth.user?.uid,
+               let stringer = firestore.stringers.first(where: { $0.id == uid }) {
+                firestore.fetchOrdersForStringer(stringerId: stringer.id)
+            }
+        }
+    }
+
+    /// Handle club deep link navigation
+    private func handleClubDeepLink(_ destination: DeepLinkDestination?) {
+        guard let destination = destination else { return }
+        switch destination {
+        case .clubJoinRequest(let placeId):
+            if let place = firestore.placesToPlay.first(where: { $0.id == placeId }) {
+                clubDeepLinkPlace = place
+                clubDeepLinkType = "joinRequest"
+                deepLink.pendingDestination = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToClubDeepLink = true
+                }
+            } else {
+                firestore.fetchPlacesToPlay()
+            }
+        case .clubMembers(let placeId):
+            if let place = firestore.placesToPlay.first(where: { $0.id == placeId }) {
+                clubDeepLinkPlace = place
+                clubDeepLinkType = "members"
+                deepLink.pendingDestination = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToClubDeepLink = true
+                }
+            } else {
+                firestore.fetchPlacesToPlay()
+            }
+        case .clubAnnouncement(let placeId, let announcementId):
+            if let place = firestore.placesToPlay.first(where: { $0.id == placeId }) {
+                clubDeepLinkPlace = place
+                clubDeepLinkType = "announcement"
+                clubDeepLinkAnnouncementId = announcementId
+                deepLink.pendingDestination = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToClubDeepLink = true
+                }
+            } else {
+                firestore.fetchPlacesToPlay()
+            }
+        default:
+            break
+        }
+    }
  }
 
 // Simple logo page shown to coach users in place of the matching UI

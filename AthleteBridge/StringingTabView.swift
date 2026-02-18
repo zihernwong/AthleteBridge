@@ -34,6 +34,12 @@ struct StringingTabView: View {
         }
         .navigationTitle("Stringing")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showEditStringerSheet) {
+            if let stringer = currentUserStringer {
+                EditStringerView(stringer: stringer)
+                    .environmentObject(firestore)
+            }
+        }
         .navigationDestination(isPresented: $navigateToDeepLinkedOrder) {
             if let order = deepLinkedOrder {
                 let isStringer = currentUserStringer != nil && order.stringerId == currentUserStringer?.id
@@ -102,30 +108,82 @@ struct StringingTabView: View {
 
     // MARK: - Stringer Role View (manage incoming orders)
 
+    @State private var showEditStringerSheet = false
+
+    private var pendingOrders: [StringerOrder] {
+        firestore.stringerIncomingOrders.filter { $0.status == "placed" }
+    }
+
+    private var activeOrders: [StringerOrder] {
+        firestore.stringerIncomingOrders.filter { $0.status == "accepted" || $0.status == "stringing" }
+    }
+
+    private var historyOrders: [StringerOrder] {
+        firestore.stringerIncomingOrders.filter { $0.status == "completed" || $0.status == "declined" }
+    }
+
     @ViewBuilder
     private var stringerManagerView: some View {
-        // Incoming orders (primary section for stringers)
         if let stringer = currentUserStringer {
+            // Edit Profile button
             Section {
-                NavigationLink {
-                    StringerIncomingOrdersView(stringer: stringer)
-                        .environmentObject(firestore)
+                Button {
+                    showEditStringerSheet = true
                 } label: {
                     HStack {
-                        Image(systemName: "tray.and.arrow.down")
-                            .foregroundColor(Color("LogoGreen"))
-                        Text("Incoming Orders")
-                        Spacer()
-                        let pendingCount = firestore.stringerIncomingOrders.filter { $0.status == "placed" }.count
-                        if pendingCount > 0 {
-                            Text("\(pendingCount) pending")
-                                .font(.caption)
-                                .foregroundColor(.orange)
+                        Image(systemName: "pencil.circle.fill")
+                            .foregroundColor(Color("LogoBlue"))
+                        Text("Edit Stringer Profile")
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+
+            // Inline incoming orders
+            if firestore.stringerIncomingOrders.isEmpty {
+                Section {
+                    Text("No incoming orders yet.")
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if !pendingOrders.isEmpty {
+                Section(header: Text("Pending")) {
+                    ForEach(pendingOrders) { order in
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
                         }
                     }
                 }
-            } header: {
-                Text("Orders I Received")
+            }
+
+            if !activeOrders.isEmpty {
+                Section(header: Text("Active")) {
+                    ForEach(activeOrders) { order in
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
+                        }
+                    }
+                }
+            }
+
+            if !historyOrders.isEmpty {
+                Section(header: Text("History")) {
+                    ForEach(historyOrders) { order in
+                        NavigationLink {
+                            StringerOrderDetailView(order: order, stringer: stringer, isStringerView: true)
+                                .environmentObject(firestore)
+                        } label: {
+                            StringerOrderRow(order: order)
+                        }
+                    }
+                }
             }
         } else {
             // Stringer role but no stringer profile yet — prompt to register
@@ -147,88 +205,16 @@ struct StringingTabView: View {
                 Text("Create your stringer profile to start receiving orders.")
             }
         }
-
-        // My placed orders
-        Section {
-            NavigationLink {
-                MyStringerOrdersView()
-                    .environmentObject(firestore)
-            } label: {
-                HStack {
-                    Image(systemName: "cart")
-                        .foregroundColor(Color("LogoBlue"))
-                    Text("My Orders")
-                    Spacer()
-                    if !firestore.myStringerOrders.isEmpty {
-                        Text("\(firestore.myStringerOrders.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-        } header: {
-            Text("Orders I Placed")
-        }
-
-        // Browse stringers
-        Section {
-            NavigationLink {
-                StringersView()
-                    .environmentObject(firestore)
-                    .environmentObject(auth)
-            } label: {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    Text("Browse Stringers")
-                }
-            }
-        }
     }
 
     // MARK: - Customer View (browse, place orders, track)
 
     @ViewBuilder
     private var customerView: some View {
-        // Browse stringers (primary action for customers)
         Section {
-            NavigationLink {
-                StringersView()
-                    .environmentObject(firestore)
-                    .environmentObject(auth)
-            } label: {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(Color("LogoBlue"))
-                    Text("Find a Stringer")
-                }
-            }
-        } header: {
-            Text("Place an Order")
-        } footer: {
-            Text("Browse available stringers and place a stringing order.")
-        }
-
-        // My placed orders
-        Section {
-            NavigationLink {
-                MyStringerOrdersView()
-                    .environmentObject(firestore)
-            } label: {
-                HStack {
-                    Image(systemName: "cart")
-                        .foregroundColor(Color("LogoGreen"))
-                    Text("My Orders")
-                    Spacer()
-                    if !firestore.myStringerOrders.isEmpty {
-                        Text("\(firestore.myStringerOrders.count)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-        } header: {
-            Text("Track Orders")
+            Text("Browse Stringers from the homepage to find stringers and view your placed orders.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
         }
     }
 }

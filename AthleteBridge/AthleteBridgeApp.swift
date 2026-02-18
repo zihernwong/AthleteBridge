@@ -66,6 +66,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     // Forward silent push notifications to Firebase Auth for Phone Auth verification
+    // Also handles booking cancellation calendar removal via content-available push
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
@@ -74,6 +75,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             completionHandler(.noData)
             return
         }
+
+        // Handle booking cancellation/decline/rejection — remove calendar event on this device
+        let calendarRemovalTypes: Set<String> = ["booking_cancelled", "booking_rejected", "booking_declined"]
+        if let type = userInfo["type"] as? String, calendarRemovalTypes.contains(type),
+           let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
+            print("[AppDelegate] Booking \(type) notification — removing calendar event for \(bookingId)")
+            NotificationManager.removeCalendarEventForCancelledBooking(bookingId: bookingId)
+            completionHandler(.newData)
+            return
+        }
+
         print("[AppDelegate] didReceiveRemoteNotification - not handled by Auth")
         completionHandler(.noData)
     }

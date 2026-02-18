@@ -4,6 +4,7 @@ import UIKit
 import Firebase
 import FirebaseMessaging
 import FirebaseAuth
+@preconcurrency import EventKit
 
 /// Centralized notification helper to register for APNs, obtain FCM token and persist it to Firestore.
 final class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate, MessagingDelegate {
@@ -207,11 +208,20 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         // Show banner, sound, and badge while in foreground
         completionHandler([.banner, .sound, .badge])
 
+        let userInfo = notification.request.content.userInfo
+
+        // If a booking was cancelled/declined/rejected, remove the calendar event on this device
+        let calendarRemovalTypes: Set<String> = ["booking_cancelled", "booking_rejected", "booking_declined"]
+        if let type = userInfo["type"] as? String, calendarRemovalTypes.contains(type),
+           let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
+            NotificationManager.removeCalendarEventForCancelledBooking(bookingId: bookingId)
+        }
+
         // Broadcast so any visible view can refresh its data
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: NotificationManager.didReceiveForegroundNotification,
                                             object: nil,
-                                            userInfo: notification.request.content.userInfo)
+                                            userInfo: userInfo)
         }
     }
 
@@ -220,6 +230,13 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         let userInfo = response.notification.request.content.userInfo
         print("[DeepLink] didReceive notification tap. userInfo keys: \(userInfo.keys)")
         print("[DeepLink] userInfo: \(userInfo)")
+
+        // If a booking was cancelled/declined/rejected, remove the calendar event on this device
+        let calendarRemovalTypes: Set<String> = ["booking_cancelled", "booking_rejected", "booking_declined"]
+        if let type = userInfo["type"] as? String, calendarRemovalTypes.contains(type),
+           let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
+            NotificationManager.removeCalendarEventForCancelledBooking(bookingId: bookingId)
+        }
 
         if let chatId = userInfo["chatId"] as? String, !chatId.isEmpty {
             print("[DeepLink] Found chatId: \(chatId)")
@@ -242,10 +259,108 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             DispatchQueue.main.async {
                 DeepLinkManager.shared.pendingDestination = .stringing(orderId: orderId)
             }
+        } else if let type = userInfo["type"] as? String, let placeId = userInfo["placeId"] as? String, !placeId.isEmpty {
+            if type == "club_join_request" {
+                print("[DeepLink] Club join request for place: \(placeId)")
+                DispatchQueue.main.async {
+                    DeepLinkManager.shared.pendingDestination = .clubJoinRequest(placeId: placeId)
+                }
+            } else if type == "club_approved" {
+                print("[DeepLink] Club approved for place: \(placeId)")
+                DispatchQueue.main.async {
+                    DeepLinkManager.shared.pendingDestination = .clubMembers(placeId: placeId)
+                }
+            } else if type == "club_announcement" {
+                let announcementId = userInfo["announcementId"] as? String ?? ""
+                print("[DeepLink] Club announcement for place: \(placeId), announcement: \(announcementId)")
+                DispatchQueue.main.async {
+                    DeepLinkManager.shared.pendingDestination = .clubAnnouncement(placeId: placeId, announcementId: announcementId)
+                }
+            }
         } else {
             print("[DeepLink] No chatId, bookingId, or stringerOrderId found in notification payload")
         }
 
         completionHandler()
+    }
+
+    // MARK: - Calendar removal for cancelled bookings
+
+    /// Removes the Apple Calendar event for a cancelled booking on this device.
+    /// Reads the per-user calendarEventId from Firestore and deletes the local EKEvent.
+    /// Safe to call multiple times (idempotent).
+    static func removeCalendarEventForCancelledBooking(bookingId: String) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("[CalendarRemoval] No authenticated user, skipping")
+            return
+        }
+
+        let db = Firestore.firestore()
+        let bookingRef = db.collection("bookings").document(bookingId)
+
+        bookingRef.getDocument { snap, err in
+            if let err = err {
+                print("[CalendarRemoval] Failed to read booking \(bookingId): \(err)")
+                return
+            }
+
+            guard let data = snap?.data() else {
+                print("[CalendarRemoval] No booking data for \(bookingId)")
+                return
+            }
+
+            // Look up per-user event ID first, fall back to legacy global field
+            let eventId: String? = {
+                if let perUser = data["calendarEventIds"] as? [String: String],
+                   let id = perUser[uid], !id.isEmpty {
+                    return id
+                }
+                if let global = data["calendarEventId"] as? String, !global.isEmpty {
+                    return global
+                }
+                return nil
+            }()
+
+            guard let eventId = eventId, !eventId.isEmpty else {
+                print("[CalendarRemoval] No calendarEventId for booking \(bookingId), user \(uid)")
+                return
+            }
+
+            let handleAccess: (Bool, Error?) -> Void = { granted, error in
+                guard granted, error == nil else {
+                    print("[CalendarRemoval] Calendar access not granted")
+                    return
+                }
+
+                let store = EKEventStore()
+                if let event = store.event(withIdentifier: eventId) {
+                    do {
+                        try store.remove(event, span: .thisEvent)
+                        print("[CalendarRemoval] Removed calendar event \(eventId) for cancelled booking \(bookingId)")
+
+                        // Clean up per-user entry in Firestore
+                        bookingRef.updateData([
+                            "calendarEventIds.\(uid)": FieldValue.delete(),
+                            "calendarRemovedAt": FieldValue.serverTimestamp(),
+                            "calendarRemovedBy": uid
+                        ]) { _ in }
+                    } catch {
+                        print("[CalendarRemoval] Failed to remove event: \(error)")
+                    }
+                } else {
+                    print("[CalendarRemoval] Event \(eventId) not found on this device (already removed or added on another device)")
+                }
+            }
+
+            if #available(iOS 17.0, *) {
+                EKEventStore().requestFullAccessToEvents { granted, error in
+                    handleAccess(granted, error)
+                }
+            } else {
+                EKEventStore().requestAccess(to: .event) { granted, error in
+                    handleAccess(granted, error)
+                }
+            }
+        }
     }
 }

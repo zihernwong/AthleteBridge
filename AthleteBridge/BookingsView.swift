@@ -182,38 +182,38 @@ struct BookingsView: View {
         print("[DeepLink-Bookings]   bookings count: \(firestore.bookings.count), ids: \(firestore.bookings.map { $0.id })")
         print("[DeepLink-Bookings]   coachBookings count: \(firestore.coachBookings.count), ids: \(firestore.coachBookings.map { $0.id })")
 
+        let notifType = deepLink.pendingBookingType
+        print("[DeepLink-Bookings]   notifType: \(notifType ?? "nil")")
+
+        // If we have a notification type indicating a status change, force a fresh fetch first
+        // This ensures we display the correct updated status
+        let statusChangeTypes = ["booking_cancelled", "booking_rejected", "booking_confirmed", "booking_declined"]
+        if let notifType = notifType, statusChangeTypes.contains(notifType) {
+            print("[DeepLink-Bookings]   Status change notification detected, forcing refresh before displaying")
+            // Clear the booking type to prevent infinite refresh loop
+            deepLink.pendingBookingType = nil
+            pendingDeepLinkBookingId = bookingId
+            firestore.fetchBookingsForCurrentClientSubcollection()
+            firestore.fetchBookingsForCurrentCoachSubcollection()
+            // The onChange handlers will pick up the refreshed data and call handleBookingDeepLink again
+            return
+        }
+
         if let booking = firestore.bookings.first(where: { $0.id == bookingId }) {
-            let notifType = deepLink.pendingBookingType
             let status = (booking.status ?? "").lowercased()
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
             deepLink.pendingBookingType = nil
 
-            if notifType == "booking_rejected" || status == "rejected" || status == "declined" || status == "declined_by_client" {
+            if status == "rejected" || status == "declined" || status == "declined_by_client" {
                 print("[DeepLink-Bookings]   FOUND in client bookings (rejected) → opening RejectedBookingView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForRejection = booking
                 }
-            } else if notifType == "booking_cancelled" || status == "cancelled" {
+            } else if status == "cancelled" {
                 print("[DeepLink-Bookings]   FOUND in client bookings (cancelled) → opening BookingDetailView")
-                let corrected = FirestoreManager.BookingItem(
-                    id: booking.id, clientID: booking.clientID, clientName: booking.clientName,
-                    coachID: booking.coachID, coachName: booking.coachName,
-                    startAt: booking.startAt, endAt: booking.endAt,
-                    location: booking.location, notes: booking.notes,
-                    status: "cancelled", paymentStatus: booking.paymentStatus,
-                    RateUSD: booking.RateUSD, clientIDs: booking.clientIDs,
-                    clientNames: booking.clientNames, coachIDs: booking.coachIDs,
-                    coachNames: booking.coachNames, isGroupBooking: booking.isGroupBooking,
-                    creatorID: booking.creatorID, creatorType: booking.creatorType,
-                    coachAcceptances: booking.coachAcceptances,
-                    clientConfirmations: booking.clientConfirmations,
-                    coachRates: booking.coachRates, coachNote: booking.coachNote,
-                    rejectionReason: booking.rejectionReason, rejectedBy: booking.rejectedBy,
-                    clientDeclineReason: booking.clientDeclineReason
-                )
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.selectedBookingForDetail = corrected
+                    self.selectedBookingForDetail = booking
                 }
             } else if status == "confirmed" || status == "fully_confirmed" || status == "accepted" || status == "approved" {
                 print("[DeepLink-Bookings]   FOUND in client bookings (confirmed) → opening BookingDetailView")
@@ -228,34 +228,16 @@ struct BookingsView: View {
                 }
             }
         } else if let booking = firestore.coachBookings.first(where: { $0.id == bookingId }) {
-            let notifType = deepLink.pendingBookingType
             let status = (booking.status ?? "").lowercased()
             pendingDeepLinkBookingId = nil
             deepLink.pendingDestination = nil
             deepLink.pendingBookingType = nil
-            if notifType == "booking_cancelled" || status == "cancelled" {
+            if status == "cancelled" {
                 print("[DeepLink-Bookings]   FOUND in coach bookings (cancelled) → opening BookingDetailView")
-                // Use corrected status in case local cache is stale
-                let corrected = FirestoreManager.BookingItem(
-                    id: booking.id, clientID: booking.clientID, clientName: booking.clientName,
-                    coachID: booking.coachID, coachName: booking.coachName,
-                    startAt: booking.startAt, endAt: booking.endAt,
-                    location: booking.location, notes: booking.notes,
-                    status: "cancelled", paymentStatus: booking.paymentStatus,
-                    RateUSD: booking.RateUSD, clientIDs: booking.clientIDs,
-                    clientNames: booking.clientNames, coachIDs: booking.coachIDs,
-                    coachNames: booking.coachNames, isGroupBooking: booking.isGroupBooking,
-                    creatorID: booking.creatorID, creatorType: booking.creatorType,
-                    coachAcceptances: booking.coachAcceptances,
-                    clientConfirmations: booking.clientConfirmations,
-                    coachRates: booking.coachRates, coachNote: booking.coachNote,
-                    rejectionReason: booking.rejectionReason, rejectedBy: booking.rejectedBy,
-                    clientDeclineReason: booking.clientDeclineReason
-                )
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.selectedBookingForDetail = corrected
+                    self.selectedBookingForDetail = booking
                 }
-            } else if notifType == "booking_confirmed" || status == "confirmed" || status == "fully_confirmed" {
+            } else if status == "confirmed" || status == "fully_confirmed" {
                 print("[DeepLink-Bookings]   FOUND in coach bookings (confirmed) → navigating to CoachConfirmedBookingsView with bookingId=\(bookingId)")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.confirmedBookingsDeepLinkId = bookingId
@@ -603,7 +585,7 @@ struct BookingRowView: View {
             return Color("LogoBlue")
         case "pending acceptance":
             return .orange
-        case "rejected", "declined", "declined_by_client":
+        case "rejected", "declined", "declined_by_client", "cancelled":
             return .red
         case "partially_accepted", "partially_confirmed":
             return .orange

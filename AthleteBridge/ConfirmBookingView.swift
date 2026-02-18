@@ -476,6 +476,7 @@ struct ConfirmBookingView: View {
                                 "body": "\(clientName) has declined the group booking. Reason: \(reason)",
                                 "bookingId": self.booking.id,
                                 "senderId": clientId,
+                                "type": "booking_declined",
                                 "isGroupBooking": true,
                                 "createdAt": FieldValue.serverTimestamp(),
                                 "delivered": false
@@ -527,6 +528,7 @@ struct ConfirmBookingView: View {
                             "body": "\(clientName) has declined your booking offer. Reason: \(reason)",
                             "bookingId": self.booking.id,
                             "senderId": clientId,
+                            "type": "booking_declined",
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
                         ]

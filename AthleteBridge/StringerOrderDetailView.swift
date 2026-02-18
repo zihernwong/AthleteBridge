@@ -14,19 +14,29 @@ struct StringerOrderDetailView: View {
 
     private var currentUid: String { Auth.auth().currentUser?.uid ?? "" }
 
+    /// Live order from Firestore arrays, falls back to the initially passed order
+    private var liveOrder: StringerOrder {
+        if isStringerView {
+            return firestore.stringerIncomingOrders.first(where: { $0.id == order.id }) ?? order
+        } else {
+            return firestore.myStringerOrders.first(where: { $0.id == order.id }) ?? order
+        }
+    }
+
     private var otherPartyUid: String {
-        isStringerView ? order.createdBy : order.stringerId
+        isStringerView ? liveOrder.createdBy : liveOrder.stringerId
     }
 
     private var otherPartyName: String {
-        isStringerView ? order.buyerName : resolvedStringerName
+        isStringerView ? liveOrder.buyerName : resolvedStringerName
     }
 
     private var resolvedStringerName: String {
-        stringer?.name ?? firestore.stringers.first(where: { $0.id == order.stringerId })?.name ?? "Stringer"
+        stringer?.name ?? firestore.stringers.first(where: { $0.id == liveOrder.stringerId })?.name ?? "Stringer"
     }
 
     var body: some View {
+        let ord = liveOrder
         List {
             // Header
             Section {
@@ -40,29 +50,29 @@ struct StringerOrderDetailView: View {
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    StatusBadge(status: order.status)
+                    StatusBadge(status: ord.status)
                 }
             }
 
             // Order Details
             Section(header: Text("Order Details")) {
-                detailRow(icon: "sportscourt", label: "Racket", value: order.racketName)
+                detailRow(icon: "sportscourt", label: "Racket", value: ord.racketName)
 
-                if order.hasOwnString {
+                if ord.hasOwnString {
                     detailRow(icon: "figure.badminton", label: "String", value: "Own string")
-                } else if let s = order.selectedString {
-                    let costSuffix = order.stringCost.map { !$0.isEmpty ? " (\($0))" : "" } ?? ""
+                } else if let s = ord.selectedString {
+                    let costSuffix = ord.stringCost.map { !$0.isEmpty ? " (\($0))" : "" } ?? ""
                     detailRow(icon: "figure.badminton", label: "String", value: "\(s)\(costSuffix)")
                 }
 
-                detailRow(icon: "gauge", label: "Tension", value: "\(order.tension) lbs")
-                detailRow(icon: "clock", label: "Timeline", value: order.timelinePreference)
+                detailRow(icon: "gauge", label: "Tension", value: "\(ord.tension) lbs")
+                detailRow(icon: "clock", label: "Timeline", value: ord.timelinePreference)
 
-                if let labor = order.laborCost, !labor.isEmpty {
+                if let labor = ord.laborCost, !labor.isEmpty {
                     detailRow(icon: "wrench.and.screwdriver", label: "Labor", value: labor)
                 }
 
-                if let total = order.orderTotal, !total.isEmpty {
+                if let total = ord.orderTotal, !total.isEmpty {
                     HStack {
                         Label("Total", systemImage: "dollarsign.circle")
                             .font(.body)
@@ -78,7 +88,7 @@ struct StringerOrderDetailView: View {
                     Label("Placed", systemImage: "calendar")
                         .font(.body)
                     Spacer()
-                    Text(order.createdAt, style: .date)
+                    Text(ord.createdAt, style: .date)
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
@@ -101,10 +111,14 @@ struct StringerOrderDetailView: View {
                 .listRowBackground(Color.clear)
             }
 
-            // Action Buttons (stringer only)
-            if isStringerView && !isUpdating {
-                actionSection
-            } else if isStringerView && isUpdating {
+            // Action Buttons
+            if !isUpdating {
+                if isStringerView {
+                    stringerActionSection
+                } else {
+                    buyerActionSection
+                }
+            } else {
                 Section {
                     HStack {
                         Spacer()
@@ -116,6 +130,14 @@ struct StringerOrderDetailView: View {
         }
         .navigationTitle("Order Details")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            // Refresh order data so deep-linked views show the latest status
+            if isStringerView {
+                if let s = stringer { firestore.fetchOrdersForStringer(stringerId: s.id) }
+            } else {
+                firestore.fetchOrdersForBuyer()
+            }
+        }
         .sheet(item: $presentedChat) { sheet in
             NavigationStack {
                 ChatView(chatId: sheet.id)
@@ -156,15 +178,15 @@ struct StringerOrderDetailView: View {
         }
     }
 
-    // MARK: - Action Buttons
+    // MARK: - Stringer Action Buttons
 
     @ViewBuilder
-    private var actionSection: some View {
-        switch order.status {
+    private var stringerActionSection: some View {
+        switch liveOrder.status {
         case "placed":
             Section {
                 HStack(spacing: 12) {
-                    Button(action: { updateStatus("accepted") }) {
+                    Button(action: { updateStatusAsStringer("accepted") }) {
                         Text("Accept")
                             .font(.subheadline)
                             .fontWeight(.medium)
@@ -176,7 +198,7 @@ struct StringerOrderDetailView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
-                    Button(action: { updateStatus("declined") }) {
+                    Button(action: { updateStatusAsStringer("declined") }) {
                         Text("Decline")
                             .font(.subheadline)
                             .fontWeight(.medium)
@@ -192,7 +214,7 @@ struct StringerOrderDetailView: View {
 
         case "accepted":
             Section {
-                Button(action: { updateStatus("stringing") }) {
+                Button(action: { updateStatusAsStringer("stringing") }) {
                     Text("Mark as Stringing")
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -207,8 +229,33 @@ struct StringerOrderDetailView: View {
 
         case "stringing":
             Section {
-                Button(action: { updateStatus("completed") }) {
-                    Text("Mark as Completed")
+                Button(action: { updateStatusAsStringer("ready_for_pickup") }) {
+                    Text("Mark as Ready For Pickup")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.teal.opacity(0.15))
+                        .foregroundColor(.teal)
+                        .cornerRadius(8)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: - Buyer Action Buttons
+
+    @ViewBuilder
+    private var buyerActionSection: some View {
+        switch liveOrder.status {
+        case "ready_for_pickup":
+            Section {
+                Button(action: { updateStatusAsBuyer("picked_up") }) {
+                    Text("Mark as Picked Up")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
@@ -225,19 +272,41 @@ struct StringerOrderDetailView: View {
         }
     }
 
-    private func updateStatus(_ newStatus: String) {
+    // MARK: - Status Update Actions
+
+    private func updateStatusAsStringer(_ newStatus: String) {
         guard let stringer = stringer else { return }
         isUpdating = true
+        let ord = liveOrder
         firestore.updateStringerOrderStatus(
-            orderId: order.id,
+            orderId: ord.id,
             status: newStatus,
-            buyerUid: order.createdBy,
+            buyerUid: ord.createdBy,
             stringerName: stringer.name
         ) { err in
             DispatchQueue.main.async {
                 isUpdating = false
                 if err == nil {
                     firestore.fetchOrdersForStringer(stringerId: stringer.id)
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func updateStatusAsBuyer(_ newStatus: String) {
+        isUpdating = true
+        let ord = liveOrder
+        firestore.updateStringerOrderStatusAsBuyer(
+            orderId: ord.id,
+            status: newStatus,
+            stringerUid: ord.stringerId,
+            buyerName: ord.buyerName
+        ) { err in
+            DispatchQueue.main.async {
+                isUpdating = false
+                if err == nil {
+                    firestore.fetchOrdersForBuyer()
                     dismiss()
                 }
             }

@@ -27,8 +27,11 @@ class FirestoreManager: ObservableObject {
         let photoURL: URL?
         var tournamentSoftwareLink: String? = nil
     }
+    @Published var signupEvents: [SignupEvent] = []
     @Published var tournaments: [Tournament] = []
     @Published var placesToPlay: [PlaceToPlay] = []
+    @Published var clubAnnouncements: [String: [ClubAnnouncement]] = [:]  // placeId -> announcements
+    @Published var playersToPlayWith: [PlayerToPlayWith] = []
     @Published var stringers: [BadmintonStringer] = []
     @Published var stringerReviews: [StringerReview] = []
     @Published var stringerOrders: [StringerOrder] = []
@@ -53,6 +56,9 @@ class FirestoreManager: ObservableObject {
     // User preference: whether to automatically add confirmed bookings to the device calendar
     @Published var autoAddToCalendar: Bool = false
 
+    // User preference: whether the user has granted location permission for driving time
+    @Published var locationPermissionGranted: Bool = false
+
     // Track booking IDs currently being processed for calendar add to prevent race conditions
     private var calendarAddInProgress: Set<String> = []
 
@@ -66,8 +72,10 @@ class FirestoreManager: ObservableObject {
             }
             let data = snap?.data() ?? [:]
             let auto = data["autoAddCalendar"] as? Bool ?? false
+            let locPerm = data["locationPermissionGranted"] as? Bool ?? false
             DispatchQueue.main.async {
                 self.autoAddToCalendar = auto
+                self.locationPermissionGranted = locPerm
             }
         }
     }
@@ -79,6 +87,17 @@ class FirestoreManager: ObservableObject {
         let ref = db.collection("userSettings").document(uid)
         ref.setData(["autoAddCalendar": value], merge: true) { err in
             if let err = err { print("setAutoAddToCalendar error: \(err)") }
+            completion?(err)
+        }
+    }
+
+    /// Persist the location permission preference for the current user into Firestore.
+    func setLocationPermissionGranted(_ value: Bool, completion: ((Error?) -> Void)? = nil) {
+        DispatchQueue.main.async { self.locationPermissionGranted = value }
+        guard let uid = Auth.auth().currentUser?.uid else { completion?(nil); return }
+        let ref = db.collection("userSettings").document(uid)
+        ref.setData(["locationPermissionGranted": value], merge: true) { err in
+            if let err = err { print("setLocationPermissionGranted error: \(err)") }
             completion?(err)
         }
     }
@@ -1315,6 +1334,211 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    // MARK: - Signup Events
+
+    func fetchSignupEvents() {
+        self.db.collection("signupEvents").order(by: "eventDate").getDocuments { snap, err in
+            if let err = err {
+                print("fetchSignupEvents error: \(err)")
+                return
+            }
+            let docs = snap?.documents ?? []
+            var results: [SignupEvent] = []
+            for d in docs {
+                let data = d.data()
+                let id = d.documentID
+                let title = data["title"] as? String ?? ""
+                let description = data["description"] as? String ?? ""
+                let location = data["location"] as? String ?? ""
+                let placeId = data["placeId"] as? String ?? ""
+                let placeName = data["placeName"] as? String ?? ""
+                let createdBy = data["createdBy"] as? String ?? ""
+                let maxSignups = data["maxSignups"] as? Int ?? 0
+                let signupCount = data["signupCount"] as? Int ?? 0
+                let eventDate: Date
+                if let ts = data["eventDate"] as? Timestamp {
+                    eventDate = ts.dateValue()
+                } else {
+                    eventDate = Date()
+                }
+                var signups: [SignupEventSignup] = []
+                if let raw = data["signups"] as? [String: Any] {
+                    for (key, value) in raw {
+                        if let info = value as? [String: Any] {
+                            let name = info["name"] as? String ?? ""
+                            let email = info["email"] as? String ?? ""
+                            let userId = info["userId"] as? String
+                            let signedUpAt: Date
+                            if let ts = info["signedUpAt"] as? Timestamp {
+                                signedUpAt = ts.dateValue()
+                            } else {
+                                signedUpAt = Date()
+                            }
+                            let paid = info["paid"] as? Bool ?? false
+                            signups.append(SignupEventSignup(id: key, name: name, email: email, userId: userId, signedUpAt: signedUpAt, paid: paid))
+                        }
+                    }
+                }
+                signups.sort { $0.signedUpAt < $1.signedUpAt }
+                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups))
+            }
+            DispatchQueue.main.async {
+                self.signupEvents = results
+            }
+        }
+    }
+
+    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let data: [String: Any] = [
+            "title": title,
+            "description": description,
+            "eventDate": Timestamp(date: eventDate),
+            "location": location,
+            "placeId": placeId,
+            "placeName": placeName,
+            "maxSignups": maxSignups,
+            "signupCount": 0,
+            "createdBy": uid,
+            "createdAt": FieldValue.serverTimestamp(),
+            "signups": [String: Any]()
+        ]
+        self.db.collection("signupEvents").addDocument(data: data) { err in
+            if let err = err {
+                print("createSignupEvent error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async {
+                self.fetchSignupEvents()
+            }
+            completion(nil)
+        }
+    }
+
+    func signupForEvent(eventId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let userName: String = {
+            if let name = self.currentClient?.name, !name.isEmpty { return name }
+            if let coach = self.currentCoach, !coach.name.isEmpty { return coach.name }
+            return "Unknown"
+        }()
+        let userEmail = Auth.auth().currentUser?.email ?? ""
+        let ref = self.db.collection("signupEvents").document(eventId)
+        self.db.runTransaction({ (transaction, errorPointer) -> Any? in
+            let snapshot: DocumentSnapshot
+            do {
+                try snapshot = transaction.getDocument(ref)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+            guard let data = snapshot.data() else {
+                let err = NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+                errorPointer?.pointee = err
+                return nil
+            }
+            let currentCount = data["signupCount"] as? Int ?? 0
+            let maxSignups = data["maxSignups"] as? Int ?? 0
+            if currentCount >= maxSignups {
+                let err = NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "This event is full"])
+                errorPointer?.pointee = err
+                return nil
+            }
+            // Check if user already signed up
+            if let signups = data["signups"] as? [String: Any] {
+                for (_, value) in signups {
+                    if let info = value as? [String: Any], let existingUid = info["userId"] as? String, existingUid == uid {
+                        let err = NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "You're already signed up"])
+                        errorPointer?.pointee = err
+                        return nil
+                    }
+                }
+            }
+            let key = UUID().uuidString
+            let signupData: [String: Any] = [
+                "name": userName,
+                "email": userEmail,
+                "userId": uid,
+                "signedUpAt": Timestamp(date: Date()),
+                "paid": false
+            ]
+            transaction.updateData([
+                "signups.\(key)": signupData,
+                "signupCount": FieldValue.increment(Int64(1))
+            ], forDocument: ref)
+            return nil
+        }) { [weak self] _, error in
+            if let error = error {
+                print("signupForEvent error: \(error)")
+                completion?(error)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion?(nil)
+        }
+    }
+
+    func removeSignupFromEvent(eventId: String, signupId: String, completion: ((Error?) -> Void)? = nil) {
+        let ref = self.db.collection("signupEvents").document(eventId)
+        ref.updateData([
+            "signups.\(signupId)": FieldValue.delete(),
+            "signupCount": FieldValue.increment(Int64(-1))
+        ]) { [weak self] err in
+            if let err = err {
+                print("removeSignupFromEvent error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion?(nil)
+        }
+    }
+
+    func toggleSignupPaid(eventId: String, signupId: String, paid: Bool) {
+        let ref = self.db.collection("signupEvents").document(eventId)
+        ref.updateData(["signups.\(signupId).paid": paid]) { [weak self] err in
+            if let err = err {
+                print("toggleSignupPaid error: \(err)")
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+        }
+    }
+
+    func updateSignupEventCapacity(eventId: String, newMax: Int, completion: ((Error?) -> Void)? = nil) {
+        let ref = self.db.collection("signupEvents").document(eventId)
+        ref.updateData(["maxSignups": newMax]) { [weak self] err in
+            if let err = err {
+                print("updateSignupEventCapacity error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion?(nil)
+        }
+    }
+
+    func deleteSignupEvent(id: String, completion: ((Error?) -> Void)? = nil) {
+        self.db.collection("signupEvents").document(id).delete { [weak self] err in
+            if let err = err {
+                print("deleteSignupEvent error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion?(nil)
+        }
+    }
+
+    // MARK: - Tournaments
+
     func fetchTournaments() {
         self.db.collection("tournaments").order(by: "startDate").getDocuments { snap, err in
             if let err = err {
@@ -1448,6 +1672,32 @@ class FirestoreManager: ObservableObject {
                 } else if let raw = data["playingTimes"] as? [String: Any] {
                     for (k, v) in raw { timesMap[k] = "\(v)" }
                 }
+                var members: [ClubMember] = []
+                if let raw = data["members"] as? [String: Any] {
+                    for (uid, value) in raw {
+                        if let info = value as? [String: Any] {
+                            let mName = info["name"] as? String ?? ""
+                            let joinedAt: Date
+                            if let ts = info["joinedAt"] as? Timestamp { joinedAt = ts.dateValue() } else { joinedAt = Date() }
+                            members.append(ClubMember(id: uid, name: mName, joinedAt: joinedAt))
+                        }
+                    }
+                }
+                members.sort { $0.joinedAt < $1.joinedAt }
+
+                var pendingMembers: [ClubMember] = []
+                if let raw = data["pendingMembers"] as? [String: Any] {
+                    for (uid, value) in raw {
+                        if let info = value as? [String: Any] {
+                            let mName = info["name"] as? String ?? ""
+                            let requestedAt: Date
+                            if let ts = info["requestedAt"] as? Timestamp { requestedAt = ts.dateValue() } else { requestedAt = Date() }
+                            pendingMembers.append(ClubMember(id: uid, name: mName, joinedAt: requestedAt))
+                        }
+                    }
+                }
+                pendingMembers.sort { $0.joinedAt < $1.joinedAt }
+
                 return PlaceToPlay(
                     id: d.documentID,
                     name: name,
@@ -1456,7 +1706,9 @@ class FirestoreManager: ObservableObject {
                     pricePerSession: data["pricePerSession"] as? String ?? "",
                     createdBy: data["createdBy"] as? String ?? "",
                     contactUid: data["contactUid"] as? String,
-                    contactName: data["contactName"] as? String
+                    contactName: data["contactName"] as? String,
+                    members: members,
+                    pendingMembers: pendingMembers
                 )
             }
             DispatchQueue.main.async {
@@ -1513,7 +1765,11 @@ class FirestoreManager: ObservableObject {
         }()
         self.db.collection("placesToPlay").document(placeId).updateData([
             "contactUid": uid,
-            "contactName": contactName
+            "contactName": contactName,
+            "members.\(uid)": [
+                "name": contactName,
+                "joinedAt": Timestamp(date: Date())
+            ]
         ]) { [weak self] err in
             if let err = err {
                 print("assignPlaceContact error: \(err)")
@@ -1540,6 +1796,340 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    // MARK: - Club Membership
+
+    func requestToJoinClub(placeId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let userName: String = {
+            if let name = self.currentClient?.name, !name.isEmpty { return name }
+            if let coach = self.currentCoach, !coach.name.isEmpty { return coach.name }
+            return "Unknown"
+        }()
+        let ref = self.db.collection("placesToPlay").document(placeId)
+        ref.updateData([
+            "pendingMembers.\(uid)": [
+                "name": userName,
+                "requestedAt": Timestamp(date: Date())
+            ]
+        ]) { [weak self] err in
+            if let err = err {
+                print("requestToJoinClub error: \(err)")
+                completion?(err)
+                return
+            }
+            // Notify the point of contact
+            if let place = self?.placesToPlay.first(where: { $0.id == placeId }),
+               let contactUid = place.contactUid, !contactUid.isEmpty {
+                let notifRef = Firestore.firestore().collection("pendingNotifications").document(contactUid).collection("notifications").document()
+                notifRef.setData([
+                    "title": "New Club Join Request",
+                    "body": "\(userName) wants to join \(place.name)",
+                    "type": "club_join_request",
+                    "placeId": placeId,
+                    "senderId": uid,
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "delivered": false
+                ]) { _ in }
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion?(nil)
+        }
+    }
+
+    func approveClubMember(placeId: String, userId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let place = self.placesToPlay.first(where: { $0.id == placeId }),
+              let pending = place.pendingMembers.first(where: { $0.id == userId }) else {
+            completion?(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Pending member not found"]))
+            return
+        }
+        let ref = self.db.collection("placesToPlay").document(placeId)
+        ref.updateData([
+            "pendingMembers.\(userId)": FieldValue.delete(),
+            "members.\(userId)": [
+                "name": pending.name,
+                "joinedAt": Timestamp(date: Date())
+            ]
+        ]) { [weak self] err in
+            if let err = err {
+                print("approveClubMember error: \(err)")
+                completion?(err)
+                return
+            }
+            // Notify the approved member
+            let notifRef = Firestore.firestore().collection("pendingNotifications").document(userId).collection("notifications").document()
+            notifRef.setData([
+                "title": "Welcome to \(place.name)!",
+                "body": "Your request to join \(place.name) has been approved.",
+                "type": "club_approved",
+                "placeId": placeId,
+                "createdAt": FieldValue.serverTimestamp(),
+                "delivered": false
+            ]) { _ in }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion?(nil)
+        }
+    }
+
+    func rejectClubMember(placeId: String, userId: String, completion: ((Error?) -> Void)? = nil) {
+        let ref = self.db.collection("placesToPlay").document(placeId)
+        ref.updateData([
+            "pendingMembers.\(userId)": FieldValue.delete()
+        ]) { [weak self] err in
+            if let err = err {
+                print("rejectClubMember error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion?(nil)
+        }
+    }
+
+    func removeClubMember(placeId: String, userId: String, completion: ((Error?) -> Void)? = nil) {
+        let ref = self.db.collection("placesToPlay").document(placeId)
+        ref.updateData([
+            "members.\(userId)": FieldValue.delete()
+        ]) { [weak self] err in
+            if let err = err {
+                print("removeClubMember error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion?(nil)
+        }
+    }
+
+    func leaveClub(placeId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let ref = self.db.collection("placesToPlay").document(placeId)
+        ref.updateData([
+            "members.\(uid)": FieldValue.delete()
+        ]) { [weak self] err in
+            if let err = err {
+                print("leaveClub error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
+            completion?(nil)
+        }
+    }
+
+    func sendClubAnnouncement(placeId: String, title: String, body: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        guard let place = self.placesToPlay.first(where: { $0.id == placeId }) else {
+            completion?(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Place not found"]))
+            return
+        }
+        let memberIds = place.members.map { $0.id }
+        guard !memberIds.isEmpty else {
+            completion?(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "No members to notify"]))
+            return
+        }
+
+        // Determine sender name for the stored announcement
+        let senderName = self.currentCoach?.name ?? self.currentClient?.name ?? "Unknown"
+
+        // 1. Store the announcement in the club's subcollection
+        let announcementRef = self.db.collection("placesToPlay").document(placeId).collection("announcements").document()
+        let announcementId = announcementRef.documentID
+        announcementRef.setData([
+            "title": title,
+            "body": body,
+            "senderName": senderName,
+            "createdBy": uid,
+            "createdAt": FieldValue.serverTimestamp()
+        ]) { [weak self] err in
+            if let err = err {
+                print("sendClubAnnouncement: failed to store announcement: \(err)")
+                completion?(err)
+                return
+            }
+            // 2. Send push notifications to all members with the announcementId
+            let batch = self?.db.batch()
+            for memberId in memberIds where memberId != uid {
+                if let notifRef = self?.db.collection("pendingNotifications").document(memberId).collection("notifications").document() {
+                    batch?.setData([
+                        "title": title,
+                        "body": body,
+                        "type": "club_announcement",
+                        "placeId": placeId,
+                        "announcementId": announcementId,
+                        "senderId": uid,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ], forDocument: notifRef)
+                }
+            }
+            batch?.commit { err in
+                if let err = err {
+                    print("sendClubAnnouncement notification error: \(err)")
+                    completion?(err)
+                    return
+                }
+                completion?(nil)
+            }
+        }
+    }
+
+    func fetchClubAnnouncements(placeId: String) {
+        self.db.collection("placesToPlay").document(placeId).collection("announcements")
+            .order(by: "createdAt", descending: true)
+            .getDocuments { [weak self] snap, err in
+                if let err = err {
+                    print("fetchClubAnnouncements error: \(err)")
+                    return
+                }
+                let docs = snap?.documents ?? []
+                let results: [ClubAnnouncement] = docs.compactMap { d in
+                    let data = d.data()
+                    let title = data["title"] as? String ?? ""
+                    let body = data["body"] as? String ?? ""
+                    let senderName = data["senderName"] as? String ?? "Unknown"
+                    let createdBy = data["createdBy"] as? String ?? ""
+                    let createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                    return ClubAnnouncement(
+                        id: d.documentID,
+                        placeId: placeId,
+                        title: title,
+                        body: body,
+                        senderName: senderName,
+                        createdBy: createdBy,
+                        createdAt: createdAt
+                    )
+                }
+                DispatchQueue.main.async {
+                    self?.clubAnnouncements[placeId] = results
+                }
+            }
+    }
+
+    // MARK: - Players to Play With
+
+    func fetchPlayersToPlayWith() {
+        self.db.collection("playersToPlayWith")
+            .order(by: "createdAt", descending: true)
+            .getDocuments { snap, err in
+                if let err = err {
+                    print("fetchPlayersToPlayWith error: \(err)")
+                    return
+                }
+                let docs = snap?.documents ?? []
+                let results: [PlayerToPlayWith] = docs.compactMap { d in
+                    let data = d.data()
+                    let name = data["name"] as? String ?? ""
+                    guard !name.isEmpty else { return nil }
+                    let ts = (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                    return PlayerToPlayWith(
+                        id: d.documentID,
+                        name: name,
+                        skillLevel: data["skillLevel"] as? String ?? "",
+                        city: data["city"] as? String ?? "",
+                        availability: data["availability"] as? [String] ?? [],
+                        connectedVenueIds: data["connectedVenueIds"] as? [String] ?? [],
+                        createdBy: data["createdBy"] as? String ?? d.documentID,
+                        createdAt: ts
+                    )
+                }
+                DispatchQueue.main.async {
+                    self.playersToPlayWith = results
+                }
+            }
+    }
+
+    func addPlayerToPlayWith(completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        // Auto-fill from current profile
+        let name: String = {
+            if let n = self.currentClient?.name, !n.isEmpty { return n }
+            if let c = self.currentCoach, !c.name.isEmpty { return c.name }
+            return "Player"
+        }()
+        let skillLevel: String = {
+            if let s = self.currentClient?.skillLevel, !s.isEmpty { return s }
+            return ""
+        }()
+        let city: String = {
+            if let c = self.currentClient?.city, !c.isEmpty { return c }
+            if let c = self.currentCoach?.city, !c.isEmpty { return c }
+            return ""
+        }()
+        let availability: [String] = {
+            if let a = self.currentClient?.preferredAvailability, !a.isEmpty { return a }
+            if let a = self.currentCoach?.availability, !a.isEmpty { return a }
+            return []
+        }()
+        let data: [String: Any] = [
+            "name": name,
+            "skillLevel": skillLevel,
+            "city": city,
+            "availability": availability,
+            "connectedVenueIds": [String](),
+            "createdBy": uid,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        self.db.collection("playersToPlayWith").document(uid).setData(data) { err in
+            if let err = err {
+                print("addPlayerToPlayWith error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async { self.fetchPlayersToPlayWith() }
+            completion(nil)
+        }
+    }
+
+    func updatePlayerToPlayWith(skillLevel: String, city: String, availability: [String], connectedVenueIds: [String], completion: @escaping (Error?) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let updates: [String: Any] = [
+            "skillLevel": skillLevel,
+            "city": city,
+            "availability": availability,
+            "connectedVenueIds": connectedVenueIds
+        ]
+        self.db.collection("playersToPlayWith").document(uid).updateData(updates) { err in
+            if let err = err {
+                print("updatePlayerToPlayWith error: \(err)")
+                completion(err)
+                return
+            }
+            DispatchQueue.main.async { self.fetchPlayersToPlayWith() }
+            completion(nil)
+        }
+    }
+
+    func deletePlayerToPlayWith(completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        self.db.collection("playersToPlayWith").document(uid).delete { err in
+            if let err = err {
+                print("deletePlayerToPlayWith error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self.fetchPlayersToPlayWith() }
+            completion?(nil)
+        }
+    }
+
     // MARK: - Badminton Stringers
 
     func fetchStringers() {
@@ -1559,10 +2149,25 @@ class FirestoreManager: ObservableObject {
                 } else if let raw = data["stringsOffered"] as? [String: Any] {
                     for (k, v) in raw { stringsMap[k] = "\(v)" }
                 }
+                // Parse rich meetup locations (with coordinates)
+                var locations: [StringerLocation] = []
+                if let rawLocs = data["meetupLocations"] as? [[String: Any]] {
+                    for loc in rawLocs {
+                        let locId = loc["id"] as? String ?? UUID().uuidString
+                        let locName = loc["name"] as? String ?? ""
+                        let locAddr = loc["address"] as? String ?? ""
+                        let lat = loc["latitude"] as? Double ?? 0
+                        let lng = loc["longitude"] as? Double ?? 0
+                        if !locName.isEmpty {
+                            locations.append(StringerLocation(id: locId, name: locName, address: locAddr, latitude: lat, longitude: lng))
+                        }
+                    }
+                }
                 return BadmintonStringer(
                     id: d.documentID,
                     name: name,
                     meetupLocationNames: data["meetupLocationNames"] as? [String] ?? [],
+                    meetupLocations: locations,
                     stringsOffered: stringsMap,
                     laborCost: data["laborCost"] as? String ?? "",
                     createdBy: data["createdBy"] as? String ?? ""
@@ -1574,14 +2179,24 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func addStringer(name: String, meetupLocationNames: [String], stringsOffered: [String: String], laborCost: String, completion: @escaping (Error?) -> Void) {
+    func addStringer(name: String, meetupLocationNames: [String], stringsOffered: [String: String], laborCost: String, meetupLocations: [StringerLocation] = [], completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
         }
+        let locationsData: [[String: Any]] = meetupLocations.map { loc in
+            [
+                "id": loc.id,
+                "name": loc.name,
+                "address": loc.address,
+                "latitude": loc.latitude,
+                "longitude": loc.longitude
+            ]
+        }
         let data: [String: Any] = [
             "name": name,
             "meetupLocationNames": meetupLocationNames,
+            "meetupLocations": locationsData,
             "stringsOffered": stringsOffered,
             "laborCost": laborCost,
             "createdBy": uid,
@@ -3413,9 +4028,15 @@ class FirestoreManager: ObservableObject {
         completion(.failure(NSError(domain: "Cloudinary", code: 0, userInfo: [NSLocalizedDescriptionKey: "Cloudinary not configured"])))
     }
 
+    @Published var toastMessage: String? = nil
+
     func showToast(_ message: String) {
-        // placeholder for UI toast handling
-        print("Toast: \(message)")
+        toastMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            if self?.toastMessage == message {
+                self?.toastMessage = nil
+            }
+        }
     }
 
     // Upload profile image to Firebase Storage and return a download URL.
@@ -5397,9 +6018,16 @@ extension FirestoreManager {
                 .document(buyerUid)
                 .collection("notifications")
                 .document()
+            let displayStatus: String = {
+                switch status {
+                case "ready_for_pickup": return "Ready For Pickup"
+                case "picked_up": return "Picked Up"
+                default: return status.capitalized
+                }
+            }()
             let notifData: [String: Any] = [
                 "title": "Stringing Order Update",
-                "body": "\(stringerName) updated your order status to \(status)",
+                "body": "\(stringerName) updated your order status to \(displayStatus)",
                 "type": "stringer_order_update",
                 "stringerOrderId": orderId,
                 "createdAt": FieldValue.serverTimestamp(),
@@ -5408,6 +6036,40 @@ extension FirestoreManager {
             notifRef.setData(notifData) { nerr in
                 if let nerr = nerr {
                     print("updateStringerOrderStatus notification error: \(nerr)")
+                }
+            }
+            completion(nil)
+        }
+    }
+
+    /// Update a stringing order status as the buyer (e.g. marking as picked up) and notify the stringer.
+    func updateStringerOrderStatusAsBuyer(orderId: String, status: String, stringerUid: String, buyerName: String, completion: @escaping (Error?) -> Void) {
+        self.db.collection("stringerOrders").document(orderId).updateData([
+            "status": status,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]) { err in
+            if let err = err {
+                print("updateStringerOrderStatusAsBuyer error: \(err)")
+                completion(err)
+                return
+            }
+            // Notify the stringer of the status change
+            let notifRef = self.db.collection("pendingNotifications")
+                .document(stringerUid)
+                .collection("notifications")
+                .document()
+            let displayStatus = status == "picked_up" ? "Picked Up" : status.replacingOccurrences(of: "_", with: " ").capitalized
+            let notifData: [String: Any] = [
+                "title": "Stringing Order Update",
+                "body": "\(buyerName) marked their order as \(displayStatus)",
+                "type": "stringer_order_update",
+                "stringerOrderId": orderId,
+                "createdAt": FieldValue.serverTimestamp(),
+                "delivered": false
+            ]
+            notifRef.setData(notifData) { nerr in
+                if let nerr = nerr {
+                    print("updateStringerOrderStatusAsBuyer notification error: \(nerr)")
                 }
             }
             completion(nil)

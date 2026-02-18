@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 private let presetStrings = [
     "BG65", "BG65T", "BG66F", "BG66UM", "BG80", "BG80P",
@@ -8,12 +9,80 @@ private let presetStrings = [
 struct StringersView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @StateObject private var locationManager = LocationManager.shared
     @State private var showAddSheet = false
+    @State private var mapPosition: MapCameraPosition = .automatic
 
     private var currentUid: String { auth.user?.uid ?? "" }
 
+    /// Stringers that have at least one location with coordinates.
+    private var stringersWithLocations: [BadmintonStringer] {
+        firestore.stringers.filter { !$0.meetupLocations.isEmpty }
+    }
+
+    /// All stringer annotations for the map (one per meetup location).
+    private var mapAnnotations: [StringerMapPin] {
+        stringersWithLocations.flatMap { stringer in
+            stringer.meetupLocations.map { loc in
+                StringerMapPin(
+                    id: "\(stringer.id)_\(loc.id)",
+                    stringerId: stringer.id,
+                    name: stringer.name,
+                    locationName: loc.name,
+                    coordinate: CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude)
+                )
+            }
+        }
+    }
+
+    /// Stringers sorted by closest meetup location to user, if location is available.
+    private var sortedStringers: [BadmintonStringer] {
+        guard let userLoc = locationManager.currentLocation else {
+            return firestore.stringers
+        }
+        let userCL = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
+        return firestore.stringers.sorted { a, b in
+            let distA = a.meetupLocations.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: userCL) }.min() ?? Double.greatestFiniteMagnitude
+            let distB = b.meetupLocations.map { CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: userCL) }.min() ?? Double.greatestFiniteMagnitude
+            return distA < distB
+        }
+    }
+
+    private var mapSectionHeader: some View {
+        Text("Find Nearest Stringers")
+            .font(.subheadline)
+            .fontWeight(.semibold)
+            .foregroundColor(.primary)
+            .textCase(nil)
+    }
+
+    private var mapSectionFooter: some View {
+        Text("Based on your real-time location or profile zip code")
+            .font(.caption2)
+    }
+
+    private var mapContent: some View {
+        Map(position: $mapPosition) {
+            ForEach(mapAnnotations) { pin in
+                Marker(pin.name, coordinate: pin.coordinate)
+                    .tint(Color("LogoGreen"))
+            }
+            UserAnnotation()
+        }
+        .frame(height: 250)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+    }
+
     var body: some View {
         List {
+            // Map section
+            if !mapAnnotations.isEmpty {
+                Section(header: mapSectionHeader, footer: mapSectionFooter) {
+                    mapContent
+                }
+            }
+
             Section {
                 NavigationLink {
                     MyStringerOrdersView()
@@ -32,7 +101,7 @@ struct StringersView: View {
                 Text("No stringers registered yet. Be the first!")
                     .foregroundColor(.secondary)
             } else {
-                ForEach(firestore.stringers) { stringer in
+                ForEach(sortedStringers) { stringer in
                     NavigationLink {
                         StringerDetailView(stringer: stringer)
                             .environmentObject(firestore)
@@ -42,11 +111,29 @@ struct StringersView: View {
                             Text(stringer.name)
                                 .font(.headline)
 
-                            if !stringer.meetupLocationNames.isEmpty {
+                            if !stringer.meetupLocations.isEmpty {
+                                HStack(alignment: .top, spacing: 4) {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .foregroundColor(.secondary)
+                                    Text(stringer.meetupLocations.map { $0.name }.joined(separator: ", "))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            } else if !stringer.meetupLocationNames.isEmpty {
                                 HStack(alignment: .top, spacing: 4) {
                                     Image(systemName: "mappin.and.ellipse")
                                         .foregroundColor(.secondary)
                                     Text(stringer.meetupLocationNames.joined(separator: ", "))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            if let distText = distanceText(for: stringer) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "location")
+                                        .foregroundColor(.secondary)
+                                    Text(distText)
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
@@ -79,8 +166,9 @@ struct StringersView: View {
                     }
                 }
                 .onDelete { indexSet in
+                    let sorted = sortedStringers
                     for index in indexSet {
-                        let stringer = firestore.stringers[index]
+                        let stringer = sorted[index]
                         if stringer.id == currentUid {
                             firestore.deleteStringer(id: stringer.id)
                         }
@@ -103,8 +191,35 @@ struct StringersView: View {
         }
         .onAppear {
             firestore.fetchStringers()
+            locationManager.requestPermission()
+            locationManager.requestLocation()
         }
     }
+
+    private func distanceText(for stringer: BadmintonStringer) -> String? {
+        guard let userLoc = locationManager.currentLocation,
+              !stringer.meetupLocations.isEmpty else { return nil }
+        let userCL = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
+        guard let closest = stringer.meetupLocations
+            .map({ CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: userCL) })
+            .min() else { return nil }
+        let miles = closest / 1609.34
+        if miles < 1 {
+            return String(format: "%.1f mi away", miles)
+        } else {
+            return String(format: "%.0f mi away", miles)
+        }
+    }
+}
+
+// MARK: - Map Pin Model
+
+struct StringerMapPin: Identifiable {
+    let id: String
+    let stringerId: String
+    let name: String
+    let locationName: String
+    let coordinate: CLLocationCoordinate2D
 }
 
 // MARK: - Display strings with costs
@@ -153,8 +268,8 @@ struct AddStringerView: View {
     @State private var laborCost = ""
     @State private var isSaving = false
 
-    // Meetup locations
-    @State private var locationInputs: [String] = [""]
+    // Meetup locations (rich)
+    @State private var selectedLocations: [StringerLocation] = []
 
     private var allOfferedStrings: [String: String] {
         var result: [String: String] = [:]
@@ -165,12 +280,6 @@ struct AddStringerView: View {
             result[s] = stringCosts[s] ?? ""
         }
         return result
-    }
-
-    private var meetupNames: [String] {
-        locationInputs
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
     }
 
     private var isValid: Bool {
@@ -188,20 +297,27 @@ struct AddStringerView: View {
                 }
 
                 Section(header: Text("Meetup Locations")) {
-                    ForEach(locationInputs.indices, id: \.self) { index in
+                    ForEach(selectedLocations) { loc in
                         HStack {
-                            TextField("Location name", text: $locationInputs[index])
-                            if locationInputs.count > 1 {
-                                Button(action: { locationInputs.remove(at: index) }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red)
-                                }
-                                .buttonStyle(BorderlessButtonStyle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(loc.name)
+                                    .font(.subheadline)
+                                Text(loc.address)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
+                            Spacer()
+                            Button {
+                                selectedLocations.removeAll { $0.id == loc.id }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    Button(action: { locationInputs.append("") }) {
-                        Label("Add Location", systemImage: "plus.circle.fill")
+                    AddressSearchBar { location in
+                        selectedLocations.append(location)
                     }
                 }
 
@@ -276,21 +392,17 @@ struct AddStringerView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         isSaving = true
-                        let names = meetupNames
+                        let names = selectedLocations.map { $0.name }
                         firestore.addStringer(
                             name: stringerName.trimmingCharacters(in: .whitespacesAndNewlines),
                             meetupLocationNames: names,
                             stringsOffered: allOfferedStrings,
-                            laborCost: laborCost.trimmingCharacters(in: .whitespacesAndNewlines)
+                            laborCost: laborCost.trimmingCharacters(in: .whitespacesAndNewlines),
+                            meetupLocations: selectedLocations
                         ) { err in
                             DispatchQueue.main.async {
                                 isSaving = false
-                                if err == nil {
-                                    for loc in names {
-                                        firestore.addSimpleLocation(name: loc)
-                                    }
-                                    dismiss()
-                                }
+                                if err == nil { dismiss() }
                             }
                         }
                     }
@@ -313,7 +425,7 @@ struct AddStringerView: View {
 
 // MARK: - String row with checkbox and cost
 
-private struct StringRow: View {
+struct StringRow: View {
     let name: String
     let isSelected: Bool
     @Binding var cost: String

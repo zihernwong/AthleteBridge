@@ -16,6 +16,8 @@
 	<string>2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Allow access to your location to calculate driving time to places to play</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>6.0</string>
 	<key>NSCalendarsUsageDescription</key>

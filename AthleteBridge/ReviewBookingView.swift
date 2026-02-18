@@ -91,146 +91,220 @@ struct ReviewBookingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Review Booking")
-                    .font(.largeTitle)
-                    .bold()
+            ZStack {
+                // Subtle background logo watermark
+                if let bg = appLogoImageSwiftUI() {
+                    bg
+                        .resizable()
+                        .scaledToFit()
+                        .opacity(0.04)
+                        .frame(maxWidth: 400)
+                        .allowsHitTesting(false)
+                }
 
-                if isMultiCoachBooking {
-                    // Multi-coach group booking: show each coach with their rate
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Coaches & Rates")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Header with icon
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar.badge.checkmark")
+                                .font(.system(size: 32))
+                                .foregroundColor(Color("LogoGreen"))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Review Booking")
+                                    .font(.title2)
+                                    .bold()
+                                Text("Please review and confirm the details below")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.bottom, 4)
 
-                        ForEach(coachRatesForDisplay, id: \.id) { coach in
-                            HStack {
-                                Text(coach.name)
-                                    .font(.headline)
-                                Spacer()
-                                if let rate = coach.rate {
-                                    Text(String(format: "$%.2f", rate))
+                        // Coach & Rate Card
+                        VStack(alignment: .leading, spacing: 12) {
+                            if isMultiCoachBooking {
+                                Label("Coaches & Rates", systemImage: "person.2.fill")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color("LogoBlue"))
+
+                                ForEach(coachRatesForDisplay, id: \.id) { coach in
+                                    HStack {
+                                        Image(systemName: "person.circle.fill")
+                                            .foregroundColor(Color("LogoGreen"))
+                                        Text(coach.name)
+                                            .font(.body)
+                                            .fontWeight(.medium)
+                                        Spacer()
+                                        if let rate = coach.rate {
+                                            Text(String(format: "$%.2f/hr", rate))
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(Color("LogoGreen"))
+                                        } else {
+                                            Text("Rate pending")
+                                                .font(.subheadline)
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                }
+
+                                Divider()
+
+                                HStack {
+                                    Text("Total")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
-                                } else {
-                                    Text("Rate pending")
+                                    if durationMinutes > 0 {
+                                        Text("(\(durationMinutes) mins)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(totalCombinedCostDisplayText)
+                                        .font(.title3)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(Color("LogoGreen"))
+                                }
+                            } else {
+                                Label("Coach", systemImage: "person.fill")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color("LogoBlue"))
+
+                                HStack {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(Color("LogoGreen"))
+                                    Text(coachDisplayName)
+                                        .font(.body)
+                                        .fontWeight(.medium)
+                                    Spacer()
+                                    Text(rateDisplayText + "/hr")
                                         .font(.subheadline)
-                                        .foregroundColor(.orange)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(Color("LogoGreen"))
+                                }
+
+                                Divider()
+
+                                HStack {
+                                    Text("Total")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    if durationMinutes > 0 {
+                                        Text("(\(durationMinutes) mins)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(totalCostDisplayText)
+                                        .font(.title3)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(Color("LogoGreen"))
                                 }
                             }
-                            .padding(.vertical, 4)
                         }
-                    }
+                        .padding()
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(12)
 
-                    // Total Combined Booking Cost
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Total Booking Cost")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            if durationMinutes > 0 {
-                                Text("(\(durationMinutes) mins)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                        // Schedule Card
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Schedule", systemImage: "clock.fill")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(Color("LogoBlue"))
+
+                            if let start = booking.startAt {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "play.circle.fill")
+                                        .foregroundColor(Color("LogoGreen"))
+                                    Text(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))
+                                        .font(.body)
+                                }
+                            }
+                            if let end = booking.endAt {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "stop.circle.fill")
+                                        .foregroundColor(.red.opacity(0.7))
+                                    Text(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))
+                                        .font(.body)
+                                }
                             }
                         }
-                        Text(totalCombinedCostDisplayText)
-                            .font(.headline)
-                    }
-                } else {
-                    // Single coach booking: show original layout
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Coach")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(coachDisplayName)
-                            .font(.headline)
-                    }
+                        .padding()
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(12)
 
-                    // Rate
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Rate")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(rateDisplayText)
-                            .font(.headline)
-                    }
+                        // Notes Card (if any)
+                        if (booking.notes != nil && !booking.notes!.isEmpty) || (booking.coachNote != nil && !booking.coachNote!.isEmpty) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Notes", systemImage: "note.text")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color("LogoBlue"))
 
-                    // Total Booking Cost
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Total Booking Cost")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            if durationMinutes > 0 {
-                                Text("(\(durationMinutes) mins)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                if let notes = booking.notes, !notes.isEmpty {
+                                    Text(notes)
+                                        .font(.body)
+                                        .foregroundColor(.primary)
+                                }
+
+                                if let note = booking.coachNote, !note.isEmpty {
+                                    Divider()
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("From Coach")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text(note)
+                                            .font(.body)
+                                            .foregroundColor(.primary)
+                                    }
+                                }
+                            }
+                            .padding()
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(12)
+                        }
+
+                        // Action buttons
+                        HStack(spacing: 12) {
+                            Button {
+                                showDeclineSheet = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "xmark")
+                                    Text("Decline")
+                                }
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color("LogoBlue"))
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                            }
+
+                            Button {
+                                confirmOrDecline(status: "confirmed")
+                            } label: {
+                                HStack {
+                                    Image(systemName: "checkmark")
+                                    Text("Confirm")
+                                }
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color("LogoGreen"))
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
                             }
                         }
-                        Text(totalCostDisplayText)
-                            .font(.headline)
+                        .padding(.top, 8)
                     }
+                    .padding()
                 }
-
-                if let start = booking.startAt {
-                    Text("Start: \(DateFormatter.localizedString(from: start, dateStyle: .medium, timeStyle: .short))")
-                }
-                if let end = booking.endAt {
-                    Text("End: \(DateFormatter.localizedString(from: end, dateStyle: .medium, timeStyle: .short))")
-                }
-
-                if let notes = booking.notes, !notes.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Notes")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(notes)
-                            .font(.body)
-                    }
-                }
-
-                if let note = booking.coachNote, !note.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Coach Note")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(note)
-                            .font(.body)
-                    }
-                }
-
-                Spacer()
-
-                // Action buttons: Decline (left) and Confirm (right)
-                HStack {
-                    Button {
-                        showDeclineSheet = true
-                    } label: {
-                        Text("Decline")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color("LogoBlue"))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-
-                    Button {
-                        confirmOrDecline(status: "confirmed")
-                    } label: {
-                        Text("Confirm Booking")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color("LogoGreen"))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                }
-                .padding(.top)
-
-                Spacer()
             }
-            .padding()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -330,6 +404,7 @@ struct ReviewBookingView: View {
                                 "body": "\(clientName) has declined the group booking. Reason: \(reason)",
                                 "bookingId": self.booking.id,
                                 "senderId": clientId,
+                                "type": "booking_declined",
                                 "isGroupBooking": true,
                                 "createdAt": FieldValue.serverTimestamp(),
                                 "delivered": false
@@ -377,6 +452,7 @@ struct ReviewBookingView: View {
                                     "body": "\(clientName) has declined your booking offer. Reason: \(reason)",
                                     "bookingId": self.booking.id,
                                     "senderId": clientId,
+                                    "type": "booking_declined",
                                     "createdAt": FieldValue.serverTimestamp(),
                                     "delivered": false
                                 ]

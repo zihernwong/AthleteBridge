@@ -1,8 +1,8 @@
 import SwiftUI
 import FirebaseAuth
 
-private let weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-private let weekdayAbbrev: [String: String] = [
+let weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+let weekdayAbbrev: [String: String] = [
     "Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed",
     "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"
 ]
@@ -24,69 +24,80 @@ struct PlacesToPlayView: View {
                     .foregroundColor(.secondary)
             } else {
                 ForEach(firestore.placesToPlay) { place in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(place.name)
-                            .font(.headline)
+                    NavigationLink {
+                        PlaceDetailView(place: place)
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(place.name)
+                                .font(.headline)
 
-                        if !place.address.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "mappin.and.ellipse")
-                                    .foregroundColor(.secondary)
-                                Text(place.address)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                            if !place.address.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .foregroundColor(.secondary)
+                                    Text(place.address)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                        }
 
-                        if !place.pricePerSession.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "dollarsign.circle")
-                                    .foregroundColor(.secondary)
-                                Text(place.pricePerSession)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                            if !place.pricePerSession.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "dollarsign.circle")
+                                        .foregroundColor(.secondary)
+                                    Text(place.pricePerSession)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                        }
 
-                        if !place.playingTimes.isEmpty {
-                            WeeklyScheduleDisplay(schedule: place.playingTimes)
-                        }
+                            if !place.playingTimes.isEmpty {
+                                WeeklyScheduleDisplay(schedule: place.playingTimes)
+                            }
 
-                        // Contact card
-                        if let contactName = place.contactName, let contactUid = place.contactUid, !contactUid.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Divider()
-                                HStack(spacing: 8) {
-                                    Image(systemName: "person.circle.fill")
-                                        .font(.title2)
+                            if !place.members.isEmpty {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "person.2.fill")
                                         .foregroundColor(Color("LogoGreen"))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Contact")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                        Text(contactName)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                    }
-                                    Spacer()
-                                    if contactUid != currentUid {
-                                        Button(action: { openChat(withUid: contactUid) }) {
-                                            Label("Message", systemImage: "message.fill")
-                                                .font(.caption)
+                                    Text("\(place.members.count) member\(place.members.count == 1 ? "" : "s")")
+                                        .font(.subheadline)
+                                        .foregroundColor(Color("LogoGreen"))
+                                }
+                            }
+
+                            // Contact info with message icon
+                            if let contactUid = place.contactUid, !contactUid.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Divider()
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.title2)
+                                            .foregroundColor(Color("LogoGreen"))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Contact")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                            Text(place.contactName ?? "Contact")
+                                                .font(.subheadline)
                                                 .fontWeight(.medium)
-                                                .padding(.horizontal, 12)
-                                                .padding(.vertical, 6)
-                                                .background(Color("LogoBlue"))
-                                                .foregroundColor(.white)
-                                                .cornerRadius(8)
                                         }
-                                        .buttonStyle(PlainButtonStyle())
+                                        Spacer()
+                                        if contactUid != currentUid {
+                                            Button(action: { openChat(withUid: contactUid) }) {
+                                                Image(systemName: "message.fill")
+                                                    .font(.title3)
+                                                    .foregroundColor(Color("LogoBlue"))
+                                            }
+                                            .buttonStyle(BorderlessButtonStyle())
+                                        }
                                     }
                                 }
                             }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
                 .onDelete { indexSet in
                     for index in indexSet {
@@ -142,7 +153,7 @@ struct PlacesToPlayView: View {
 
 // MARK: - Weekly Schedule Display
 
-private struct WeeklyScheduleDisplay: View {
+struct WeeklyScheduleDisplay: View {
     let schedule: [String: String]
 
     var body: some View {

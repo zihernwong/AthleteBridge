@@ -198,6 +198,7 @@ struct CoachConfirmedBookingsView: View {
                             "body": "\(coachName) has cancelled the booking.",
                             "bookingId": booking.id,
                             "senderId": booking.coachID,
+                            "type": "booking_cancelled",
                             "createdAt": FieldValue.serverTimestamp(),
                             "delivered": false
                         ]

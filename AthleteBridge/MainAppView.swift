@@ -24,69 +24,47 @@ struct MainAppView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Messages tab (placeholder) — moved Locations into Bookings
+            // Messages tab
             RequiresProfile(content: { messagesTab }, selectedTab: $selectedTab)
                 .tabItem { Label("Messages", systemImage: "message") }
                 .badge(firestore.unreadChatIds.count)
                 .tag(4)
 
-            // Home (or Payments for coaches)
-            RequiresProfile(content: { homeOrPaymentsTab() }, selectedTab: $selectedTab)
+            // Home tab for both clients and coaches
+            RequiresProfile(content: { homeTab }, selectedTab: $selectedTab)
                 .tabItem {
-                    let homeTitle = isCoachUserComputed ? "Payments" : "Home"
-                    let homeIcon = isCoachUserComputed ? "creditcard" : "house"
-                    Label(homeTitle, systemImage: homeIcon)
+                    Label("Home", systemImage: "house")
                 }
                 .tag(1)
 
-            // For coaches, Profile tab goes here (swapped with Reviews)
-            if isCoachUserComputed {
-                ProfileView()
-                    .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-                    .tag(0)
-            }
-
-            // Bookings tab wrapper: shows BookingsView and exposes Locations as a navigable page.
+            // Bookings tab
             RequiresProfile(content: { bookingsTab }, selectedTab: $selectedTab)
                 .tabItem { Label("Bookings", systemImage: "calendar") }
                 .tag(3)
 
-            // For clients, Profile tab goes here (swapped with Stringing)
-            if !isCoachUserComputed {
-                ProfileView()
-                    .tabItem { Label("Profile", systemImage: "person.crop.circle") }
-                    .tag(0)
-            }
+            // Payments tab
+            RequiresProfile(content: { paymentsTab }, selectedTab: $selectedTab)
+                .tabItem { Label("Payments", systemImage: "creditcard") }
+                .tag(5)
 
-            // Stringing tab
-            RequiresProfile(content: { stringingTab }, selectedTab: $selectedTab)
-                .tabItem { Label("Stringing", systemImage: "scissors") }
-                .tag(7)
-
-            // For coaches, Reviews goes here (swapped with Profile)
-            if isCoachUserComputed {
-                RequiresProfile(content: { NavigationStack { ReviewsView() } }, selectedTab: $selectedTab)
-                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
-                    .tag(2)
-            }
-
-            // Additional Payments tab for clients (keep Home intact and all existing tabs)
-            if !isCoachUserComputed {
-                RequiresProfile(content: { paymentsTab }, selectedTab: $selectedTab)
-                    .tabItem { Label("Payments", systemImage: "creditcard") }
-                    .tag(5)
-
-                // Move Reviews to overflow (More) for clients
-                RequiresProfile(content: { ReviewsView() }, selectedTab: $selectedTab)
-                    .tabItem { Label("Reviews", systemImage: "star.bubble") }
-                    .tag(6)
-            }
-
-            // Places to Play Contact tab (only when role is selected)
-            if firestore.currentAdditionalTypes.contains(AdditionalUserType.placesToPlayContact.rawValue) {
-                RequiresProfile(content: { placesToPlayContactTab }, selectedTab: $selectedTab)
-                    .tabItem { Label("Places Contact", systemImage: "location.fill") }
-                    .tag(8)
+            // Profile tab — always far right
+            ProfileView()
+                .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+                .tag(0)
+        }
+        .overlay(alignment: .top) {
+            if let message = firestore.toastMessage {
+                Text(message)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(24)
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: firestore.toastMessage)
             }
         }
         .tint(Color("LogoGreen"))
@@ -114,8 +92,12 @@ struct MainAppView: View {
                     selectedTab = isCoachUserComputed ? 1 : 5
                     deepLink.pendingDestination = nil
                 case .stringing(let orderId):
-                    selectedTab = 7
+                    selectedTab = 1
                     if orderId == nil { deepLink.pendingDestination = nil }
+                case .clubJoinRequest, .clubMembers:
+                    selectedTab = 1
+                case .clubAnnouncement:
+                    selectedTab = 1
                 }
             }
         }
@@ -129,8 +111,12 @@ struct MainAppView: View {
                 selectedTab = isCoachUserComputed ? 1 : 5
                 deepLink.pendingDestination = nil
             case .stringing(let orderId):
-                selectedTab = 7
+                selectedTab = 1
                 if orderId == nil { deepLink.pendingDestination = nil }
+            case .clubJoinRequest, .clubMembers:
+                selectedTab = 1
+            case .clubAnnouncement:
+                selectedTab = 1
             }
         }
         .onChange(of: auth.user?.uid) { _old, _new in
@@ -153,11 +139,20 @@ struct MainAppView: View {
         }
     }
 
+    @ViewBuilder
     private var homeTab: some View {
         NavigationStack {
-            ClientFormView()
-                .environmentObject(firestore)
-                .environmentObject(auth)
+            if isCoachUserComputed {
+                CoachHomeView()
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+                    .environmentObject(deepLink)
+            } else {
+                ClientFormView()
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+                    .environmentObject(deepLink)
+            }
         }
     }
 
@@ -244,21 +239,6 @@ struct MainAppView: View {
         }
     }
 
-    private var placesToPlayContactTab: some View {
-        NavigationStack {
-            PlacesToPlayContactView()
-                .environmentObject(firestore)
-        }
-    }
-
-    @ViewBuilder
-    private func homeOrPaymentsTab() -> some View {
-        if isCoachUserComputed {
-            paymentsTab
-        } else {
-            homeTab
-        }
-    }
 }
 
 struct MainAppView_Previews: PreviewProvider {

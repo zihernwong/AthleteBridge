@@ -325,6 +325,22 @@ struct Tournament: Identifiable, Hashable {
     }
 }
 
+struct ClubAnnouncement: Identifiable, Hashable {
+    let id: String          // Firestore doc ID
+    let placeId: String
+    let title: String
+    let body: String
+    let senderName: String
+    let createdBy: String   // sender UID
+    let createdAt: Date
+}
+
+struct ClubMember: Identifiable, Hashable {
+    let id: String      // user UID
+    let name: String
+    let joinedAt: Date
+}
+
 struct PlaceToPlay: Identifiable, Hashable {
     let id: String
     let name: String
@@ -335,12 +351,34 @@ struct PlaceToPlay: Identifiable, Hashable {
     let createdBy: String
     let contactUid: String?
     let contactName: String?
+    let members: [ClubMember]
+    let pendingMembers: [ClubMember]
+}
+
+struct PlayerToPlayWith: Identifiable, Hashable {
+    let id: String          // Firestore doc ID (= user's UID)
+    let name: String
+    let skillLevel: String
+    let city: String
+    let availability: [String]
+    let connectedVenueIds: [String]
+    let createdBy: String
+    let createdAt: Date
+}
+
+struct StringerLocation: Identifiable, Hashable {
+    let id: String       // UUID string
+    let name: String     // display name from search result
+    let address: String  // full address string
+    let latitude: Double
+    let longitude: Double
 }
 
 struct BadmintonStringer: Identifiable, Hashable {
     let id: String
     let name: String
-    let meetupLocationNames: [String]
+    let meetupLocationNames: [String]       // legacy: plain name strings
+    let meetupLocations: [StringerLocation] // rich locations with coordinates
     /// Maps string name to additional cost (e.g. "BG65" -> "$5")
     let stringsOffered: [String: String]
     let laborCost: String // labor price per racket (e.g. "$10")
@@ -372,4 +410,32 @@ struct StringerOrder: Identifiable, Hashable {
     let createdAt: Date
     let status: String // "placed", "accepted", "stringing", "completed", "declined"
     let buyerName: String
+}
+
+// MARK: - Signup Events
+
+struct SignupEventSignup: Identifiable, Hashable {
+    let id: String          // map key
+    let name: String
+    let email: String
+    let userId: String?     // nil for web signups
+    let signedUpAt: Date
+    let paid: Bool
+}
+
+struct SignupEvent: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let description: String
+    let eventDate: Date
+    let location: String
+    let placeId: String      // linked PlaceToPlay document ID
+    let placeName: String    // denormalized place name for display
+    let maxSignups: Int
+    let signupCount: Int
+    let createdBy: String
+    let signups: [SignupEventSignup]
+    var spotsRemaining: Int { max(0, maxSignups - signupCount) }
+    var isFull: Bool { signupCount >= maxSignups }
+    var shareURL: URL? { URL(string: "https://athletebridge-63176.web.app/signup/?event=\(id)") }
 }
