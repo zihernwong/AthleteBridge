@@ -19,6 +19,7 @@ import FirebaseAuth
         let typed = localSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard typed.count >= 1 else { return [] }
         return firestore.coaches.filter { coach in
+            guard coach.subscriptionTier == .pro else { return false }
             if coach.name.lowercased().contains(typed) { return true }
             if coach.specialties.contains(where: { $0.lowercased().contains(typed) }) { return true }
             return false
@@ -31,7 +32,8 @@ import FirebaseAuth
      }
 
      private func filteredCoaches() -> [Coach] {
-         var candidates = firestore.coaches
+         // Only Pro coaches are visible in the homepage discovery view
+         var candidates = firestore.coaches.filter { $0.subscriptionTier == .pro }
 
         // Filter by availability preferences
         let availPrefs = client.preferredAvailability.compactMap { pref -> String? in

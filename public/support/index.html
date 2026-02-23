@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AthleteBridge — Support</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #8DC63F;
+      --blue:  #2D5A7B;
+      --bg:    #f5f7fa;
+      --card:  #ffffff;
+      --text:  #1a1a2e;
+      --muted: #6b7280;
+      --border:#e5e7eb;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--blue);
+      color: #fff;
+      padding: 48px 24px 40px;
+      text-align: center;
+    }
+    header .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    header .logo-icon {
+      width: 56px; height: 56px;
+      background: var(--green);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px;
+    }
+    header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { font-size: 1.05rem; opacity: 0.85; margin-top: 8px; }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 28px;
+      margin-bottom: 24px;
+    }
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--blue);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--green);
+      display: inline-block;
+    }
+
+    .faq-item { margin-bottom: 20px; }
+    .faq-item:last-child { margin-bottom: 0; }
+    .faq-item strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .faq-item p { color: var(--muted); font-size: 0.95rem; }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .contact-item {
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .contact-item .label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .contact-item a {
+      color: var(--blue);
+      text-decoration: none;
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .contact-item a:hover { text-decoration: underline; }
+
+    .badge {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 0 20px 40px;
+    }
+    footer a { color: var(--blue); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏃</div>
+    <h1>AthleteBridge</h1>
+  </div>
+  <p>Connect Athletes with Expert Coaches</p>
+</header>
+
+<main>
+
+  <!-- Contact -->
+  <div class="card">
+    <h2>Contact Support</h2>
+    <div class="contact-grid">
+      <div class="contact-item">
+        <div class="label">Email</div>
+        <a href="mailto:aik_hernalena@yahoo.com">aik_hernalena@yahoo.com</a>
+      </div>
+      <div class="contact-item">
+        <div class="label">Response Time</div>
+        <span>Within 1–2 business days</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="card">
+    <h2>Frequently Asked Questions</h2>
+
+    <div class="faq-item">
+      <strong>How do I book a coaching session?</strong>
+      <p>Open the app, go to Coach Discovery, browse coaches, and tap "Book" on any coach's profile. Select a date and time, then confirm your booking. You'll receive a push notification once the coach accepts.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do I sign up as a coach?</strong>
+      <p>Create an account and choose "Coach" as your role. Complete your profile with your sport, bio, availability, and pricing. Your profile will be visible to athletes immediately.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do payments work?</strong>
+      <p>Payments are processed securely through Stripe. Coaches set their session price, and clients pay directly in the app. Payouts are handled through your Stripe connected account.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>What is Coach Plus and Coach Pro?</strong>
+      <p><strong>Coach Plus</strong> gives access to Revenue Insights so you can track your earnings and growth. <strong>Coach Pro</strong> includes Revenue Insights and lists your profile in the Coach Search Engine for greater visibility.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do I join a club?</strong>
+      <p>Go to Places to Play, find a venue with a club, and tap "Request to Join." The club contact will review your request and approve or decline. You'll receive a notification with the decision.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do I cancel a booking?</strong>
+      <p>Go to your Bookings tab, find the booking you want to cancel, and tap "Cancel Booking." Refund eligibility depends on the coach's cancellation policy.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do I request racket stringing?</strong>
+      <p>Tap the Stringing tab in the app, fill in your racket details and preferred string tension, then submit. A local stringer will accept your order and arrange pickup or delivery.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>I'm not receiving push notifications. What should I check?</strong>
+      <p>Go to your iPhone Settings → AthleteBridge → Notifications and ensure notifications are enabled. Also check that you are signed in — notifications are tied to your account. Try signing out and back in if the issue persists.</p>
+    </div>
+
+    <div class="faq-item">
+      <strong>How do I delete my account?</strong>
+      <p>Email us at <a href="mailto:aik_hernalena@yahoo.com">aik_hernalena@yahoo.com</a> with the subject "Account Deletion Request" and we will permanently remove your data within 30 days.</p>
+    </div>
+  </div>
+
+  <!-- About -->
+  <div class="card">
+    <h2>About AthleteBridge</h2>
+    <p style="color: var(--muted); font-size: 0.95rem;">
+      AthleteBridge is a platform that connects athletes with professional sports coaches. Whether you're looking for one-on-one training, group sessions, or community clubs at your favorite venues, AthleteBridge makes it simple to find, book, and communicate with coaches near you.
+    </p>
+  </div>
+
+</main>
+
+<footer>
+  <p>© 2026 Zi Hern Wong · AthleteBridge</p>
+  <p style="margin-top: 6px;">
+    <a href="mailto:aik_hernalena@yahoo.com">Contact Us</a>
+  </p>
+</footer>
+
+</body>
+</html>

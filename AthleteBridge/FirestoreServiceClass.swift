@@ -1170,6 +1170,39 @@ class FirestoreManager: ObservableObject {
         return coachPhotoURLs[uid] ?? clientPhotoURLs[uid] ?? nil
     }
 
+    /// Fetch and cache the photo URL for an arbitrary user UID.
+    /// Checks both coaches and clients collections. Skips the fetch if the UID
+    /// is already cached (including a cached nil — explicit absence).
+    func fetchAndCacheUserPhotoURL(uid: String) {
+        guard !uid.isEmpty else { return }
+        // Skip if already cached
+        if coachPhotoURLs.keys.contains(uid) || clientPhotoURLs.keys.contains(uid) { return }
+
+        let coachRef = db.collection("coaches").document(uid)
+        coachRef.getDocument { [weak self] snap, _ in
+            guard let self = self else { return }
+            if let data = snap?.data() {
+                let photoStr = (data["PhotoURL"] as? String)
+                    ?? (data["photoURL"] as? String)
+                    ?? (data["photoUrl"] as? String)
+                self.resolvePhotoURL(photoStr) { url in
+                    DispatchQueue.main.async { self.coachPhotoURLs[uid] = url }
+                }
+                return
+            }
+            // Fall back to clients collection
+            self.db.collection("clients").document(uid).getDocument { snap, _ in
+                let data = snap?.data() ?? [:]
+                let photoStr = (data["photoURL"] as? String)
+                    ?? (data["PhotoURL"] as? String)
+                    ?? (data["photoUrl"] as? String)
+                self.resolvePhotoURL(photoStr) { url in
+                    DispatchQueue.main.async { self.clientPhotoURLs[uid] = url }
+                }
+            }
+        }
+    }
+
     func stopListeningForMessages(chatId: String) {
         if let l = messageListeners[chatId] { l.remove(); messageListeners.removeValue(forKey: chatId) }
         DispatchQueue.main.async { self.messagesByChat[chatId] = [] }
@@ -1269,8 +1302,9 @@ class FirestoreManager: ObservableObject {
                 let tierRaw = data["subscriptionTier"] as? String ?? "free"
                 let subscriptionTier = CoachTier(rawValue: tierRaw) ?? .free
                 let phoneVerified = data["phoneVerified"] as? Bool ?? false
+                let linkedPlaceIds = data["linkedPlaceIds"] as? [String] ?? []
 
-                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange, subscriptionTier: subscriptionTier, phoneVerified: phoneVerified))
+                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange, subscriptionTier: subscriptionTier, phoneVerified: phoneVerified, linkedPlaceIds: linkedPlaceIds))
 
                 // resolve coach photo if provided and cache into coachPhotoURLs
                 let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
@@ -2047,37 +2081,37 @@ class FirestoreManager: ObservableObject {
             }
     }
 
-    func addPlayerToPlayWith(completion: @escaping (Error?) -> Void) {
+    func addPlayerToPlayWith(skillLevel: String? = nil, city: String? = nil, availability: [String]? = nil, connectedVenueIds: [String] = [], completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
         }
-        // Auto-fill from current profile
+        // Name always auto-filled from profile
         let name: String = {
             if let n = self.currentClient?.name, !n.isEmpty { return n }
             if let c = self.currentCoach, !c.name.isEmpty { return c.name }
             return "Player"
         }()
-        let skillLevel: String = {
+        let resolvedSkillLevel: String = skillLevel ?? {
             if let s = self.currentClient?.skillLevel, !s.isEmpty { return s }
             return ""
         }()
-        let city: String = {
+        let resolvedCity: String = city ?? {
             if let c = self.currentClient?.city, !c.isEmpty { return c }
             if let c = self.currentCoach?.city, !c.isEmpty { return c }
             return ""
         }()
-        let availability: [String] = {
+        let resolvedAvailability: [String] = availability ?? {
             if let a = self.currentClient?.preferredAvailability, !a.isEmpty { return a }
             if let a = self.currentCoach?.availability, !a.isEmpty { return a }
             return []
         }()
         let data: [String: Any] = [
             "name": name,
-            "skillLevel": skillLevel,
-            "city": city,
-            "availability": availability,
-            "connectedVenueIds": [String](),
+            "skillLevel": resolvedSkillLevel,
+            "city": resolvedCity,
+            "availability": resolvedAvailability,
+            "connectedVenueIds": connectedVenueIds,
             "createdBy": uid,
             "createdAt": FieldValue.serverTimestamp()
         ]
@@ -2344,6 +2378,7 @@ class FirestoreManager: ObservableObject {
             let coachTierRaw = data["subscriptionTier"] as? String ?? "free"
             let coachSubscriptionTier = CoachTier(rawValue: coachTierRaw) ?? .free
             let coachPhoneVerified = data["phoneVerified"] as? Bool ?? false
+            let coachLinkedPlaceIds = data["linkedPlaceIds"] as? [String] ?? []
 
             let photoStr = (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String) ?? (data["photoURL"] as? String)
             self.resolvePhotoURL(photoStr) { resolved in
@@ -2357,7 +2392,7 @@ class FirestoreManager: ObservableObject {
                         paymentsMap = tmp.isEmpty ? nil : tmp
                     }
 
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink, subscriptionTier: coachSubscriptionTier, phoneVerified: coachPhoneVerified)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink, subscriptionTier: coachSubscriptionTier, phoneVerified: coachPhoneVerified, linkedPlaceIds: coachLinkedPlaceIds)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -2386,7 +2421,7 @@ class FirestoreManager: ObservableObject {
             DispatchQueue.main.async {
                 if let current = self.currentCoach, current.subscriptionTier != tier {
                     // Update the coach with the new tier
-                    self.currentCoach = Coach(
+                    let updated = Coach(
                         id: current.id,
                         name: current.name,
                         specialties: current.specialties,
@@ -2397,8 +2432,15 @@ class FirestoreManager: ObservableObject {
                         meetingPreference: current.meetingPreference,
                         payments: current.payments,
                         rateRange: current.rateRange,
-                        subscriptionTier: tier
+                        subscriptionTier: tier,
+                        linkedPlaceIds: current.linkedPlaceIds
                     )
+                    self.currentCoach = updated
+                    // Sync the new tier into the coaches discovery list so
+                    // MatchResultsView reflects the change without an app restart
+                    if let idx = self.coaches.firstIndex(where: { $0.id == current.id }) {
+                        self.coaches[idx] = updated
+                    }
                 }
             }
         }
@@ -2601,7 +2643,7 @@ class FirestoreManager: ObservableObject {
     }
 
     // Save coach with the provided schema to "coaches" collection under document id
-    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
+    func saveCoachWithSchema(id: String, firstName: String, lastName: String, specialties: [String], availability: [String], experienceYears: Int, hourlyRate: Double?, meetingPreference: String? = nil, photoURL: String?, bio: String? = nil, zipCode: String? = nil, city: String? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, linkedPlaceIds: [String] = [], active: Bool = true, overwrite: Bool = false, completion: @escaping (Error?) -> Void) {
         // Base payload (do not include createdAt here yet so we can control whether it is written)
         var baseData: [String: Any] = [
             "FirstName": firstName,
@@ -2609,7 +2651,8 @@ class FirestoreManager: ObservableObject {
             "Specialties": specialties,
             "Availability": availability,
             "ExperienceYears": experienceYears,
-            "Active": active
+            "Active": active,
+            "linkedPlaceIds": linkedPlaceIds
         ]
         if let hr = hourlyRate { baseData["HourlyRate"] = hr }
         if let p = photoURL { baseData["PhotoURL"] = p }
@@ -5735,7 +5778,8 @@ class FirestoreManager: ObservableObject {
                                     payments: cur.payments,
                                     rateRange: cur.rateRange,
                                     tournamentSoftwareLink: cur.tournamentSoftwareLink,
-                                    subscriptionTier: cur.subscriptionTier)
+                                    subscriptionTier: cur.subscriptionTier,
+                                    linkedPlaceIds: cur.linkedPlaceIds)
                 self.currentCoach = updated
             }
             completion?(nil)
@@ -5769,7 +5813,8 @@ class FirestoreManager: ObservableObject {
                                     payments: payments,
                                     rateRange: cur.rateRange,
                                     tournamentSoftwareLink: cur.tournamentSoftwareLink,
-                                    subscriptionTier: cur.subscriptionTier)
+                                    subscriptionTier: cur.subscriptionTier,
+                                    linkedPlaceIds: cur.linkedPlaceIds)
                 self.currentCoach = updated
             }
             completion?(nil)

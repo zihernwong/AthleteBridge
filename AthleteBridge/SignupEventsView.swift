@@ -8,9 +8,10 @@ struct SignupEventsView: View {
     @State private var showCreateSheet = false
 
     private var eventsForPlace: [SignupEvent] {
-        let now = Date()
+        let startOfToday = Calendar.current.startOfDay(for: Date())
         return firestore.signupEvents
-            .filter { $0.placeId == place.id && $0.eventDate >= now }
+            .filter { $0.placeId == place.id && $0.eventDate >= startOfToday }
+            .sorted { $0.eventDate < $1.eventDate }
     }
 
     private static let dateFormatter: DateFormatter = {

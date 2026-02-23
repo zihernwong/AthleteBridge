@@ -53,8 +53,7 @@ struct LocationsView: View {
                     VStack(alignment: .leading) {
                         TextField("Name for pin", text: $newName)
                             .textFieldStyle(.roundedBorder)
-                        TextField("Address (optional)", text: $newAddress)
-                            .textFieldStyle(.roundedBorder)
+                        LocationAutocompleteField(placeholder: "Address (optional)", text: $newAddress, mode: .address, rounded: true)
                     }
 
                     VStack(spacing: 8) {

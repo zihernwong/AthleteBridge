@@ -86,6 +86,10 @@ struct ProfileView: View {
     // Manage subscription sheet
     @State private var showingManageSubscription: Bool = false
 
+    // Coach linked places to play
+    @State private var selectedPlaceIds: Set<String> = []
+    @State private var showingPlacesPicker: Bool = false
+
     // Phone verification
     @State private var selectedCountryCode: CountryCode = .us
     @State private var localPhoneNumber: String = ""
@@ -115,7 +119,7 @@ struct ProfileView: View {
                     phoneVerificationSection
                     additionalTypesSection
                     if role == .client { clientSection } else { coachSection }
-                    subscriptionSection
+                    if role == .coach { subscriptionSection }
                     saveSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
@@ -135,6 +139,10 @@ struct ProfileView: View {
                     }
                     loadInitial()
                     fetchSubjectIDs()
+                    // Fetch places to play so coach can link them in profile
+                    if firestore.placesToPlay.isEmpty {
+                        firestore.fetchPlacesToPlay()
+                    }
                     // If profiles were already cached, populate fields
                     populateFromExisting()
                 }
@@ -176,6 +184,13 @@ struct ProfileView: View {
                         onSave: { newTypes in
                             saveAdditionalTypes(newTypes)
                         }
+                    )
+                }
+                .sheet(isPresented: $showingPlacesPicker) {
+                    CoachPlacesPickerView(
+                        places: firestore.placesToPlay,
+                        selectedIds: $selectedPlaceIds,
+                        onDone: { saveProfile() }
                     )
                 }
             }
@@ -570,6 +585,28 @@ struct ProfileView: View {
                     .keyboardType(.URL)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Places to Play").font(.subheadline).foregroundColor(.secondary)
+                Button(action: { showingPlacesPicker = true }) {
+                    HStack {
+                        if selectedPlaceIds.isEmpty {
+                            Text("Select places to play")
+                                .foregroundColor(.secondary)
+                        } else {
+                            let names = firestore.placesToPlay
+                                .filter { selectedPlaceIds.contains($0.id) }
+                                .map { $0.name }
+                            Text(names.sorted().joined(separator: ", "))
+                                .foregroundColor(.primary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(.secondary)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
         }
     }
 
@@ -799,6 +836,7 @@ struct ProfileView: View {
                 coachRateUpperText = ""
             }
             coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
+            selectedPlaceIds = Set(coach.linkedPlaceIds)
             isEditMode = true
             hasPopulatedFromExisting = true
         } else {
@@ -842,6 +880,7 @@ struct ProfileView: View {
                     coachRateUpperText = ""
                 }
                 coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
+                selectedPlaceIds = Set(coach.linkedPlaceIds)
             } else {
                 isEditMode = false
             }
@@ -923,7 +962,8 @@ struct ProfileView: View {
                                        zipCode: coachZipCode.isEmpty ? nil : coachZipCode,
                                        city: coachCity.isEmpty ? nil : coachCity,
                                        rateRange: rateRangeToSave,
-                                       tournamentSoftwareLink: coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines)) { err in
+                                       tournamentSoftwareLink: coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines),
+                                       linkedPlaceIds: Array(selectedPlaceIds)) { err in
                     DispatchQueue.main.async {
                         isSaving = false
                         if let err = err {
@@ -1112,6 +1152,71 @@ struct AdditionalTypesEditorView: View {
                     Button("Save") {
                         onSave(localSelection)
                         dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Coach Places Picker Sheet
+
+struct CoachPlacesPickerView: View {
+    let places: [PlaceToPlay]
+    @Binding var selectedIds: Set<String>
+    var onDone: (() -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
+    @State private var localSelection: Set<String>
+
+    init(places: [PlaceToPlay], selectedIds: Binding<Set<String>>, onDone: (() -> Void)? = nil) {
+        self.places = places
+        self._selectedIds = selectedIds
+        self.onDone = onDone
+        self._localSelection = State(initialValue: selectedIds.wrappedValue)
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                if places.isEmpty {
+                    Text("No places to play available.")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(places) { place in
+                        Button(action: {
+                            if localSelection.contains(place.id) {
+                                localSelection.remove(place.id)
+                            } else {
+                                localSelection.insert(place.id)
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: localSelection.contains(place.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(localSelection.contains(place.id) ? Color("LogoGreen") : .secondary)
+                                    .font(.title3)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(place.name).font(.body)
+                                    Text(place.address).font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+            .navigationTitle("Places to Play")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        selectedIds = localSelection
+                        dismiss()
+                        onDone?()
                     }
                 }
             }

@@ -4,6 +4,10 @@ import FirebaseAuth
 struct PlacesToPlayContactView: View {
     @EnvironmentObject var firestore: FirestoreManager
 
+    /// When set (e.g. from a deep link), the view scrolls to the pending-requests
+    /// section for this place ID on appear.
+    var scrollToPlaceId: String? = nil
+
     private var currentUid: String { Auth.auth().currentUser?.uid ?? "" }
 
     private var myPlaces: [PlaceToPlay] {
@@ -11,6 +15,7 @@ struct PlacesToPlayContactView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         List {
             // My Places section
             Section {
@@ -58,13 +63,17 @@ struct PlacesToPlayContactView: View {
                 ForEach(myPlaces) { place in
                     // Pending join requests
                     if !place.pendingMembers.isEmpty {
-                        Section(header: Text("\(place.name) — Pending Requests")) {
+                        Section(header: Text("\(place.name) — Pending Requests").id("pending_\(place.id)")) {
                             ForEach(place.pendingMembers) { pending in
                                 VStack(spacing: 10) {
-                                    HStack {
-                                        Image(systemName: "person.circle.fill")
-                                            .font(.title2)
-                                            .foregroundColor(.secondary)
+                                    HStack(spacing: 12) {
+                                        AvatarView(
+                                            url: firestore.participantPhotoURL(pending.id),
+                                            name: pending.name,
+                                            size: 40,
+                                            useCurrentUser: false
+                                        )
+                                        .environmentObject(firestore)
                                         Text(pending.name)
                                             .font(.body)
                                             .fontWeight(.medium)
@@ -117,7 +126,14 @@ struct PlacesToPlayContactView: View {
                                 .foregroundColor(.secondary)
                         } else {
                             ForEach(place.members) { member in
-                                HStack {
+                                HStack(spacing: 12) {
+                                    AvatarView(
+                                        url: firestore.participantPhotoURL(member.id),
+                                        name: member.name,
+                                        size: 36,
+                                        useCurrentUser: false
+                                    )
+                                    .environmentObject(firestore)
                                     Text(member.name)
                                         .font(.body)
                                     Spacer()
@@ -185,7 +201,26 @@ struct PlacesToPlayContactView: View {
         .onAppear {
             firestore.fetchPlacesToPlay()
             firestore.fetchSignupEvents()
+            // Prefetch profile photos for all members and pending members
+            for place in myPlaces {
+                for member in place.members { firestore.fetchAndCacheUserPhotoURL(uid: member.id) }
+                for pending in place.pendingMembers { firestore.fetchAndCacheUserPhotoURL(uid: pending.id) }
+            }
+            if let placeId = scrollToPlaceId {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    withAnimation {
+                        proxy.scrollTo("pending_\(placeId)", anchor: .top)
+                    }
+                }
+            }
         }
+        .onChange(of: firestore.placesToPlay) { _, _ in
+            for place in myPlaces {
+                for member in place.members { firestore.fetchAndCacheUserPhotoURL(uid: member.id) }
+                for pending in place.pendingMembers { firestore.fetchAndCacheUserPhotoURL(uid: pending.id) }
+            }
+        }
+        } // ScrollViewReader
     }
 
     private func toggleContact(place: PlaceToPlay, isMine: Bool) {
@@ -210,10 +245,12 @@ struct PlaceRegistrationsView: View {
     @EnvironmentObject var firestore: FirestoreManager
     let place: PlaceToPlay
 
+    @State private var showCreateEvent = false
+
     private var upcomingEvents: [SignupEvent] {
-        let now = Date()
+        let startOfToday = Calendar.current.startOfDay(for: Date())
         return firestore.signupEvents
-            .filter { $0.placeId == place.id && $0.eventDate >= now }
+            .filter { $0.placeId == place.id && $0.eventDate >= startOfToday }
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -257,6 +294,22 @@ struct PlaceRegistrationsView: View {
         }
         .navigationTitle(place.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showCreateEvent = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showCreateEvent) {
+            CreateSignupEventView(place: place)
+                .environmentObject(firestore)
+        }
+        .onChange(of: showCreateEvent) { _, isShowing in
+            if !isShowing { firestore.fetchSignupEvents() }
+        }
         .onAppear {
             firestore.fetchSignupEvents()
         }

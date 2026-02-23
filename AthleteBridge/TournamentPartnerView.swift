@@ -306,7 +306,7 @@ struct TournamentInputView: View {
                             }
                         }
                     DatePicker("End Date", selection: $endDate, in: startDate..., displayedComponents: .date)
-                    TextField("Tournament Location", text: $tournamentLocation)
+                    LocationAutocompleteField(placeholder: "Tournament Location", text: $tournamentLocation, mode: .place)
                 }
                 Section(header: Text("Optional")) {
                     TextField("Tournament Signup Link", text: $signupLink)

@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseAuth
+import CoreLocation
 
 struct PlayersToPlayWithView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -7,8 +8,8 @@ struct PlayersToPlayWithView: View {
 
     private struct ChatSheetId: Identifiable { let id: String }
     @State private var presentedChat: ChatSheetId? = nil
-    @State private var isPosting = false
     @State private var showEditSheet = false
+    @State private var showCreateSheet = false
 
     private var currentUid: String { auth.user?.uid ?? "" }
 
@@ -49,14 +50,9 @@ struct PlayersToPlayWithView: View {
                         Image(systemName: "pencil.circle")
                     }
                 } else {
-                    Button(action: postSelf) {
-                        if isPosting {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "plus")
-                        }
+                    Button(action: { showCreateSheet = true }) {
+                        Image(systemName: "plus")
                     }
-                    .disabled(isPosting)
                 }
             }
         }
@@ -65,6 +61,10 @@ struct PlayersToPlayWithView: View {
                 EditPlayerProfileSheet(player: player)
                     .environmentObject(firestore)
             }
+        }
+        .sheet(isPresented: $showCreateSheet) {
+            CreatePlayerProfileSheet()
+                .environmentObject(firestore)
         }
         .sheet(item: $presentedChat) { sheet in
             NavigationStack {
@@ -76,15 +76,6 @@ struct PlayersToPlayWithView: View {
             firestore.fetchPlayersToPlayWith()
             if firestore.placesToPlay.isEmpty {
                 firestore.fetchPlacesToPlay()
-            }
-        }
-    }
-
-    private func postSelf() {
-        isPosting = true
-        firestore.addPlayerToPlayWith { _ in
-            DispatchQueue.main.async {
-                isPosting = false
             }
         }
     }
@@ -102,6 +93,137 @@ struct PlayersToPlayWithView: View {
                 if target != expectedChatId {
                     presentedChat = ChatSheetId(id: target)
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Create Player Profile Sheet
+
+private struct CreatePlayerProfileSheet: View {
+    @EnvironmentObject var firestore: FirestoreManager
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var skillLevel: String = ""
+    @State private var city: String = ""
+    @State private var selectedAvailability: Set<String> = []
+    @State private var selectedVenueIds: Set<String> = []
+    @State private var isSaving = false
+
+    private let skillLevels = ["Beginner", "Intermediate", "Advanced", "Professional"]
+    private let availabilityOptions = ["Morning", "Afternoon", "Evening", "Weekend"]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("Skill Level")) {
+                    Picker("Skill Level", selection: $skillLevel) {
+                        Text("Not Set").tag("")
+                        ForEach(skillLevels, id: \.self) { level in
+                            Text(level).tag(level)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Section(header: Text("City")) {
+                    LocationAutocompleteField(placeholder: "City", text: $city, mode: .place)
+                }
+
+                Section(header: Text("Availability")) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], spacing: 8) {
+                        ForEach(availabilityOptions, id: \.self) { option in
+                            let isSelected = selectedAvailability.contains(option)
+                            Button(action: {
+                                if isSelected { selectedAvailability.remove(option) } else { selectedAvailability.insert(option) }
+                            }) {
+                                Text(option)
+                                    .font(.callout)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(Capsule().fill(isSelected ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground)))
+                                    .foregroundColor(isSelected ? .white : .primary)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+
+                Section(header: Text("Connected Venues")) {
+                    if firestore.placesToPlay.isEmpty {
+                        Text("No venues available yet.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(firestore.placesToPlay) { place in
+                            let isSelected = selectedVenueIds.contains(place.id)
+                            Button(action: {
+                                if isSelected { selectedVenueIds.remove(place.id) } else { selectedVenueIds.insert(place.id) }
+                            }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(place.name).font(.subheadline).foregroundColor(.primary)
+                                        if !place.address.isEmpty {
+                                            Text(place.address).font(.caption).foregroundColor(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(isSelected ? Color("LogoGreen") : .secondary)
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Create Player Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Post") { post() }
+                        .disabled(isSaving)
+                }
+            }
+            .onAppear {
+                if firestore.placesToPlay.isEmpty {
+                    firestore.fetchPlacesToPlay()
+                }
+                populateCity()
+            }
+        }
+    }
+
+    private func populateCity() {
+        let zip = firestore.currentClient?.zipCode ?? firestore.currentCoach?.zipCode ?? ""
+        let profileCity = firestore.currentClient?.city ?? firestore.currentCoach?.city ?? ""
+
+        guard !zip.isEmpty else {
+            if !profileCity.isEmpty { city = profileCity }
+            return
+        }
+
+        CLGeocoder().geocodeAddressString(zip) { placemarks, _ in
+            DispatchQueue.main.async {
+                let geocodedCity = placemarks?.first?.locality ?? placemarks?.first?.administrativeArea ?? ""
+                city = geocodedCity.isEmpty ? profileCity : geocodedCity
+            }
+        }
+    }
+
+    private func post() {
+        isSaving = true
+        firestore.addPlayerToPlayWith(
+            skillLevel: skillLevel,
+            city: city.trimmingCharacters(in: .whitespacesAndNewlines),
+            availability: availabilityOptions.filter { selectedAvailability.contains($0) },
+            connectedVenueIds: Array(selectedVenueIds)
+        ) { _ in
+            DispatchQueue.main.async {
+                isSaving = false
+                dismiss()
             }
         }
     }
@@ -229,7 +351,7 @@ private struct EditPlayerProfileSheet: View {
                 }
 
                 Section(header: Text("City")) {
-                    TextField("City", text: $city)
+                    LocationAutocompleteField(placeholder: "City", text: $city, mode: .place)
                 }
 
                 Section(header: Text("Availability")) {

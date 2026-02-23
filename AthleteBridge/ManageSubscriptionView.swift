@@ -119,13 +119,20 @@ struct ManageSubscriptionView: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             } else if tier == .plus {
-                Text("Enhanced coaching features")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Revenue Insights", systemImage: "chart.bar.fill")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             } else {
-                Text("Full access to all features")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Revenue Insights", systemImage: "chart.bar.fill")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Label("Listed in Coach Search Engine", systemImage: "magnifyingglass")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
 
             if !isCurrent && tier != .free {

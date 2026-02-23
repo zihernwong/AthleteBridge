@@ -9,6 +9,7 @@ struct CreateSignupEventView: View {
     @State private var eventDate = Date()
     @State private var maxSignups = 10
     @State private var isSaving = false
+    @State private var errorMessage: String?
 
     private var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -46,27 +47,41 @@ struct CreateSignupEventView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        isSaving = true
-                        firestore.createSignupEvent(
-                            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                            eventDate: eventDate,
-                            location: place.address,
-                            placeId: place.id,
-                            placeName: place.name,
-                            maxSignups: maxSignups
-                        ) { err in
-                            DispatchQueue.main.async {
-                                isSaving = false
-                                if err == nil {
-                                    dismiss()
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button("Create") {
+                            isSaving = true
+                            firestore.createSignupEvent(
+                                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                                eventDate: eventDate,
+                                location: place.address,
+                                placeId: place.id,
+                                placeName: place.name,
+                                maxSignups: maxSignups
+                            ) { err in
+                                DispatchQueue.main.async {
+                                    isSaving = false
+                                    if let err = err {
+                                        errorMessage = err.localizedDescription
+                                    } else {
+                                        dismiss()
+                                    }
                                 }
                             }
                         }
+                        .disabled(!isValid)
                     }
-                    .disabled(!isValid || isSaving)
                 }
+            }
+            .alert("Failed to Create Event", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
             }
         }
     }

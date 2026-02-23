@@ -278,7 +278,7 @@ struct BookingsView: View {
         return firestore.bookings + firestore.coachBookings
     }
 
-    // === Coach Header Section with Input Time Away and Locations ===
+    // === Coach Header Section with Input Time Away ===
     private var coachHeaderSection: some View {
         HStack(spacing: 16) {
             if let coach = firestore.currentCoach {
@@ -289,13 +289,6 @@ struct BookingsView: View {
                     }
                     .font(.subheadline)
                 }
-            }
-            NavigationLink(destination: LocationsView().environmentObject(firestore)) {
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin.and.ellipse")
-                    Text("Locations")
-                }
-                .font(.subheadline)
             }
             Spacer()
         }

@@ -24,6 +24,9 @@ struct PaymentsView: View {
     @State private var showClientSummary: Bool = false
     // State for coach revenue summary sheet
     @State private var showCoachSummary: Bool = false
+    // Upgrade prompt when coach free tier tries to access gated features
+    @State private var showUpgradeAlert: Bool = false
+    @State private var showManageSubscription: Bool = false
 
     // State for client bookings tab (Unpaid vs Paid)
     @State private var selectedPaymentTab: Int = 0 // 0 = Unpaid, 1 = Paid
@@ -311,12 +314,23 @@ struct PaymentsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button(action: { showCoachSummary = true }) {
+                let canAccessSummary = (firestore.currentCoach?.subscriptionTier ?? .free).hasAccess(to: "paymentSummary")
+                Button(action: {
+                    if canAccessSummary {
+                        showCoachSummary = true
+                    } else {
+                        showUpgradeAlert = true
+                    }
+                }) {
                     HStack {
-                        Image(systemName: "doc.text.magnifyingglass")
+                        Image(systemName: canAccessSummary ? "doc.text.magnifyingglass" : "lock.fill")
                         Text("Revenue Summary").bold()
                         Spacer()
-                        Text(formatUSD(totalCoachPaidUSD)).foregroundColor(.secondary)
+                        if canAccessSummary {
+                            Text(formatUSD(totalCoachPaidUSD)).foregroundColor(.secondary)
+                        } else {
+                            Text("Plus / Pro").font(.caption).foregroundColor(.secondary)
+                        }
                     }
                 }
                 .buttonStyle(.bordered)
@@ -649,6 +663,15 @@ struct PaymentsView: View {
                 }
             }
             .presentationDetents([.medium])
+        }
+        .alert("Upgrade Required", isPresented: $showUpgradeAlert) {
+            Button("Manage Subscription") { showManageSubscription = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Revenue Insights is a Coach Plus feature. Coach Pro additionally lists you in the Coach Search Engine. Upgrade to unlock.")
+        }
+        .sheet(isPresented: $showManageSubscription) {
+            ManageSubscriptionView()
         }
     }
 

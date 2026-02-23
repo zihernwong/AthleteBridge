@@ -77,13 +77,23 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         saveTokenToFirestore(token)
     }
 
-    /// Call this after user authenticates to save any cached FCM token
+    /// Call this after user authenticates to save the current FCM token.
+    /// Fetches the live token from Firebase so this works correctly even after
+    /// a user switch (where cachedFCMToken may not yet have been refreshed).
     func saveTokenIfNeeded() {
-        guard let token = cachedFCMToken else {
-            print("NotificationManager: saveTokenIfNeeded - no cached token")
-            return
+        Messaging.messaging().token { [weak self] token, error in
+            if let error = error {
+                print("NotificationManager: saveTokenIfNeeded - failed to fetch FCM token: \(error)")
+                return
+            }
+            guard let token = token else {
+                print("NotificationManager: saveTokenIfNeeded - no FCM token returned")
+                return
+            }
+            print("NotificationManager: saveTokenIfNeeded - saving token \(token.prefix(20))...")
+            self?.cachedFCMToken = token
+            self?.saveTokenToFirestore(token)
         }
-        saveTokenToFirestore(token)
     }
 
     /// Remove device token from Firestore when user logs out.

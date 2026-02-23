@@ -13,9 +13,17 @@ enum CoachTier: String, CaseIterable {
         }
     }
 
-    /// Placeholder for future feature gating. Returns true for all features currently.
+    /// Feature gating by subscription tier.
+    /// Free coaches are restricted from premium features; Plus and Pro have full access.
     func hasAccess(to feature: String) -> Bool {
-        return true
+        switch self {
+        case .free:
+            // Features locked on the free tier
+            let lockedFeatures: Set<String> = ["paymentSummary"]
+            return !lockedFeatures.contains(feature)
+        case .plus, .pro:
+            return true
+        }
     }
 }
 
@@ -43,8 +51,10 @@ struct Coach: Identifiable, Hashable {
     let subscriptionTier: CoachTier
     // Whether the coach has verified their phone number
     let phoneVerified: Bool
+    // Places to play this coach is associated with (array of PlaceToPlay document IDs)
+    let linkedPlaceIds: [String]
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free, phoneVerified: Bool = false) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free, phoneVerified: Bool = false, linkedPlaceIds: [String] = []) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespaces)
         self.specialties = specialties.map { $0.trimmingCharacters(in: .whitespaces) }
@@ -60,6 +70,7 @@ struct Coach: Identifiable, Hashable {
         self.tournamentSoftwareLink = tournamentSoftwareLink
         self.subscriptionTier = subscriptionTier
         self.phoneVerified = phoneVerified
+        self.linkedPlaceIds = linkedPlaceIds
         // Normalize rate range: ensure min <= max, clamp negatives to 0
         if let range = rateRange, range.count >= 2 {
             let lower = max(0, range[0])

@@ -52,6 +52,14 @@ struct BookingEditorView: View {
         firestore.coaches.filter { selectedCoachIds.contains($0.id) }
     }
 
+    // Union of all selected coaches' linked Places to Play
+    private var availableCoachPlaces: [PlaceToPlay] {
+        let allCoaches = isGroupBooking ? selectedCoaches : (selectedCoach.map { [$0] } ?? [])
+        let placeIds = Set(allCoaches.flatMap { $0.linkedPlaceIds })
+        guard !placeIds.isEmpty else { return [] }
+        return firestore.placesToPlay.filter { placeIds.contains($0.id) }
+    }
+
     // Inline suggestions for coach names (prefix match)
     private var coachSuggestions: [Coach] {
         let typed = coachSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -365,16 +373,29 @@ struct BookingEditorView: View {
 
                     // Details section remains
                     Section {
-                        if firestore.locations.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("No saved locations found").foregroundColor(.secondary)
-                                Text("Location is optional; leave blank for a virtual session.").font(.caption).foregroundColor(.secondary)
+                        if availableCoachPlaces.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("No locations configured by this coach.")
+                                    .foregroundColor(.secondary)
+                                    .font(.subheadline)
+                                Text("Location will be arranged separately.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         } else {
-                            Picker("Location (optional)", selection: $selectedLocationId) {
-                                Text("None").tag("")
-                                ForEach(firestore.locations, id: \.id) { loc in
-                                    Text(loc.name ?? "Unnamed").tag(loc.id)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Picker("Location", selection: $selectedLocationId) {
+                                    Text("Select a location").tag("")
+                                    ForEach(availableCoachPlaces) { place in
+                                        Text(place.name).tag(place.id)
+                                    }
+                                }
+                                if let selected = availableCoachPlaces.first(where: { $0.id == selectedLocationId }),
+                                   !selected.address.isEmpty {
+                                    Text(selected.address)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 4)
                                 }
                             }
                         }
@@ -403,6 +424,8 @@ struct BookingEditorView: View {
 
                 if isSaving { ProgressView().frame(maxWidth: .infinity, alignment: .center) }
             }
+            .onChange(of: selectedCoachId) { _, _ in selectedLocationId = "" }
+            .onChange(of: selectedCoachIds) { _, _ in selectedLocationId = "" }
             .navigationTitle("New Booking")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -425,8 +448,10 @@ struct BookingEditorView: View {
                     firestore.fetchCurrentProfiles(for: uid)
                     // also load bookings stored under clients/{uid}/bookings
                     firestore.fetchBookingsFromClientSubcollection(clientId: uid)
-                    // ensure current user's saved locations are loaded for the location picker
-                    firestore.fetchLocationsForCurrentUser()
+                }
+                // load places to play so coach-linked locations appear in the picker
+                if firestore.placesToPlay.isEmpty {
+                    firestore.fetchPlacesToPlay()
                 }
 
                 // Snap initial start/end to nearest 30-minute increment so wheels align on load
@@ -713,6 +738,13 @@ struct BookingEditorView: View {
             return
         }
 
+        // Require location selection when the coach has linked places
+        if !availableCoachPlaces.isEmpty && selectedLocationId.isEmpty {
+            alertMessage = "Please select a location for the session"
+            showAlert = true
+            return
+        }
+
         isSaving = true
 
         // Check for overlapping bookings for ALL coaches
@@ -772,8 +804,11 @@ struct BookingEditorView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 20.0, execute: uiTimeoutItem!)
 
-        // Determine location name from the selected saved location id
-        let locationName: String? = firestore.locations.first(where: { $0.id == selectedLocationId })?.name
+        // Resolve location from the coach-linked place selected by the client
+        let locationName: String? = {
+            guard let place = firestore.placesToPlay.first(where: { $0.id == selectedLocationId }) else { return nil }
+            return place.address.isEmpty ? place.name : "\(place.name) — \(place.address)"
+        }()
 
         let saveCompletion: (Error?) -> Void = { err in
             DispatchQueue.main.async {

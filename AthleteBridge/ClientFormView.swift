@@ -370,7 +370,7 @@ struct ClientFormView: View {
                  .navigationDestination(isPresented: $navigateToClubDeepLink) {
                      if let place = clubDeepLinkPlace {
                          if clubDeepLinkType == "joinRequest" {
-                             PlacesToPlayContactView()
+                             PlacesToPlayContactView(scrollToPlaceId: place.id)
                                  .environmentObject(firestore)
                          } else if clubDeepLinkType == "announcement" {
                              ClubAnnouncementsView(

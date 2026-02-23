@@ -227,7 +227,7 @@ struct AddPlaceToPlayView: View {
             Form {
                 Section(header: Text("Venue Details")) {
                     TextField("Location Name", text: $name)
-                    TextField("Address", text: $address)
+                    LocationAutocompleteField(placeholder: "Address", text: $address, mode: .address)
                     TextField("Price per Session (e.g. $25/hr)", text: $pricePerSession)
                 }
 
