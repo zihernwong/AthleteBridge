@@ -13,6 +13,40 @@ struct ChatView: View {
     @State private var locallyMarkedRead: Set<String> = []
     @State private var otherParticipantUID: String? = nil
 
+    // Presence / online status
+    @State private var otherLastSeen: Date? = nil
+    @State private var presenceListenerCoach: ListenerRegistration? = nil
+    @State private var presenceListenerClient: ListenerRegistration? = nil
+
+    // Typing indicator
+    @State private var otherIsTyping: Bool = false
+    @State private var typingListener: ListenerRegistration? = nil
+    @State private var typingDebounceTimer: Timer? = nil
+
+    private var isOtherOnline: Bool {
+        guard let lastSeen = otherLastSeen else { return false }
+        return lastSeen.timeIntervalSinceNow > -120 // within 2 minutes
+    }
+
+    private var presenceStatusText: String {
+        guard let lastSeen = otherLastSeen else { return "" }
+        let interval = -lastSeen.timeIntervalSinceNow
+        if interval < 120 { return "Online" }
+        if interval < 3600 { return "Last seen \(Int(interval / 60))m ago" }
+        if interval < 86400 { return "Last seen \(Int(interval / 3600))h ago" }
+        return "Last seen \(DateFormatter.localizedString(from: lastSeen, dateStyle: .short, timeStyle: .short))"
+    }
+
+    // The ID of the last outgoing message that has been read by the other participant.
+    // Only this message shows the "Read by" receipt.
+    private var lastReadOutgoingMessageId: String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return messages.last(where: { msg in
+            msg.senderId == uid &&
+            (msg.readBy?.keys.contains(where: { $0 != uid }) ?? false)
+        })?.id
+    }
+
     private var messagesColl: CollectionReference {
         return Firestore.firestore().collection("chats").document(chatId).collection("messages")
     }
@@ -86,9 +120,18 @@ struct ChatView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(firestore.participantNames[other] ?? other)
                             .font(.headline)
-                        Text("Online")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        if !presenceStatusText.isEmpty {
+                            HStack(spacing: 4) {
+                                if isOtherOnline {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 8, height: 8)
+                                }
+                                Text(presenceStatusText)
+                                    .font(.caption)
+                                    .foregroundColor(isOtherOnline ? .green : .secondary)
+                            }
+                        }
                     }
                 } else {
                     Text("Messages").font(.headline)
@@ -122,9 +165,13 @@ struct ChatView: View {
                     ScrollView {
                         LazyVStack(spacing: 8) {
                             ForEach(messages) { m in
-                                MessageRow(message: m, isMe: m.senderId == Auth.auth().currentUser?.uid)
-                                    .environmentObject(firestore)
-                                    .id(m.id)
+                                MessageRow(
+                                    message: m,
+                                    isMe: m.senderId == Auth.auth().currentUser?.uid,
+                                    showReadReceipt: m.id == lastReadOutgoingMessageId
+                                )
+                                .environmentObject(firestore)
+                                .id(m.id)
                             }
                         }
                         .padding()
@@ -148,6 +195,17 @@ struct ChatView: View {
                 }
             }
 
+            // Typing indicator
+            if otherIsTyping {
+                HStack {
+                    TypingIndicatorView()
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
             Divider()
 
             // Composer
@@ -155,6 +213,17 @@ struct ChatView: View {
                 TextField("Write a message...", text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(sending)
+                    .onChange(of: messageText) { _, text in
+                        typingDebounceTimer?.invalidate()
+                        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            setMyTypingState(true)
+                            typingDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+                                setMyTypingState(false)
+                            }
+                        } else {
+                            setMyTypingState(false)
+                        }
+                    }
 
                 Button(action: sendMessage) {
                     if sending {
@@ -176,6 +245,7 @@ struct ChatView: View {
         .onAppear {
             startListening()
             resolveOtherParticipant()
+            updateMyPresence()
         }
         .onDisappear(perform: stopListening)
     }
@@ -212,6 +282,8 @@ struct ChatView: View {
                     if self.firestore.participantNames[o] == nil {
                         self.fetchAndCacheParticipant(o)
                     }
+                    self.startPresenceListeners(uid: o)
+                    self.startTypingListener(otherUID: o)
                 }
             }
         }
@@ -313,6 +385,76 @@ struct ChatView: View {
     private func stopListening() {
         listener?.remove()
         listener = nil
+        presenceListenerCoach?.remove()
+        presenceListenerCoach = nil
+        presenceListenerClient?.remove()
+        presenceListenerClient = nil
+        typingListener?.remove()
+        typingListener = nil
+        typingDebounceTimer?.invalidate()
+        typingDebounceTimer = nil
+        setMyTypingState(false)
+    }
+
+    // Listen to both coach and client collections for the other participant's lastSeenAt.
+    // Whichever collection they belong to will fire with data.
+    private func startPresenceListeners(uid: String) {
+        presenceListenerCoach?.remove()
+        presenceListenerClient?.remove()
+        let db = Firestore.firestore()
+        presenceListenerCoach = db.collection("coaches").document(uid).addSnapshotListener { snap, _ in
+            guard let data = snap?.data(), snap?.exists == true else { return }
+            if let ts = data["lastSeenAt"] as? Timestamp {
+                DispatchQueue.main.async { self.otherLastSeen = ts.dateValue() }
+            }
+        }
+        presenceListenerClient = db.collection("clients").document(uid).addSnapshotListener { snap, _ in
+            guard let data = snap?.data(), snap?.exists == true else { return }
+            if let ts = data["lastSeenAt"] as? Timestamp {
+                DispatchQueue.main.async { self.otherLastSeen = ts.dateValue() }
+            }
+        }
+    }
+
+    // Listen to the other participant's typing state in chats/{chatId}/typing/{otherUID}.
+    private func startTypingListener(otherUID: String) {
+        typingListener?.remove()
+        typingListener = Firestore.firestore()
+            .collection("chats").document(chatId)
+            .collection("typing").document(otherUID)
+            .addSnapshotListener { snap, _ in
+                guard let data = snap?.data() else {
+                    DispatchQueue.main.async { self.otherIsTyping = false }
+                    return
+                }
+                var isTyping = data["isTyping"] as? Bool ?? false
+                // Treat stale typing state (>10 seconds old) as false
+                if isTyping, let ts = data["updatedAt"] as? Timestamp {
+                    if ts.dateValue().timeIntervalSinceNow < -10 { isTyping = false }
+                }
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.2)) { self.otherIsTyping = isTyping }
+                }
+            }
+    }
+
+    // Write isTyping state to chats/{chatId}/typing/{myUID}.
+    private func setMyTypingState(_ isTyping: Bool) {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        Firestore.firestore()
+            .collection("chats").document(chatId)
+            .collection("typing").document(uid)
+            .setData(["isTyping": isTyping, "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+
+    // Write the current user's lastSeenAt to their profile document.
+    private func updateMyPresence() {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let userType = (firestore.currentUserType ?? "").uppercased()
+        let coll = userType == "COACH" ? "coaches" : "clients"
+        Firestore.firestore().collection(coll).document(uid).updateData([
+            "lastSeenAt": FieldValue.serverTimestamp()
+        ]) { _ in }
     }
 
     private func sendMessage() {
@@ -348,8 +490,7 @@ struct ChatView: View {
                     firestore.showToast("Failed to send message")
                 } else {
                     self.messageText = ""
-                    // Optionally append a local optimistic message until server timestamp arrives
-                    // The listener will pick up the new message and refresh the list
+                    self.updateMyPresence()
                 }
             }
         }
@@ -368,6 +509,7 @@ fileprivate struct Message: Identifiable, Equatable {
 fileprivate struct MessageRow: View {
     let message: Message
     let isMe: Bool
+    let showReadReceipt: Bool
     @EnvironmentObject var firestore: FirestoreManager
 
     func initials(from name: String) -> String {
@@ -412,7 +554,7 @@ fileprivate struct MessageRow: View {
                             .foregroundColor(.secondary)
                     }
 
-                    if let info = latestReaderInfo {
+                    if showReadReceipt, let info = latestReaderInfo {
                         HStack(spacing: 8) {
                             if let url = info.photoURL {
                                 AsyncImage(url: url) { phase in
@@ -481,6 +623,34 @@ fileprivate struct MessageRow: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Typing Indicator
+
+fileprivate struct TypingIndicatorView: View {
+    @State private var animate = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.secondary.opacity(0.6))
+                    .frame(width: 8, height: 8)
+                    .offset(y: animate ? -4 : 0)
+                    .animation(
+                        .easeInOut(duration: 0.5)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(i) * 0.15),
+                        value: animate
+                    )
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(14)
+        .onAppear { animate = true }
     }
 }
 

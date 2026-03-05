@@ -381,10 +381,14 @@ struct AcceptBookingView: View {
         let coachId = booking.coachID
         let clientId = booking.clientID
 
-        var updatePayload: [String: Any] = ["Status": "Pending Acceptance"]
+        let isPro = firestore.currentCoach?.subscriptionTier == .pro
+        let newStatus = isPro ? "pending_payment" : "Pending Acceptance"
+
+        var updatePayload: [String: Any] = ["Status": newStatus]
         if let r = rateVal { updatePayload["RateUSD"] = r }
         if !note.isEmpty { updatePayload["CoachNote"] = note }
         updatePayload["pendingAt"] = FieldValue.serverTimestamp()
+        if isPro { updatePayload["requiresPaymentUpfront"] = true }
 
         let batch = Firestore.firestore().batch()
         batch.updateData(updatePayload, forDocument: bookingRef)
@@ -393,7 +397,7 @@ struct AcceptBookingView: View {
             let coachBookingRef = Firestore.firestore().collection("coaches").document(coachId).collection("bookings").document(booking.id)
             batch.updateData(updatePayload, forDocument: coachBookingRef)
             // append small summary to coach.calendar
-            var bookingSummary: [String: Any] = ["id": booking.id, "updatedAt": Timestamp(date: Date()), "Status": "Pending Acceptance"]
+            var bookingSummary: [String: Any] = ["id": booking.id, "updatedAt": Timestamp(date: Date()), "Status": newStatus]
             if let r = rateVal { bookingSummary["RateUSD"] = r }
             if !note.isEmpty { bookingSummary["CoachNote"] = note }
             let coachDocRef = Firestore.firestore().collection("coaches").document(coachId)
@@ -415,14 +419,27 @@ struct AcceptBookingView: View {
                     if !clientId.isEmpty {
                         let coachName = self.firestore.currentCoach?.name ?? "Your coach"
                         let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
-                        let notifPayload: [String: Any] = [
-                            "title": "Action Required: Confirm Booking",
-                            "body": "\(coachName) has accepted your booking. Please confirm.",
-                            "bookingId": self.booking.id,
-                            "senderId": coachId,
-                            "createdAt": FieldValue.serverTimestamp(),
-                            "delivered": false
-                        ]
+                        let notifPayload: [String: Any]
+                        if isPro {
+                            notifPayload = [
+                                "title": "Payment Required to Confirm Booking",
+                                "body": "\(coachName) has accepted your booking. Please make payment to confirm.",
+                                "bookingId": self.booking.id,
+                                "senderId": coachId,
+                                "type": "payment_required",
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                        } else {
+                            notifPayload = [
+                                "title": "Action Required: Confirm Booking",
+                                "body": "\(coachName) has accepted your booking. Please confirm.",
+                                "bookingId": self.booking.id,
+                                "senderId": coachId,
+                                "createdAt": FieldValue.serverTimestamp(),
+                                "delivered": false
+                            ]
+                        }
                         notifRef.setData(notifPayload) { nerr in
                             if let nerr = nerr {
                                 print("[AcceptBookingView] Failed to send notification to client: \(nerr)")
@@ -431,7 +448,8 @@ struct AcceptBookingView: View {
                     }
                     // refresh using environment object's convenience method
                     self.firestore.fetchBookingsForCurrentCoachSubcollection()
-                    self.firestore.showToast("Booking pending acceptance")
+                    let toastMessage = isPro ? "Awaiting client payment" : "Booking pending acceptance"
+                    self.firestore.showToast(toastMessage)
                     dismiss()
                 }
             }

@@ -30,6 +30,29 @@ struct CoachHomeView: View {
             }
 
             List {
+                // MARK: - My Clients Section
+                Section(header: Text("My Clients").font(.subheadline).fontWeight(.semibold)) {
+                    NavigationLink {
+                        CoachClientRosterView()
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                    } label: {
+                        HStack {
+                            Image(systemName: "person.2.fill")
+                                .foregroundColor(Color("LogoGreen"))
+                            Text("View Client Roster")
+                                .font(.body)
+                            Spacer()
+                            let count = uniqueClientCount
+                            if count > 0 {
+                                Text("\(count)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+
                 // MARK: - Tournaments Section
                 Section(header: Text("Tournaments").font(.subheadline).fontWeight(.semibold)) {
                     NavigationLink {
@@ -264,6 +287,19 @@ struct CoachHomeView: View {
     }
 
     // MARK: - Computed Properties
+
+    /// Returns the number of unique clients this coach has worked with
+    private var uniqueClientCount: Int {
+        guard let uid = auth.user?.uid else { return 0 }
+        var ids = Set<String>()
+        for booking in firestore.coachBookings {
+            if !booking.clientID.isEmpty && booking.clientID != uid { ids.insert(booking.clientID) }
+            if let clientIds = booking.clientIDs {
+                for id in clientIds where !id.isEmpty && id != uid { ids.insert(id) }
+            }
+        }
+        return ids.count
+    }
 
     /// Returns the count of active stringing orders (accepted or stringing) for the current user
     private var activeStringingOrdersCount: Int {

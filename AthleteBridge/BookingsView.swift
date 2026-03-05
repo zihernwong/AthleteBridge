@@ -210,8 +210,8 @@ struct BookingsView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForRejection = booking
                 }
-            } else if status == "cancelled" {
-                print("[DeepLink-Bookings]   FOUND in client bookings (cancelled) → opening BookingDetailView")
+            } else if status == "cancelled" || status == "payment_submitted" {
+                print("[DeepLink-Bookings]   FOUND in client bookings (cancelled/payment_submitted) → opening BookingDetailView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForDetail = booking
                 }
@@ -221,7 +221,7 @@ struct BookingsView: View {
                     self.selectedBookingForDetail = booking
                 }
             } else {
-                // Status is "pending acceptance" or "partially_confirmed" — client needs to review
+                // Status is "pending acceptance", "pending_payment", or "partially_confirmed" — client needs to review
                 print("[DeepLink-Bookings]   FOUND in client bookings (pending) → opening ReviewBookingView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForReview = booking
@@ -234,6 +234,11 @@ struct BookingsView: View {
             deepLink.pendingBookingType = nil
             if status == "cancelled" {
                 print("[DeepLink-Bookings]   FOUND in coach bookings (cancelled) → opening BookingDetailView")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.selectedBookingForDetail = booking
+                }
+            } else if status == "payment_submitted" || status == "pending_payment" {
+                print("[DeepLink-Bookings]   FOUND in coach bookings (payment_submitted/pending_payment) → opening BookingDetailView")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     self.selectedBookingForDetail = booking
                 }
@@ -353,6 +358,9 @@ struct BookingsView: View {
                 if status == "pending acceptance" {
                     return true
                 }
+                if status == "pending_payment" {
+                    return true
+                }
                 if status == "partially_confirmed" {
                     // Check if current client has already confirmed
                     let confirmations = booking.clientConfirmations ?? [:]
@@ -403,7 +411,32 @@ struct BookingsView: View {
 
     private var coachBookingsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Removed label per request
+            // Payment submitted bookings awaiting coach confirmation
+            let paymentSubmitted = firestore.coachBookings.filter { booking in
+                (booking.status ?? "").lowercased() == "payment_submitted"
+            }
+            if !paymentSubmitted.isEmpty {
+                Text("Awaiting Payment Confirmation").font(.headline)
+                ForEach(paymentSubmitted, id: \.id) { b in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Button(action: { selectedBookingForDetail = b }) {
+                            BookingRowView(item: b)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .overlay(alignment: .trailing) {
+                            Button(action: { selectedBookingForDetail = b }) {
+                                Text("Confirm Payment")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Color("LogoGreen"))
+                            .padding(.top, -4)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
             NavigationLink(destination:
                             CoachConfirmedBookingsView()
                                 .environmentObject(firestore)

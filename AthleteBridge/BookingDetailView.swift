@@ -14,6 +14,11 @@ struct BookingDetailView: View {
     @State private var selectedCoachName: String = "Coach"
     @State private var errorMessage: String? = nil
     @State private var showCoachPickerForNotify: Bool = false
+    @State private var isConfirmingPayment: Bool = false
+
+    // Post-session notes state (coach-only)
+    @State private var sessionNotesDraft: String = ""
+    @State private var isSavingNotes: Bool = false
 
     private var currentUserRole: String? {
         firestore.currentUserType?.uppercased()
@@ -41,10 +46,16 @@ struct BookingDetailView: View {
 
     private func displayStatus(for status: String?) -> String {
         let raw = status ?? "Unknown"
-        if raw.lowercased() == "declined_by_client" {
+        switch raw.lowercased() {
+        case "declined_by_client":
             return currentUserRole == "COACH" ? "Declined By Client" : "Declined"
+        case "pending_payment":
+            return currentUserRole == "COACH" ? "Awaiting Client Payment" : "Payment Required"
+        case "payment_submitted":
+            return currentUserRole == "COACH" ? "Payment Submitted — Confirm Receipt" : "Payment Submitted"
+        default:
+            return raw.replacingOccurrences(of: "_", with: " ").capitalized
         }
-        return raw.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private func statusColor(for status: String?) -> Color {
@@ -53,7 +64,7 @@ struct BookingDetailView: View {
             return Color("LogoGreen")
         case "requested":
             return Color("LogoBlue")
-        case "pending acceptance":
+        case "pending acceptance", "pending_payment", "payment_submitted":
             return .orange
         case "rejected", "declined", "declined_by_client", "cancelled":
             return .red
@@ -118,10 +129,16 @@ struct BookingDetailView: View {
                     rateSection
 
                     // Payment Section (for unpaid confirmed bookings - client only)
-                    if currentUserRole == "CLIENT" && 
+                    if currentUserRole == "CLIENT" &&
                        (booking.status ?? "").lowercased() == "confirmed" &&
                        (booking.paymentStatus ?? "").lowercased() != "paid" {
                         paymentActionsSection
+                    }
+
+                    // Coach payment confirmation (for payment_submitted bookings)
+                    if currentUserRole == "COACH" &&
+                       (booking.status ?? "").lowercased() == "payment_submitted" {
+                        coachPaymentConfirmationSection
                     }
 
                     // Notes Section
@@ -143,6 +160,7 @@ struct BookingDetailView: View {
             }
             .navigationTitle("Booking Details")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { sessionNotesDraft = booking.coachNote ?? "" }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -385,39 +403,84 @@ struct BookingDetailView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
 
-    private var hasNotes: Bool {
-        let hasClientNotes = !(booking.notes ?? "").isEmpty
-        let hasCoachNote = !(booking.coachNote ?? "").isEmpty
-        return hasClientNotes || hasCoachNote
-    }
+    private var hasClientNotes: Bool { !(booking.notes ?? "").isEmpty }
+    private var isCoachRole: Bool { currentUserRole == "COACH" }
 
     @ViewBuilder
     private var notesSection: some View {
-        if hasNotes {
+        // Show section if there are client notes (both roles) OR if coach (always show notes editor)
+        if hasClientNotes || isCoachRole {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Notes")
                     .font(.headline)
 
+                // Client notes — visible to both roles
                 if let notes = booking.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.body)
                         .foregroundColor(.secondary)
+
+                    if isCoachRole { Divider() }
                 }
 
-                if let coachNote = booking.coachNote, !coachNote.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Coach Note")
+                // Coach private session notes — coach only
+                if isCoachRole {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Session Notes (Private)")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        Text(coachNote)
+
+                        TextEditor(text: $sessionNotesDraft)
+                            .frame(minHeight: 80, maxHeight: 160)
+                            .padding(6)
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
                             .font(.body)
-                            .foregroundColor(.secondary)
+
+                        if sessionNotesDraft != (booking.coachNote ?? "") {
+                            Button(action: saveSessionNotes) {
+                                HStack {
+                                    if isSavingNotes {
+                                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    } else {
+                                        Text("Save Notes")
+                                    }
+                                }
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(Color("LogoBlue"))
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                            }
+                            .disabled(isSavingNotes)
+                        }
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+        }
+    }
+
+    private func saveSessionNotes() {
+        guard let coachId = auth.user?.uid else { return }
+        isSavingNotes = true
+        firestore.saveSessionNotes(
+            bookingId: booking.id,
+            coachId: coachId,
+            clientId: booking.clientID,
+            notes: sessionNotesDraft
+        ) { err in
+            DispatchQueue.main.async {
+                self.isSavingNotes = false
+                if let err = err {
+                    self.errorMessage = err.localizedDescription
+                } else {
+                    self.firestore.showToast("Session notes saved")
+                }
+            }
         }
     }
 
@@ -451,6 +514,91 @@ struct BookingDetailView: View {
         }
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.red.opacity(0.1)))
+    }
+
+    // MARK: - Coach Payment Confirmation Section
+
+    private var coachPaymentConfirmationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(.orange)
+                Text("Payment Submitted by Client")
+                    .font(.headline)
+            }
+
+            Text("The client has submitted payment. Once you confirm receipt, the booking will be marked as confirmed and paid.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Button(action: confirmPaymentReceived) {
+                HStack {
+                    if isConfirmingPayment {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Confirm Payment Received")
+                    }
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(Color("LogoGreen"))
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(isConfirmingPayment)
+        }
+        .padding()
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.orange.opacity(0.08)))
+    }
+
+    private func confirmPaymentReceived() {
+        guard let coachId = auth.user?.uid else { return }
+        isConfirmingPayment = true
+        let db = Firestore.firestore()
+        let updatePayload: [String: Any] = [
+            "Status": "confirmed",
+            "PaymentStatus": "paid",
+            "confirmedAt": FieldValue.serverTimestamp(),
+            "paymentConfirmedByCoach": coachId,
+            "paymentConfirmedAt": FieldValue.serverTimestamp()
+        ]
+        let batch = db.batch()
+        batch.updateData(updatePayload, forDocument: db.collection("bookings").document(booking.id))
+        let coachBookingRef = db.collection("coaches").document(booking.coachID.isEmpty ? coachId : booking.coachID).collection("bookings").document(booking.id)
+        batch.updateData(updatePayload, forDocument: coachBookingRef)
+        if !booking.clientID.isEmpty {
+            batch.updateData(updatePayload, forDocument: db.collection("clients").document(booking.clientID).collection("bookings").document(booking.id))
+        }
+        batch.commit { err in
+            DispatchQueue.main.async {
+                self.isConfirmingPayment = false
+                if let err = err {
+                    self.errorMessage = err.localizedDescription
+                } else {
+                    // Notify client
+                    if !self.booking.clientID.isEmpty {
+                        let coachName = self.firestore.currentCoach?.name ?? "Your coach"
+                        let notifRef = db.collection("pendingNotifications").document(self.booking.clientID).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Booking Confirmed",
+                            "body": "\(coachName) has confirmed your payment. Your booking is now confirmed!",
+                            "bookingId": self.booking.id,
+                            "senderId": coachId,
+                            "type": "booking_confirmed",
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                    self.firestore.fetchBookingsForCurrentCoachSubcollection()
+                    self.firestore.showToast("Payment confirmed. Booking is now confirmed.")
+                    self.dismiss()
+                }
+            }
+        }
     }
 
     // MARK: - Payment Actions Section

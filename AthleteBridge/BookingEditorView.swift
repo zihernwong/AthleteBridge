@@ -302,6 +302,39 @@ struct BookingEditorView: View {
 
                 // Show coach calendar grid once any coach is selected; hide time pickers
                 if (isGroupBooking && !selectedCoaches.isEmpty) || selectedCoach != nil {
+                    // Details section (location) shown first
+                    Section {
+                        if availableCoachPlaces.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("No locations configured by this coach.")
+                                    .foregroundColor(.secondary)
+                                    .font(.subheadline)
+                                Text("Location will be arranged separately.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Picker("Location", selection: $selectedLocationId) {
+                                    Text("Select a location").tag("")
+                                    ForEach(availableCoachPlaces) { place in
+                                        Text(place.name).tag(place.id)
+                                    }
+                                }
+                                if let selected = availableCoachPlaces.first(where: { $0.id == selectedLocationId }),
+                                   !selected.address.isEmpty {
+                                    Text(selected.address)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.leading, 4)
+                                }
+                            }
+                        }
+                        TextEditor(text: $notes).frame(minHeight: 80)
+                    } header: {
+                        Text("Details")
+                    }
+
                     Section {
                         // Show merged availability info for group bookings
                         if isGroupBooking && selectedCoachIds.count > 1 {
@@ -369,39 +402,6 @@ struct BookingEditorView: View {
                         }
                     } header: {
                         Text(isGroupBooking && selectedCoachIds.count > 1 ? "Combined Coach Availability" : "Coach Calendar")
-                    }
-
-                    // Details section remains
-                    Section {
-                        if availableCoachPlaces.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("No locations configured by this coach.")
-                                    .foregroundColor(.secondary)
-                                    .font(.subheadline)
-                                Text("Location will be arranged separately.")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Picker("Location", selection: $selectedLocationId) {
-                                    Text("Select a location").tag("")
-                                    ForEach(availableCoachPlaces) { place in
-                                        Text(place.name).tag(place.id)
-                                    }
-                                }
-                                if let selected = availableCoachPlaces.first(where: { $0.id == selectedLocationId }),
-                                   !selected.address.isEmpty {
-                                    Text(selected.address)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .padding(.leading, 4)
-                                }
-                            }
-                        }
-                        TextEditor(text: $notes).frame(minHeight: 80)
-                    } header: {
-                        Text("Details")
                     }
                 }
 

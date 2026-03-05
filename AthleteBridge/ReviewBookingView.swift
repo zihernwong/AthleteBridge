@@ -8,6 +8,15 @@ struct ReviewBookingView: View {
 
     let booking: FirestoreManager.BookingItem
 
+    // Payment upfront flow (pro coaches)
+    @State private var coachPayments: [String: String] = [:]
+    @State private var isSubmittingPayment: Bool = false
+    @State private var showPaymentMethodsSheet: Bool = false
+
+    private var requiresPaymentUpfront: Bool {
+        booking.requiresPaymentUpfront == true
+    }
+
     private var coachDisplayName: String {
         booking.coachName ?? "Coach"
     }
@@ -268,6 +277,54 @@ struct ReviewBookingView: View {
                             .cornerRadius(12)
                         }
 
+                        // Payment upfront section (pro coaches only)
+                        if requiresPaymentUpfront {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Label("Payment Required", systemImage: "creditcard.fill")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color("LogoBlue"))
+
+                                Text("This coach requires payment before your booking is confirmed. Please pay using one of their methods below, then tap \"I've Paid\".")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                if coachPayments.isEmpty {
+                                    Text("No payment methods on file — contact your coach directly.")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    ForEach(coachPayments.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                                        HStack {
+                                            Text(key.capitalized)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                            Spacer()
+                                            Text(value)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color(UIColor.tertiarySystemBackground))
+                                        .cornerRadius(8)
+                                    }
+                                }
+
+                                Button(action: { showPaymentMethodsSheet = true }) {
+                                    Text("Open Payment App")
+                                        .font(.subheadline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(Color("LogoBlue").opacity(0.15))
+                                        .foregroundColor(Color("LogoBlue"))
+                                        .cornerRadius(10)
+                                }
+                            }
+                            .padding()
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(12)
+                        }
+
                         // Action buttons
                         HStack(spacing: 12) {
                             Button {
@@ -285,19 +342,42 @@ struct ReviewBookingView: View {
                                 .cornerRadius(12)
                             }
 
-                            Button {
-                                confirmOrDecline(status: "confirmed")
-                            } label: {
-                                HStack {
-                                    Image(systemName: "checkmark")
-                                    Text("Confirm")
+                            if requiresPaymentUpfront {
+                                Button {
+                                    submitPayment()
+                                } label: {
+                                    HStack {
+                                        if isSubmittingPayment {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        } else {
+                                            Image(systemName: "checkmark.seal.fill")
+                                            Text("I've Paid")
+                                        }
+                                    }
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color("LogoGreen"))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
                                 }
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(Color("LogoGreen"))
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
+                                .disabled(isSubmittingPayment)
+                            } else {
+                                Button {
+                                    confirmOrDecline(status: "confirmed")
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "checkmark")
+                                        Text("Confirm")
+                                    }
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color("LogoGreen"))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(12)
+                                }
                             }
                         }
                         .padding(.top, 8)
@@ -310,6 +390,19 @@ struct ReviewBookingView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Close") { dismiss() }
                 }
+            }
+            .task {
+                if requiresPaymentUpfront && !booking.coachID.isEmpty {
+                    FirestoreManager.shared.fetchCoachPayments(coachIdOrPath: booking.coachID) { map in
+                        DispatchQueue.main.async { self.coachPayments = map }
+                    }
+                }
+            }
+            .sheet(isPresented: $showPaymentMethodsSheet) {
+                CoachPaymentMethodsSheet(
+                    coachName: booking.coachName ?? "Coach",
+                    payments: coachPayments
+                )
             }
         }
         .alert(isPresented: $showCalendarAlert) {
@@ -514,6 +607,52 @@ struct ReviewBookingView: View {
             return customDeclineReason.trimmingCharacters(in: .whitespaces)
         }
         return selectedDeclineReason
+    }
+
+    private func submitPayment() {
+        guard let clientId = auth.user?.uid else {
+            firestore.showToast("Not authenticated")
+            return
+        }
+        isSubmittingPayment = true
+        let db = Firestore.firestore()
+        let updatePayload: [String: Any] = [
+            "Status": "payment_submitted",
+            "paymentSubmittedAt": FieldValue.serverTimestamp(),
+            "paymentSubmittedByClient": clientId
+        ]
+        let batch = db.batch()
+        batch.updateData(updatePayload, forDocument: db.collection("bookings").document(booking.id))
+        if !booking.coachID.isEmpty {
+            batch.updateData(updatePayload, forDocument: db.collection("coaches").document(booking.coachID).collection("bookings").document(booking.id))
+        }
+        batch.updateData(updatePayload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(booking.id))
+        batch.commit { err in
+            DispatchQueue.main.async {
+                self.isSubmittingPayment = false
+                if let err = err {
+                    self.firestore.showToast("Failed: \(err.localizedDescription)")
+                } else {
+                    if !self.booking.coachID.isEmpty {
+                        let clientName = self.firestore.currentClient?.name ?? "Client"
+                        let notifRef = db.collection("pendingNotifications").document(self.booking.coachID).collection("notifications").document()
+                        let notifPayload: [String: Any] = [
+                            "title": "Payment Submitted",
+                            "body": "\(clientName) has submitted payment. Please confirm receipt to finalize the booking.",
+                            "bookingId": self.booking.id,
+                            "senderId": clientId,
+                            "type": "payment_submitted",
+                            "createdAt": FieldValue.serverTimestamp(),
+                            "delivered": false
+                        ]
+                        notifRef.setData(notifPayload) { _ in }
+                    }
+                    self.firestore.fetchBookingsForCurrentClientSubcollection()
+                    self.firestore.showToast("Payment submitted. Awaiting coach confirmation.")
+                    self.dismiss()
+                }
+            }
+        }
     }
 
     private func addToCalendar() {
