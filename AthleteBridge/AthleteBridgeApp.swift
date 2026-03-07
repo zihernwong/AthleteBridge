@@ -96,33 +96,15 @@ struct AthleteBridgeApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var auth = AuthViewModel()
     @StateObject private var firestore = FirestoreManager()
+    @StateObject private var subscriptionStore = SubscriptionStore()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(auth)
                 .environmentObject(firestore)
+                .environmentObject(subscriptionStore)
                 .environmentObject(DeepLinkManager.shared)
-                .onOpenURL { url in
-                    handleIncomingURL(url)
-                }
-        }
-    }
-
-    private func handleIncomingURL(_ url: URL) {
-        print("[AthleteBridgeApp] Received URL: \(url)")
-        // Handle athletebridge://stripe/success?session_id=...
-        guard url.scheme == "athletebridge" else { return }
-
-        if url.host == "stripe" && url.path.contains("success") {
-            print("[AthleteBridgeApp] Stripe payment success - syncing subscription")
-            // Sync subscription tier after successful payment
-            if let uid = Auth.auth().currentUser?.uid {
-                // Small delay to allow Stripe webhook to process
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    firestore.syncSubscriptionTierFromStripe(for: uid)
-                }
-            }
         }
     }
 }

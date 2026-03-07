@@ -81,6 +81,40 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Delete Account
+    func deleteAccount() async {
+        guard let currentUser = Auth.auth().currentUser else { return }
+        let uid = currentUser.uid
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        // Remove FCM device token to stop notifications
+        await withCheckedContinuation { continuation in
+            NotificationManager.shared.removeDeviceToken { continuation.resume() }
+        }
+
+        // Delete user Firestore documents
+        let db = Firestore.firestore()
+        for collection in ["coaches", "clients", "userType", "userSettings", "playersToPlayWith"] {
+            try? await db.collection(collection).document(uid).delete()
+        }
+
+        // Delete the Firebase Auth account
+        do {
+            try await currentUser.delete()
+            self.user = nil
+        } catch {
+            let nsError = error as NSError
+            if let authCode = AuthErrorCode(rawValue: nsError.code), authCode == .requiresRecentLogin {
+                errorMessage = "For security, please sign out and sign back in before deleting your account."
+            } else {
+                errorMessage = "Failed to delete account: \(nsError.localizedDescription)"
+            }
+        }
+    }
+
     // MARK: - Phone Verification
     @Published var verificationID: String?
     @Published var phoneVerificationInProgress = false

@@ -1,0 +1,195 @@
+{
+  "appPolicies" : {
+    "eula" : "https://athletebridge-63176.web.app/terms/",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : "https://athletebridge-63176.web.app/privacy/"
+      }
+    ]
+  },
+  "autoRenewableSubscriptions" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "groupID" : "E5F6A7B8",
+      "internalID" : "C9D0E1F2",
+      "introductoryOffer" : null,
+      "localizations" : [
+        {
+          "description" : "Revenue insights and analytics for your coaching business.",
+          "displayName" : "Coach Plus",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "AthleteBridge.coach.plus.monthly",
+      "recurringSubscriptionPeriod" : "P1M",
+      "referenceName" : "Coach Plus",
+      "subscriptionGroupID" : "E5F6A7B8",
+      "type" : "RecurringSubscription"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "groupID" : "E5F6A7B8",
+      "internalID" : "A3B4C5D6",
+      "introductoryOffer" : null,
+      "localizations" : [
+        {
+          "description" : "Revenue insights plus featured listing in the coach search engine.",
+          "displayName" : "Coach Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "AthleteBridge.coach.pro.monthly",
+      "recurringSubscriptionPeriod" : "P1M",
+      "referenceName" : "Coach Pro",
+      "subscriptionGroupID" : "E5F6A7B8",
+      "type" : "RecurringSubscription"
+    }
+  ],
+  "consumableProducts" : [
+
+  ],
+  "identifier" : "A1B2C3D4",
+  "nonConsumableProducts" : [
+
+  ],
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationUsername" : "",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "27B7DEF2",
+      "localizations" : [
+
+      ],
+      "name" : "Coach Plus ",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "9909A38D",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "AthleteBridge.coach.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Coach Plus ",
+          "subscriptionGroupID" : "27B7DEF2",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    },
+    {
+      "id" : "FF18F011",
+      "localizations" : [
+
+      ],
+      "name" : "Coach Pro ",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "14.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "9B0D006A",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "AthleteBridge.coach.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Coach Pro ",
+          "subscriptionGroupID" : "FF18F011",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

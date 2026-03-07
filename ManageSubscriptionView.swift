@@ -13,17 +13,7 @@ struct ManageSubscriptionView: View {
                 VStack(spacing: 20) {
                     currentPlanHeader
 
-                    if subscriptionStore.productsLoadFailed {
-                        VStack(spacing: 12) {
-                            Text("Could not load subscription plans.")
-                                .foregroundColor(.secondary)
-                            Button("Retry") {
-                                Task { await subscriptionStore.loadProducts() }
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                        .padding(.top, 40)
-                    } else if subscriptionStore.isLoadingProducts || subscriptionStore.products.isEmpty {
+                    if subscriptionStore.products.isEmpty {
                         ProgressView("Loading plans...")
                             .padding(.top, 40)
                     } else {
@@ -37,16 +27,6 @@ struct ManageSubscriptionView: View {
                     .font(.footnote)
                     .foregroundColor(.secondary)
                     .padding(.top, 4)
-
-                    // Privacy Policy and Terms of Use — required by App Store guideline 3.1.2(c)
-                    HStack(spacing: 16) {
-                        Link("Privacy Policy", destination: URL(string: "https://athletebridge-63176.web.app/privacy/")!)
-                        Text("·").foregroundColor(.secondary)
-                        Link("Terms of Use", destination: URL(string: "https://athletebridge-63176.web.app/terms/")!)
-                    }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 4)
 
                     // Opens Apple's native subscription management UI
                     if subscriptionStore.currentTier != .free {
@@ -154,16 +134,16 @@ struct ManageSubscriptionView: View {
             featureList(for: tier)
 
             if !isCurrent, let product {
-                let isThisProcessing = subscriptionStore.purchasingProductID == product.id
-                let anyProcessing = subscriptionStore.purchasingProductID != nil
                 Button {
                     Task { await subscriptionStore.purchase(product) }
                 } label: {
                     HStack {
-                        if isThisProcessing {
+                        if subscriptionStore.isPurchasing {
                             ProgressView().progressViewStyle(CircularProgressViewStyle())
                         }
-                        Text(isThisProcessing ? "Processing..." : "Subscribe – \(product.displayPrice)/mo")
+                        Text(subscriptionStore.isPurchasing
+                             ? "Processing..."
+                             : "Subscribe – \(product.displayPrice)/mo")
                             .bold()
                     }
                     .frame(maxWidth: .infinity)
@@ -171,7 +151,7 @@ struct ManageSubscriptionView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(colorForTier(tier)))
                     .foregroundColor(.white)
                 }
-                .disabled(anyProcessing)
+                .disabled(subscriptionStore.isPurchasing)
             }
         }
         .padding()

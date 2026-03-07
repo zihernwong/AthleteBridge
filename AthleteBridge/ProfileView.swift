@@ -13,6 +13,7 @@ struct ProfileView: View {
 
     @EnvironmentObject var auth: AuthViewModel
     @EnvironmentObject var firestore: FirestoreManager
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @State private var role: Role = .client
     @State private var selectedAdditionalTypes: Set<AdditionalUserType> = []
     @State private var showingAdditionalTypesSheet: Bool = false
@@ -86,6 +87,11 @@ struct ProfileView: View {
     // Manage subscription sheet
     @State private var showingManageSubscription: Bool = false
 
+    // Delete account
+    @State private var showDeleteAccountAlert: Bool = false
+    @State private var showDeleteAccountError: Bool = false
+    @State private var isDeletingAccount: Bool = false
+
     // Coach linked places to play
     @State private var selectedPlaceIds: Set<String> = []
     @State private var showingPlacesPicker: Bool = false
@@ -121,6 +127,7 @@ struct ProfileView: View {
                     if role == .client { clientSection } else { coachSection }
                     if role == .coach { subscriptionSection }
                     saveSection
+                    deleteAccountSection
                 }
                 .navigationTitle((firestore.currentClient != nil || firestore.currentCoach != nil) ? "Edit Profile" : "Create Profile")
                 .navigationBarTitleDisplayMode(.inline)
@@ -134,8 +141,8 @@ struct ProfileView: View {
                     if let uid = auth.user?.uid {
                         firestore.fetchCurrentProfiles(for: uid)
                         firestore.fetchUserType(for: uid)
-                        // Sync subscription tier for coaches
-                        firestore.syncSubscriptionTierFromStripe(for: uid)
+                        // Refresh StoreKit entitlements and sync tier to Firestore
+                        Task { await subscriptionStore.refreshEntitlements() }
                     }
                     loadInitial()
                     fetchSubjectIDs()
@@ -192,6 +199,27 @@ struct ProfileView: View {
                         selectedIds: $selectedPlaceIds,
                         onDone: { saveProfile() }
                     )
+                }
+                .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
+                    Button("Delete", role: .destructive) {
+                        isDeletingAccount = true
+                        Task {
+                            await auth.deleteAccount()
+                            isDeletingAccount = false
+                            if let msg = auth.errorMessage, !msg.isEmpty {
+                                showDeleteAccountError = true
+                            }
+                            // On success auth.user becomes nil and RootView navigates to login automatically
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Are you sure you want to permanently delete your account? All your data will be removed and this cannot be undone.")
+                }
+                .alert("Could Not Delete Account", isPresented: $showDeleteAccountError) {
+                    Button("OK") { auth.errorMessage = nil }
+                } message: {
+                    Text(auth.errorMessage ?? "An error occurred. Please try again.")
                 }
             }
 
@@ -684,7 +712,7 @@ struct ProfileView: View {
     private var subscriptionSection: some View {
         Section("Subscription") {
             HStack {
-                let tier = firestore.currentCoach?.subscriptionTier ?? .free
+                let tier = subscriptionStore.currentTier
                 Text(tier.displayName)
                     .font(.subheadline)
                     .bold()
@@ -722,6 +750,22 @@ struct ProfileView: View {
                     .disabled(isSaving)
                 if let msg = saveMessage { Text(msg).foregroundColor(.green) }
             }
+        }
+    }
+
+    private var deleteAccountSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showDeleteAccountAlert = true
+            } label: {
+                HStack {
+                    if isDeletingAccount { ProgressView().tint(.red) }
+                    Text("Delete Account")
+                }
+            }
+            .disabled(isDeletingAccount)
+        } footer: {
+            Text("Permanently deletes your account and all associated data. This cannot be undone.")
         }
     }
 

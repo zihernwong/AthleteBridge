@@ -66,6 +66,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4B1C977F2F5B23BA005EFC5D /* ManageSubscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageSubscriptionView.swift; sourceTree = "<group>"; };
 		4B285B3E2ECEBBAB00241189 /* AthleteBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AthleteBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B285B4B2ECEBBAD00241189 /* AthleteBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AthleteBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B285B552ECEBBAD00241189 /* AthleteBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AthleteBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -3506,6 +3507,7 @@
 		4B285B352ECEBBAB00241189 = {
 			isa = PBXGroup;
 			children = (
+				4B1C977F2F5B23BA005EFC5D /* ManageSubscriptionView.swift */,
 				4B74E5E32EDD451E0030F699 /* LaunchScreen.storyboard */,
 				4B285B402ECEBBAB00241189 /* AthleteBridge */,
 				4B285B4E2ECEBBAD00241189 /* AthleteBridgeTests */,
@@ -3873,7 +3875,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AthleteBridge/AthleteBridge.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = Q27LVA8STD;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -3903,7 +3905,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AthleteBridge/AthleteBridge.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 41;
 				DEVELOPMENT_TEAM = Q27LVA8STD;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
