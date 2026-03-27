@@ -12,8 +12,17 @@ struct StringerDetailView: View {
     let stringer: BadmintonStringer
 
     @State private var showReviewSheet = false
-    @State private var showOrderSheet = false
-    @State private var linkedCoach: Coach? = nil
+
+    // Inline order form state
+    @State private var racketName = ""
+    @State private var hasOwnString = false
+    @State private var selectedString: String? = nil
+    @State private var tension = 24
+    @State private var timelinePreference = "No rush"
+    @State private var isSaving = false
+    @State private var showSuccess = false
+
+    private let timelineOptions = ["ASAP", "Within 1 day", "Within 3 days", "No rush"]
 
     private var currentUid: String { auth.user?.uid ?? "" }
 
@@ -22,6 +31,44 @@ struct StringerDetailView: View {
         guard !reviews.isEmpty else { return 0 }
         return Double(reviews.reduce(0) { $0 + $1.rating }) / Double(reviews.count)
     }
+
+    private var sortedOfferedStringKeys: [String] {
+        let order = presetStrings
+        return stringer.stringsOffered.keys.sorted { a, b in
+            let ia = order.firstIndex(of: a) ?? Int.max
+            let ib = order.firstIndex(of: b) ?? Int.max
+            return ia < ib
+        }
+    }
+
+    private func parseDollars(_ str: String) -> Double? {
+        Double(str.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "$", with: ""))
+    }
+
+    private var computedTotal: Double {
+        let labor = parseDollars(stringer.laborCost) ?? 0
+        let strings: Double = {
+            guard !hasOwnString, let sel = selectedString,
+                  let costStr = stringer.stringsOffered[sel] else { return 0 }
+            return parseDollars(costStr) ?? 0
+        }()
+        return labor + strings
+    }
+
+    private var formattedTotal: String { String(format: "$%.2f", computedTotal) }
+
+    private var missingOrderFields: [String] {
+        var missing: [String] = []
+        if racketName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("Racket name")
+        }
+        if !hasOwnString && selectedString == nil {
+            missing.append("String selection (or toggle \"I have my own string\")")
+        }
+        return missing
+    }
+
+    @State private var validationMessage: String? = nil
 
     var body: some View {
         List {
@@ -32,17 +79,9 @@ struct StringerDetailView: View {
                     AvatarView(url: photoURL, size: 56, useCurrentUser: false)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        if let coach = linkedCoach {
-                            NavigationLink(destination: CoachDetailView(coach: coach).environmentObject(firestore)) {
-                                Text(stringer.name)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                            }
-                        } else {
-                            Text(stringer.name)
-                                .font(.title2)
-                                .fontWeight(.bold)
-                        }
+                        Text(stringer.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
 
                         if !stringer.meetupLocationNames.isEmpty {
                             HStack(alignment: .top, spacing: 4) {
@@ -76,7 +115,8 @@ struct StringerDetailView: View {
                 }
             }
 
-            // Labor cost & Strings offered
+            // Labor cost & Strings offered (owner view only — non-owners see pricing in the order form)
+            if stringer.id == currentUid {
             Section(header: Text("Pricing")) {
                 if !stringer.laborCost.isEmpty {
                     HStack {
@@ -103,6 +143,112 @@ struct StringerDetailView: View {
                             }
                         }
                     }
+                }
+            }
+            } // end owner-only Pricing section
+
+            // Inline order form (non-owners only)
+            if stringer.id != currentUid {
+                Section(header: Text("Racket")) {
+                    TextField("Racket Name (e.g. Yonex Astrox 88D)", text: $racketName)
+                }
+
+                Section(header: Text("String")) {
+                    Toggle("I have my own string", isOn: $hasOwnString)
+                        .tint(Color("LogoGreen"))
+
+                    if !hasOwnString && !stringer.stringsOffered.isEmpty {
+                        Text("Select a string from this stringer:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        ForEach(sortedOfferedStringKeys, id: \.self) { name in
+                            Button(action: { selectedString = name }) {
+                                HStack {
+                                    Image(systemName: selectedString == name ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(selectedString == name ? Color("LogoGreen") : .secondary)
+                                    Text(name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if let cost = stringer.stringsOffered[name], !cost.isEmpty {
+                                        Text(cost)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+
+                Section(header: Text("Tension (lbs)")) {
+                    Stepper("\(tension) lbs", value: $tension, in: 16...35)
+                }
+
+                Section(header: Text("Timeline Preference")) {
+                    ForEach(timelineOptions, id: \.self) { option in
+                        Button(action: { timelinePreference = option }) {
+                            HStack {
+                                Image(systemName: timelinePreference == option ? "checkmark.circle.fill" : "circle")
+                                    .foregroundColor(timelinePreference == option ? Color("LogoGreen") : .secondary)
+                                Text(option)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+
+                Section(header: Text("Order Total")) {
+                    if !stringer.laborCost.isEmpty {
+                        HStack {
+                            Text("Labor")
+                            Spacer()
+                            Text(stringer.laborCost).foregroundColor(.secondary)
+                        }
+                    }
+                    if !hasOwnString, let sel = selectedString,
+                       let costStr = stringer.stringsOffered[sel], !costStr.isEmpty {
+                        HStack {
+                            Text("String (\(sel))")
+                            Spacer()
+                            Text(costStr).foregroundColor(.secondary)
+                        }
+                    } else if hasOwnString {
+                        HStack {
+                            Text("String")
+                            Spacer()
+                            Text("Own string").foregroundColor(.secondary)
+                        }
+                    }
+                    HStack {
+                        Text("Total").fontWeight(.semibold)
+                        Spacer()
+                        Text(formattedTotal)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color("LogoGreen"))
+                    }
+                }
+
+                Section {
+                    Button(action: submitOrder) {
+                        HStack {
+                            Spacer()
+                            if isSaving {
+                                ProgressView()
+                            } else {
+                                Label("Submit Stringing Order", systemImage: "cart")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .background(Color("LogoGreen"))
+                        .cornerRadius(10)
+                    }
+                    .disabled(isSaving)
+                    .listRowBackground(Color.clear)
                 }
             }
 
@@ -155,44 +301,68 @@ struct StringerDetailView: View {
                     }
                 }
             }
-
-            // Order form button (hidden for the stringer themselves)
-            if stringer.id != currentUid {
-                Section {
-                    Button(action: { showOrderSheet = true }) {
-                        HStack {
-                            Spacer()
-                            Label("Place Stringing Order", systemImage: "cart")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            Spacer()
-                        }
-                        .padding(.vertical, 8)
-                        .background(Color("LogoGreen"))
-                        .cornerRadius(10)
-                    }
-                    .listRowBackground(Color.clear)
-                }
-            }
         }
         .navigationTitle(stringer.name)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             firestore.fetchStringerReviews(stringerId: stringer.id)
-            if firestore.coaches.isEmpty { firestore.fetchCoaches() }
-            linkedCoach = firestore.coaches.first(where: { $0.id == stringer.id })
         }
-        .onChange(of: firestore.coaches) { _, newCoaches in
-            linkedCoach = newCoaches.first(where: { $0.id == stringer.id })
+        .onChange(of: hasOwnString) { _, newValue in
+            if newValue { selectedString = nil }
         }
         .sheet(isPresented: $showReviewSheet) {
             AddStringerReviewView(stringer: stringer)
                 .environmentObject(firestore)
         }
-        .sheet(isPresented: $showOrderSheet) {
-            StringerOrderFormView(stringer: stringer)
-                .environmentObject(firestore)
+        .alert("Order Submitted", isPresented: $showSuccess) {
+            Button("OK") { resetOrderForm() }
+        } message: {
+            Text("Your stringing order has been submitted to \(stringer.name).")
         }
+        .alert("Missing Information", isPresented: Binding(
+            get: { validationMessage != nil },
+            set: { if !$0 { validationMessage = nil } }
+        )) {
+            Button("OK") { validationMessage = nil }
+        } message: {
+            Text(validationMessage ?? "")
+        }
+    }
+
+    private func submitOrder() {
+        let missing = missingOrderFields
+        if !missing.isEmpty {
+            validationMessage = "Please complete the following before submitting:\n\n• " + missing.joined(separator: "\n• ")
+            return
+        }
+        isSaving = true
+        let chosenString = hasOwnString ? nil : selectedString
+        let cost = chosenString.flatMap { stringer.stringsOffered[$0] }
+        firestore.submitStringerOrder(
+            stringerId: stringer.id,
+            racketName: racketName.trimmingCharacters(in: .whitespacesAndNewlines),
+            hasOwnString: hasOwnString,
+            selectedString: chosenString,
+            stringCost: cost,
+            laborCost: stringer.laborCost.isEmpty ? nil : stringer.laborCost,
+            orderTotal: formattedTotal,
+            tension: tension,
+            timelinePreference: timelinePreference,
+            stringerCreatedBy: stringer.id
+        ) { err in
+            DispatchQueue.main.async {
+                isSaving = false
+                if err == nil { showSuccess = true }
+            }
+        }
+    }
+
+    private func resetOrderForm() {
+        racketName = ""
+        hasOwnString = false
+        selectedString = nil
+        tension = 24
+        timelinePreference = "No rush"
     }
 
     private func sortedStringKeys(_ strings: [String: String]) -> [String] {

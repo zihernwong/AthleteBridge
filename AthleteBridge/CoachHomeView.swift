@@ -144,22 +144,24 @@ struct CoachHomeView: View {
 
                 // MARK: - Stringing Section
                 Section(header: Text("Stringing").font(.subheadline).fontWeight(.semibold)) {
-                    NavigationLink {
-                        StringingTabView()
-                            .environmentObject(firestore)
-                            .environmentObject(auth)
-                    } label: {
-                        HStack {
-                            Image(systemName: "scissors")
-                                .foregroundColor(Color("LogoGreen"))
-                            Text("View Stringer Dashboard")
-                                .font(.body)
-                            Spacer()
-                            let activeCount = activeStringingOrdersCount
-                            if activeCount > 0 {
-                                Text("\(activeCount) active")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
+                    if let uid = auth.user?.uid, firestore.stringers.contains(where: { $0.id == uid }) {
+                        NavigationLink {
+                            StringingTabView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "scissors")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("View Stringer Dashboard")
+                                    .font(.body)
+                                Spacer()
+                                let activeCount = activeStringingOrdersCount
+                                if activeCount > 0 {
+                                    Text("\(activeCount) active")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
                             }
                         }
                     }

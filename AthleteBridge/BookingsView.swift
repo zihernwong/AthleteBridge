@@ -63,20 +63,25 @@ struct BookingsView: View {
                                 Text("No requested bookings").foregroundColor(.secondary)
                             } else {
                                 ForEach(requested, id: \ .id) { b in
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    HStack(alignment: .top, spacing: 12) {
                                         Button(action: { selectedBookingForDetail = b }) {
-                                            BookingRowView(item: b)
+                                            BookingRowView(item: b, showStatus: false)
                                                 .contentShape(Rectangle())
                                         }
                                         .buttonStyle(PlainButtonStyle())
-                                        .overlay(alignment: .trailing) {
+
+                                        VStack(alignment: .center, spacing: 6) {
+                                            Text(b.status?.replacingOccurrences(of: "_", with: " ").capitalized ?? "")
+                                                .font(.caption)
+                                                .foregroundColor(Color("LogoBlue"))
+                                                .multilineTextAlignment(.center)
                                             Button(action: { self.selectedBookingForAccept = b }) {
                                                 Text("Accept")
                                             }
                                             .buttonStyle(.borderedProminent)
                                             .tint(.blue)
-                                            .padding(.top, -4) // nudge upward slightly
                                         }
+                                        .frame(minWidth: 70)
                                     }
                                     .padding(.vertical, 2)
                                 }
@@ -586,6 +591,7 @@ struct DayCell: View {
 // Small reusable row view for displaying a booking
 struct BookingRowView: View {
     let item: FirestoreManager.BookingItem
+    var showStatus: Bool = true
     @EnvironmentObject var firestore: FirestoreManager
 
     private var isGroup: Bool {
@@ -672,9 +678,11 @@ struct BookingRowView: View {
                 Text(displayTitle).font(.headline)
                 if !isGroup && isDisplayedPersonVerified { VerifiedBadge() }
                 Spacer()
-                Text(displayStatus(for: item.status))
-                    .font(.caption)
-                    .foregroundColor(statusColor(for: item.status))
+                if showStatus {
+                    Text(displayStatus(for: item.status))
+                        .font(.caption)
+                        .foregroundColor(statusColor(for: item.status))
+                }
             }
 
             // Show participant summary for group bookings

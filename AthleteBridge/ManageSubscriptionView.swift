@@ -172,6 +172,21 @@ struct ManageSubscriptionView: View {
                     .foregroundColor(.white)
                 }
                 .disabled(anyProcessing)
+
+                // Required by App Store guideline 3.1.2(c)
+                VStack(spacing: 3) {
+                    Text("Auto-renews monthly at \(product.displayPrice). Cancel anytime.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 4) {
+                        Link("Terms of Use", destination: URL(string: "https://athletebridge-63176.web.app/terms/")!)
+                        Text("·").foregroundColor(.secondary)
+                        Link("Privacy Policy", destination: URL(string: "https://athletebridge-63176.web.app/privacy/")!)
+                    }
+                    .font(.caption2)
+                }
             }
         }
         .padding()
