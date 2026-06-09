@@ -1,0 +1,15 @@
+{
+  "name": "AthleteBridge Tournament Manager",
+  "short_name": "Tournaments",
+  "description": "Run and follow live tournament brackets with AthleteBridge",
+  "start_url": "/tournament/",
+  "scope": "/tournament/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2D5A7B",
+  "theme_color": "#2D5A7B",
+  "icons": [
+    { "src": "/stripe/AthleteBridgeLogo.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/stripe/AthleteBridgeLogo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

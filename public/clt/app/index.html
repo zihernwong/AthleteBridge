@@ -1,0 +1,4309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CLT — Card Inventory App</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:        #5BB8F5;
+      --blue-dark:   #2E86C1;
+      --blue-deeper: #1a5a85;
+      --blue-light:  #D6EFFD;
+      --blue-bg:     #EBF6FE;
+      --white:       #ffffff;
+      --text:        #0d1b2a;
+      --muted:       #5a7590;
+      --border:      #c9e4f8;
+      --danger:      #ef4444;
+      --success:     #22c55e;
+      --sidebar-w:   220px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--blue-bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--blue-deeper);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      z-index: 50;
+    }
+    .sidebar-brand {
+      padding: 24px 22px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-brand .app-name {
+      font-size: 1.7rem;
+      font-weight: 900;
+      color: var(--white);
+      letter-spacing: -0.5px;
+    }
+    .sidebar-brand .app-tagline {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.55);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: rgba(255,255,255,0.65);
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.1); color: var(--white); }
+    .nav-item.active { background: var(--blue); color: var(--white); }
+    .nav-item .icon { font-size: 1.1rem; width: 22px; text-align: center; }
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .portfolio-pill {
+      background: rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .portfolio-pill .label { font-size: 0.7rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.08em; }
+    .portfolio-pill .value { font-size: 1.3rem; font-weight: 800; color: var(--white); margin-top: 2px; }
+
+    /* ── MAIN ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      padding: 32px 32px 60px;
+      min-height: 100vh;
+    }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .page-header p { color: var(--muted); font-size: 0.9rem; margin-top: 2px; }
+
+    /* ── VIEWS ── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── STAT CARDS ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 22px;
+    }
+    .stat-card .stat-label { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .stat-card .stat-value { font-size: 1.7rem; font-weight: 800; color: var(--text); margin-top: 4px; letter-spacing: -0.5px; }
+    .stat-card .stat-sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .stat-card .stat-icon { font-size: 1.6rem; float: right; margin-top: -4px; }
+
+    /* ── SPORT BREAKDOWN ── */
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    .breakdown-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .breakdown-icon { font-size: 2rem; }
+    .breakdown-name { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+    .breakdown-val { font-size: 1.15rem; font-weight: 800; color: var(--text); }
+    .breakdown-count { font-size: 0.8rem; color: var(--muted); }
+
+    /* ── SECTION CARD ── */
+    .section-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin-bottom: 24px;
+    }
+    .section-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .section-card-header h2 { font-size: 1rem; font-weight: 700; }
+
+    /* ── RECENT LIST ── */
+    .recent-list { display: flex; flex-direction: column; gap: 10px; }
+    .recent-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--blue-bg);
+    }
+    .recent-item-img {
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      background: var(--blue-light);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .recent-item-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+    .recent-item-info { flex: 1; min-width: 0; }
+    .recent-item-name { font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .recent-item-meta { font-size: 0.78rem; color: var(--muted); }
+    .recent-item-price { font-size: 0.92rem; font-weight: 700; color: var(--blue-dark); flex-shrink: 0; }
+
+    /* ── INVENTORY TABLE ── */
+    .inventory-toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 180px;
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 0.9rem;
+      background: var(--white);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(91,184,245,0.15); }
+    .filter-select {
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 0.9rem;
+      background: var(--white);
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+    .inv-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .inv-card:hover { box-shadow: 0 6px 20px rgba(91,184,245,0.2); transform: translateY(-2px); }
+    .inv-card-img {
+      width: 100%;
+      height: 120px;
+      background: var(--blue-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      overflow: hidden;
+    }
+    .inv-card-img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+    .inv-card-body { padding: 10px 12px 12px; }
+    .inv-card-sport {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--white);
+      padding: 2px 7px;
+      border-radius: 20px;
+      display: inline-block;
+      margin-bottom: 5px;
+    }
+    .sport-pokemon { background: #d97706; }
+    .sport-nfl     { background: #16a34a; }
+    .sport-nba     { background: #dc2626; }
+    .inv-card-name { font-size: 0.82rem; font-weight: 700; line-height: 1.3; margin-bottom: 3px; }
+    .inv-card-set  { font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .inv-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .inv-card-price { font-size: 0.9rem; font-weight: 800; color: var(--blue-dark); }
+    .inv-card-qty { font-size: 0.72rem; color: var(--muted); }
+    .inv-card-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .btn-icon {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--white);
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: var(--muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-icon:hover { background: var(--blue-bg); color: var(--blue-dark); }
+    .btn-icon.danger:hover { background: #fef2f2; color: var(--danger); border-color: #fca5a5; }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state .empty-icon { font-size: 3rem; margin-bottom: 14px; }
+    .empty-state h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* ── ADD CARD FORM ── */
+    .sport-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .sport-tab {
+      padding: 9px 20px;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      background: var(--white);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .sport-tab:hover { border-color: var(--blue); color: var(--blue-dark); }
+    .sport-tab.active.pokemon { border-color: #d97706; color: #d97706; background: #fffbeb; }
+    .sport-tab.active.nfl     { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+    .sport-tab.active.nba     { border-color: #dc2626; color: #dc2626; background: #fef2f2; }
+    .sport-tab.active.psa     { border-color: #7c3aed; color: #7c3aed; background: #f5f3ff; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .form-row.single { grid-template-columns: 1fr; }
+    .form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+    label.field-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; color: var(--text); }
+    .field-input, .field-select {
+      width: 100%;
+      padding: 10px 13px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      font-size: 0.92rem;
+      background: var(--white);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field-input:focus, .field-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(91,184,245,0.15); }
+
+    /* Search results */
+    .search-results {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 12px;
+      display: none;
+    }
+    .search-results.visible { display: block; }
+    .search-results-header {
+      padding: 10px 14px;
+      background: var(--blue-bg);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 12px;
+      padding: 14px;
+      background: var(--white);
+      max-height: 360px;
+      overflow-y: auto;
+    }
+    .result-card {
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.15s;
+      text-align: center;
+    }
+    .result-card:hover { border-color: var(--blue); transform: scale(1.03); }
+    .result-card.selected { border-color: var(--blue-dark); background: var(--blue-bg); }
+    .result-card img { width: 100%; height: 90px; object-fit: contain; margin-bottom: 5px; }
+    .result-card .r-name { font-size: 0.72rem; font-weight: 600; line-height: 1.3; }
+    .result-card .r-set  { font-size: 0.65rem; color: var(--muted); }
+    .result-card .r-price { font-size: 0.75rem; font-weight: 700; color: var(--blue-dark); margin-top: 3px; }
+    .no-results { text-align: center; padding: 28px; color: var(--muted); font-size: 0.9rem; }
+
+    /* ── POKEMON SMART SEARCH ── */
+    .poke-search-hint { font-size: 0.83rem; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+    .poke-search-hint code {
+      background: var(--blue-bg); padding: 1px 6px; border-radius: 4px;
+      color: var(--blue-dark); font-size: 0.8rem; font-family: monospace;
+    }
+    .poke-input-row { position: relative; }
+    .poke-main-input { font-size: 1.05rem !important; padding: 13px 120px 13px 14px !important; }
+    .poke-status {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      font-size: 0.78rem; color: var(--muted); display: flex; align-items: center;
+      gap: 6px; pointer-events: none;
+    }
+    .poke-status .spinner { border-color: rgba(91,184,245,0.35); border-top-color: var(--blue); width: 14px; height: 14px; }
+    .result-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    .result-card img { height: 130px !important; }
+    .r-num {
+      font-size: 0.65rem; color: var(--blue-dark); background: var(--blue-bg);
+      padding: 1px 5px; border-radius: 4px; display: inline-block; margin-top: 3px;
+    }
+    .sets-ready-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: var(--success); margin-right: 5px; vertical-align: middle;
+    }
+
+    /* Sports card preview — full card face */
+    .card-face {
+      width: 100%; aspect-ratio: 5/7;
+      border-radius: 10px; overflow: hidden; position: relative;
+      flex-shrink: 0; box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+    }
+    /* Brand pattern overlays */
+    .brand-prizm .card-pattern {
+      background: repeating-linear-gradient(
+        -55deg,
+        transparent, transparent 8px,
+        rgba(255,255,255,0.04) 8px, rgba(255,255,255,0.04) 9px
+      ),
+      repeating-linear-gradient(
+        35deg,
+        transparent, transparent 14px,
+        rgba(255,255,255,0.03) 14px, rgba(255,255,255,0.03) 15px
+      );
+    }
+    .brand-optic .card-pattern {
+      background: repeating-radial-gradient(circle at 50% 50%, transparent 0px, transparent 18px, rgba(255,255,255,0.04) 18px, rgba(255,255,255,0.04) 19px);
+    }
+    .brand-mosaic .card-pattern {
+      background: repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 20px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 20px);
+    }
+    .brand-select .card-pattern {
+      background: repeating-linear-gradient(
+        -30deg, transparent, transparent 40px,
+        rgba(255,255,255,0.025) 40px, rgba(255,255,255,0.025) 41px
+      );
+    }
+    .brand-hoops .card-pattern {
+      background: repeating-linear-gradient(
+        90deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 2px,
+        transparent 2px, transparent 30px
+      );
+    }
+    .brand-nt .card-pattern {
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(180,150,60,0) 0, rgba(180,150,60,0) 6px,
+        rgba(180,150,60,0.08) 6px, rgba(180,150,60,0.08) 7px
+      );
+    }
+    .card-pattern { position: absolute; inset: 0; z-index: 1; }
+    .card-photo-wrap {
+      position: absolute; inset: 0; z-index: 2;
+      display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
+    }
+    .card-photo-wrap img {
+      width: 95%; max-height: 82%; object-fit: contain; object-position: bottom;
+      display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.6));
+    }
+    .card-photo-wrap .no-photo {
+      font-size: 3rem; color: rgba(255,255,255,0.2); padding-bottom: 10%;
+    }
+    /* Gradient vignette at top */
+    .card-vignette {
+      position: absolute; top: 0; left: 0; right: 0; height: 40%;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+      z-index: 3; pointer-events: none;
+    }
+    /* Bottom info bar */
+    .card-info {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+      padding: 6px 8px 5px;
+      background: linear-gradient(to top, rgba(0,0,0,0.92) 60%, transparent);
+    }
+    .card-info-name {
+      font-size: 0.72rem; font-weight: 800; color: #fff; letter-spacing: 0.03em;
+      text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    .card-info-meta {
+      font-size: 0.52rem; color: rgba(255,255,255,0.6); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-info-num {
+      position: absolute; bottom: 5px; right: 7px;
+      font-size: 0.5rem; color: rgba(255,255,255,0.4); font-weight: 700;
+    }
+    /* Top-left brand label */
+    .card-brand-label {
+      position: absolute; top: 6px; left: 7px; z-index: 5;
+      font-size: 0.48rem; font-weight: 900; letter-spacing: 0.1em;
+      text-transform: uppercase; opacity: 0.7;
+    }
+    /* Variant badge top-right */
+    .card-variant-badge {
+      position: absolute; top: 5px; right: 6px; z-index: 5;
+      font-size: 0.44rem; font-weight: 800; letter-spacing: 0.06em;
+      text-transform: uppercase; padding: 1px 4px; border-radius: 3px;
+      background: rgba(0,0,0,0.5); white-space: nowrap;
+    }
+
+    /* Sports card visual styling */
+    .sports-result-card {
+      border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 0; cursor: pointer;
+      transition: transform 0.18s, box-shadow 0.18s;
+      overflow: hidden; text-align: center;
+      background: #1a1a2e; position: relative;
+    }
+    .sports-result-card:hover { transform: scale(1.05); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .sports-result-card.selected { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue); }
+    .sports-card-img {
+      width: 100%; height: 120px; overflow: hidden; position: relative;
+      display: flex; align-items: flex-end; justify-content: center;
+    }
+    .sports-card-img img {
+      width: 90%; height: 130%; object-fit: cover; object-position: top center;
+      margin-bottom: -10%; display: block;
+    }
+    .sports-card-img .no-photo {
+      width: 100%; height: 100%; display: flex; align-items: center;
+      justify-content: center; font-size: 2.8rem; color: rgba(255,255,255,0.3);
+    }
+    /* Variant shimmer overlay */
+    .shimmer-silver::after {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background: linear-gradient(135deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0) 60%);
+      background-size: 200% 200%; animation: shimmer 2.5s linear infinite;
+    }
+    .shimmer-gold::after {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background: linear-gradient(135deg, rgba(255,215,0,0) 40%, rgba(255,215,0,0.3) 50%, rgba(255,215,0,0) 60%);
+      background-size: 200% 200%; animation: shimmer 2s linear infinite;
+    }
+    .shimmer-rainbow::after {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background: linear-gradient(135deg, rgba(255,0,128,0) 20%, rgba(255,215,0,0.2) 35%, rgba(0,255,200,0.2) 50%, rgba(0,128,255,0.2) 65%, rgba(200,0,255,0) 80%);
+      background-size: 300% 300%; animation: shimmer 1.8s linear infinite;
+    }
+    @keyframes shimmer { 0%{background-position:200% 200%} 100%{background-position:-200% -200%} }
+    .sports-card-footer {
+      padding: 5px 7px 7px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.9));
+      position: relative;
+    }
+    .sports-card-name { font-size: 0.68rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sports-card-team { font-size: 0.6rem; color: rgba(255,255,255,0.55); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Preview card (larger) */
+    .sports-preview-card {
+      width: 100px; height: 140px; border-radius: 8px; overflow: hidden;
+      flex-shrink: 0; position: relative;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+    }
+    .sports-preview-card img {
+      width: 100%; height: 80%; object-fit: cover; object-position: top; display: block;
+    }
+    .sports-preview-card .card-bottom {
+      height: 20%; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+    .sports-preview-card .card-bottom span {
+      font-size: 0.55rem; font-weight: 700; color: #fff;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Sports player autocomplete */
+    .player-search-wrap { position: relative; margin-bottom: 14px; }
+    .player-suggestions {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 100;
+      background: var(--white); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1); display: none; overflow: hidden;
+      max-height: 280px; overflow-y: auto;
+    }
+    .player-suggestions.visible { display: block; }
+    .player-suggestion {
+      display: flex; align-items: center; gap: 11px;
+      padding: 9px 14px; cursor: pointer; transition: background 0.12s;
+    }
+    .player-suggestion:hover { background: var(--blue-bg); }
+    .player-suggestion + .player-suggestion { border-top: 1px solid var(--border); }
+    .ps-avatar {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      overflow: hidden; background: var(--blue-light);
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .ps-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .ps-name { font-size: 0.87rem; font-weight: 600; }
+    .ps-meta { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+    /* Selected player chip */
+    .player-chip {
+      display: none; align-items: center; gap: 12px;
+      background: var(--blue-bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+    }
+    .player-chip.visible { display: flex; }
+    .player-chip-avatar {
+      width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+      overflow: hidden; background: var(--blue-light);
+      display: flex; align-items: center; justify-content: center; font-size: 1.3rem;
+    }
+    .player-chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .player-chip-info { flex: 1; }
+    .player-chip-name { font-weight: 700; font-size: 0.95rem; }
+    .player-chip-team { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+
+    .btn-add {
+      padding: 12px 28px;
+      background: var(--blue-dark);
+      color: var(--white);
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      width: 100%;
+      margin-top: 20px;
+    }
+    .btn-add:hover { background: var(--blue-deeper); }
+    .btn-add:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .search-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 4px;
+    }
+    .search-row .field-wrap { flex: 1; }
+
+    /* Selected card preview */
+    .selected-preview {
+      display: none;
+      background: var(--blue-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 14px;
+      align-items: center;
+      gap: 14px;
+    }
+    .selected-preview.visible { display: flex; }
+    .selected-preview img { width: 60px; height: 80px; object-fit: contain; border-radius: 6px; }
+    .selected-preview .prev-info { flex: 1; }
+    .selected-preview .prev-name { font-weight: 700; font-size: 0.95rem; }
+    .selected-preview .prev-set  { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .selected-preview .prev-price { font-size: 1rem; font-weight: 800; color: var(--blue-dark); margin-top: 4px; }
+    .selected-preview .clear-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--muted); padding: 4px; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--text);
+      color: var(--white);
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      z-index: 200;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.25s, opacity 0.25s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success .toast-icon::before { content: '✓'; color: var(--success); }
+    .toast.error   .toast-icon::before { content: '✕'; color: var(--danger); }
+
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: var(--white);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Condition badge */
+    .cond-badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--blue-light);
+      color: var(--blue-dark);
+    }
+
+    /* ── MOBILE HEADER ── */
+    .mobile-header { display: none; }
+    .bottom-nav    { display: none; }
+
+    /* ── RESPONSIVE / iPhone ── */
+    @media (max-width: 768px) {
+      /* Kill the desktop sidebar entirely */
+      .sidebar { display: none; }
+
+      /* Mobile sticky top bar */
+      .mobile-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--blue-deeper);
+        padding: 12px 16px 10px;
+        padding-top: max(12px, env(safe-area-inset-top));
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        gap: 10px;
+      }
+      .mobile-header-brand {
+        font-size: 1.4rem;
+        font-weight: 900;
+        color: #fff;
+        letter-spacing: -0.5px;
+      }
+      .mobile-header-total {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: rgba(255,255,255,0.85);
+        flex: 1;
+        text-align: center;
+      }
+      .mobile-header-auth { display: flex; align-items: center; gap: 8px; }
+      .mobile-avatar {
+        width: 30px; height: 30px; border-radius: 50%;
+        cursor: pointer; border: 2px solid rgba(255,255,255,0.3);
+        object-fit: cover;
+      }
+      .mobile-signin-btn {
+        font-size: 0.75rem; font-weight: 600; color: var(--blue-deep);
+        background: #fff; border: none; border-radius: 6px;
+        padding: 5px 10px; cursor: pointer;
+      }
+
+      /* Bottom navigation bar — iOS tab bar pattern */
+      .bottom-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 50;
+        background: var(--blue-deeper);
+        border-top: 1px solid rgba(255,255,255,0.12);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .bottom-nav-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 4px 4px;
+        cursor: pointer;
+        color: rgba(255,255,255,0.5);
+        font-size: 0.6rem;
+        font-weight: 500;
+        gap: 2px;
+        min-height: 52px;
+        transition: color 0.15s;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .bottom-nav-item .bn-icon { font-size: 1.45rem; line-height: 1; }
+      .bottom-nav-item.active   { color: var(--blue); }
+
+      /* Main content — full width, room for header + bottom nav */
+      .main {
+        margin-left: 0 !important;
+        padding: 20px 16px calc(68px + env(safe-area-inset-bottom)) !important;
+        min-height: 100vh;
+      }
+
+      /* iOS Safari: prevent input zoom (font-size must be ≥16px) */
+      .field-input, .field-select,
+      .search-input, .filter-select,
+      .poke-main-input { font-size: 16px !important; }
+
+      /* Layout fixes */
+      .form-row        { grid-template-columns: 1fr !important; }
+      .form-row.triple { grid-template-columns: 1fr 1fr !important; }
+      .stats-grid      { grid-template-columns: 1fr 1fr; gap: 12px; }
+      .stat-card       { padding: 14px 14px; }
+      .stat-card .stat-value { font-size: 1.3rem; }
+      .page-header h1  { font-size: 1.25rem; }
+      .card-grid       { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); }
+      .section-card    { padding: 16px 14px; }
+
+      /* Bigger tap targets for action buttons */
+      .btn-icon { padding: 6px 10px; font-size: 0.8rem; }
+    }
+
+    /* ── MULTI-CONDITION ROWS ── */
+    .condition-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .condition-row-item {
+      display: grid;
+      grid-template-columns: 1fr 64px 104px 32px;
+      gap: 8px;
+      align-items: center;
+    }
+    .add-condition-btn {
+      background: none; border: none;
+      color: var(--blue-dark); font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; padding: 0; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .add-condition-btn:hover { text-decoration: underline; }
+    @media (max-width: 768px) {
+      .condition-row-item { grid-template-columns: 1fr 56px 88px 32px; }
+    }
+
+    /* ── LANGUAGE SELECTOR ── */
+    .lang-selector { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .lang-btn {
+      padding: 5px 11px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--white);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .lang-btn:hover  { border-color: var(--blue); color: var(--blue-dark); }
+    .lang-btn.active { border-color: var(--blue-dark); color: var(--blue-dark); background: var(--blue-light); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Auth */
+    .auth-section { padding-bottom: 12px; }
+    .btn-google-signin {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 9px 12px;
+      background: var(--white); color: #3c4043;
+      border: none; border-radius: 9px;
+      font-size: 0.82rem; font-weight: 600; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-google-signin:hover { opacity: 0.88; }
+    .auth-user-pill {
+      display: flex; align-items: center; gap: 9px;
+      background: rgba(255,255,255,0.1); border-radius: 10px; padding: 9px 12px;
+    }
+    .auth-user-pill img { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; }
+    .auth-user-name {
+      font-size: 0.8rem; font-weight: 600; color: var(--white);
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+    }
+    .btn-signout {
+      background: none; border: none; font-size: 0.7rem;
+      color: rgba(255,255,255,0.5); cursor: pointer; padding: 0; display: block; margin-top: 2px;
+    }
+    .btn-signout:hover { color: var(--white); }
+    .sync-badge { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; padding: 4px 0 0; }
+  </style>
+</head>
+<body>
+
+<!-- MOBILE HEADER (visible on phones only) -->
+<div class="mobile-header" id="mobile-header">
+  <div class="mobile-header-brand"><img src="logo.svg" alt="CLT" style="height:26px;width:auto;display:block" /></div>
+  <div class="mobile-header-total" id="mobile-total">$0.00</div>
+  <div class="mobile-header-auth">
+    <div id="mobile-signed-out">
+      <button class="mobile-signin-btn" onclick="signInWithGoogle()">Sign in</button>
+    </div>
+    <div id="mobile-signed-in" style="display:none">
+      <img class="mobile-avatar" id="mobile-avatar" src="" alt=""
+           onclick="if(confirm('Sign out?'))signOutUser()"
+           onerror="this.style.display='none'" />
+    </div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <img src="logo.svg" alt="CLT" style="height:38px;width:auto;display:block;margin-bottom:4px" />
+    <div class="app-tagline">Card Tracker</div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-view="dashboard">
+      <span class="icon">📊</span><span>Dashboard</span>
+    </div>
+    <div class="nav-item" data-view="inventory">
+      <span class="icon">🗂️</span><span>Inventory</span>
+    </div>
+    <div class="nav-item" data-view="add">
+      <span class="icon">➕</span><span>Add Card</span>
+    </div>
+    <div class="nav-item" data-view="psa">
+      <span class="icon">🏅</span><span>PSA Lookup</span>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="auth-section">
+      <div id="auth-signed-out">
+        <button class="btn-google-signin" onclick="signInWithGoogle()">
+          <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Sign in with Google
+        </button>
+      </div>
+      <div id="auth-signed-in" style="display:none">
+        <div class="auth-user-pill">
+          <img id="auth-avatar" src="" alt="" onerror="this.style.display='none'" />
+          <div style="min-width:0">
+            <div class="auth-user-name" id="auth-name"></div>
+            <button class="btn-signout" onclick="signOutUser()">Sign out</button>
+          </div>
+        </div>
+        <div class="sync-badge" id="sync-badge">✓ Synced</div>
+      </div>
+    </div>
+    <div class="portfolio-pill">
+      <div class="label">Portfolio</div>
+      <div class="value" id="sidebar-total">$0.00</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+  <!-- DASHBOARD -->
+  <div class="view active" id="view-dashboard">
+    <div class="page-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p>Your collection overview</p>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-icon">💰</span>
+        <div class="stat-label">Total Value</div>
+        <div class="stat-value" id="stat-total">$0.00</div>
+        <div class="stat-sub" id="stat-cards-total">0 cards</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">🎴</span>
+        <div class="stat-label">Pokémon</div>
+        <div class="stat-value" id="stat-pokemon-val">$0.00</div>
+        <div class="stat-sub" id="stat-pokemon-count">0 cards</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">🏈</span>
+        <div class="stat-label">NFL</div>
+        <div class="stat-value" id="stat-nfl-val">$0.00</div>
+        <div class="stat-sub" id="stat-nfl-count">0 cards</div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">🏀</span>
+        <div class="stat-label">NBA</div>
+        <div class="stat-value" id="stat-nba-val">$0.00</div>
+        <div class="stat-sub" id="stat-nba-count">0 cards</div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-card-header">
+        <h2>Recent Additions</h2>
+        <span style="font-size:0.8rem;color:var(--muted);cursor:pointer" onclick="switchView('inventory')">View all</span>
+      </div>
+      <div class="recent-list" id="recent-list">
+        <div class="empty-state">
+          <div class="empty-icon">🃏</div>
+          <h3>No cards yet</h3>
+          <p>Add your first card to get started.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="view" id="view-inventory">
+    <div class="page-header">
+      <div>
+        <h1>Inventory</h1>
+        <p id="inv-count-label">0 cards in your collection</p>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="inventory-toolbar">
+        <input class="search-input" id="inv-search" type="text" placeholder="Search by name, set, player…" oninput="renderInventory()" />
+        <select class="filter-select" id="inv-filter" onchange="renderInventory()">
+          <option value="all">All Sports</option>
+          <option value="pokemon">Pokémon</option>
+          <option value="nfl">NFL</option>
+          <option value="nba">NBA</option>
+        </select>
+        <button class="btn-icon" id="refresh-all-btn" onclick="refreshAllPokemonPrices()" style="display:none;white-space:nowrap">↻ Refresh Prices</button>
+      </div>
+      <div class="card-grid" id="card-grid"></div>
+    </div>
+  </div>
+
+  <!-- ADD CARD -->
+  <div class="view" id="view-add">
+    <div class="page-header">
+      <div>
+        <h1>Add Card</h1>
+        <p>Search for a card and add it to your collection</p>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <!-- Sport Tabs -->
+      <div class="sport-tabs">
+        <button class="sport-tab active pokemon" data-sport="pokemon" onclick="selectSport('pokemon')">🎴 Pokémon</button>
+        <button class="sport-tab nfl"            data-sport="nfl"     onclick="selectSport('nfl')">🏈 NFL</button>
+        <button class="sport-tab nba"            data-sport="nba"     onclick="selectSport('nba')">🏀 NBA</button>
+        <button class="sport-tab psa"            data-sport="psa"     onclick="selectSport('psa')">🏅 PSA Cert</button>
+      </div>
+
+      <!-- POKEMON FORM -->
+      <div id="form-pokemon">
+
+        <!-- Language selector -->
+        <div style="margin-bottom:16px">
+          <label class="field-label" style="margin-bottom:8px;display:block">Card Language</label>
+          <div class="lang-selector" id="poke-lang-selector">
+            <button class="lang-btn active" data-lang="en"    onclick="selectPokeLanguage('en')">🇺🇸 EN</button>
+            <button class="lang-btn"        data-lang="ja"    onclick="selectPokeLanguage('ja')">🇯🇵 JA</button>
+            <button class="lang-btn"        data-lang="ko"    onclick="selectPokeLanguage('ko')">🇰🇷 KO</button>
+            <button class="lang-btn"        data-lang="pt-br" onclick="selectPokeLanguage('pt-br')">🇧🇷 PT</button>
+            <button class="lang-btn"        data-lang="fr"    onclick="selectPokeLanguage('fr')">🇫🇷 FR</button>
+            <button class="lang-btn"        data-lang="de"    onclick="selectPokeLanguage('de')">🇩🇪 DE</button>
+            <button class="lang-btn"        data-lang="es"    onclick="selectPokeLanguage('es')">🇪🇸 ES</button>
+            <button class="lang-btn"        data-lang="it"    onclick="selectPokeLanguage('it')">🇮🇹 IT</button>
+            <button class="lang-btn"        data-lang="zh-tw" onclick="selectPokeLanguage('zh-tw')">🇹🇼 ZH</button>
+          </div>
+        </div>
+
+        <!-- Set filter (optional) -->
+        <div style="margin-bottom:14px">
+          <label class="field-label" style="margin-bottom:6px;display:block">Filter by set (optional)</label>
+          <div class="player-search-wrap">
+            <input class="field-input" id="poke-set-search" type="text"
+              placeholder="e.g. 151, Prismatic Evolutions, Obsidian Flames…" autocomplete="off"
+              oninput="onPokeSetInput(this.value)"
+              onblur="setTimeout(hideSetSuggestions, 200)" />
+            <div class="player-suggestions" id="poke-set-suggestions"></div>
+          </div>
+          <div class="player-chip" id="poke-set-chip" style="margin-top:8px">
+            <div class="player-chip-info">
+              <div class="player-chip-name" id="poke-set-chip-name"></div>
+            </div>
+            <button class="clear-btn" onclick="clearPokeSet()">✕</button>
+          </div>
+        </div>
+
+        <!-- Card search -->
+        <div class="poke-search-hint" id="poke-hint">
+          Search by name or number — e.g. <code>Charizard ex</code>, <code>223</code>, or <code>223/197</code>
+        </div>
+        <div class="poke-input-row">
+          <input class="field-input poke-main-input" id="poke-search" type="text"
+            placeholder="Charizard ex" autocomplete="off"
+            oninput="onPokeInput(this.value)" />
+          <div class="poke-status" id="poke-status"></div>
+        </div>
+
+        <div class="search-results" id="poke-results">
+          <div class="search-results-header" id="poke-results-header">Select a card</div>
+          <div class="result-grid" id="poke-result-grid"></div>
+        </div>
+
+        <!-- Selected card preview -->
+        <div class="selected-preview" id="poke-preview">
+          <img id="poke-preview-img" src="" alt="" />
+          <div class="prev-info">
+            <div class="prev-name" id="poke-preview-name"></div>
+            <div class="prev-set"  id="poke-preview-set"></div>
+            <div id="poke-preview-prices"></div>
+          </div>
+          <button class="clear-btn" onclick="clearPokemonSelection()">✕</button>
+        </div>
+
+        <!-- Add form -->
+        <div id="poke-add-form" style="display:none">
+          <!-- PSA cert lookup -->
+          <div style="margin:14px 0 0;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--white)">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🏅 PSA Certificate (optional)</div>
+            <div style="display:flex;gap:8px">
+              <input class="field-input" id="poke-psa-cert" type="text" placeholder="e.g. 83834764"
+                style="font-size:15px;flex:1" onkeydown="if(event.key==='Enter')lookupPokePSACert()" />
+              <button class="btn-icon" id="poke-psa-btn" onclick="lookupPokePSACert()"
+                style="padding:9px 14px;font-weight:600;white-space:nowrap">Lookup</button>
+            </div>
+            <div id="poke-psa-result"></div>
+          </div>
+          <div style="margin-top:14px">
+            <div class="condition-row-item" style="margin-bottom:4px">
+              <label class="field-label">Condition / Grade</label>
+              <label class="field-label">Qty</label>
+              <label class="field-label">Price (USD)</label>
+              <div></div>
+            </div>
+            <div id="poke-condition-rows" class="condition-rows"></div>
+            <button class="add-condition-btn" onclick="addPokeConditionRow()">＋ Add another condition</button>
+          </div>
+          <button class="btn-add" id="poke-add-btn" onclick="addPokemonCard()" style="margin-top:12px">Add to Inventory</button>
+        </div>
+
+        <!-- Divider + manual toggle -->
+        <div style="text-align:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <button style="background:none;border:none;color:var(--blue-dark);font-size:0.85rem;cursor:pointer;font-weight:600"
+            onclick="togglePokeManual()">
+            ➕ Card not in database? Add manually
+          </button>
+        </div>
+
+        <!-- MANUAL ENTRY FORM (Japanese sets, promos, etc.) -->
+        <div id="poke-manual-form" style="display:none;margin-top:16px">
+          <p class="poke-search-hint" style="margin-bottom:14px">
+            Enter the card details manually — an eBay image will be auto-fetched.
+          </p>
+          <div class="form-row">
+            <div>
+              <label class="field-label">Card Name</label>
+              <input class="field-input" id="poke-m-name" type="text"
+                placeholder="Mega Charizard X EX" autocomplete="off"
+                oninput="onPokeManualInput()" />
+            </div>
+            <div>
+              <label class="field-label">Set Name</label>
+              <input class="field-input" id="poke-m-set" type="text"
+                placeholder="Japanese Inferno X" autocomplete="off"
+                oninput="onPokeManualInput()" />
+            </div>
+          </div>
+          <div class="form-row triple">
+            <div>
+              <label class="field-label">Card # (e.g. 110/080)</label>
+              <input class="field-input" id="poke-m-number" type="text"
+                placeholder="110/080" oninput="onPokeManualInput()" />
+            </div>
+            <div>
+              <label class="field-label">Condition</label>
+              <select class="field-select" id="poke-m-condition">
+                <option>Near Mint</option>
+                <option>Lightly Played</option>
+                <option>Moderately Played</option>
+                <option>Heavily Played</option>
+                <option>PSA 10</option>
+                <option>PSA 9</option>
+                <option>PSA 8</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Quantity</label>
+              <input class="field-input" id="poke-m-qty" type="number" value="1" min="1" />
+            </div>
+          </div>
+
+          <!-- Image preview -->
+          <div id="poke-m-img-wrap" style="display:none;align-items:center;gap:12px;
+               margin:8px 0 14px;background:var(--blue-bg);border-radius:10px;padding:12px 14px">
+            <div id="poke-m-img-slot" style="width:64px;height:90px;border-radius:8px;overflow:hidden;
+                 flex-shrink:0;background:var(--blue-light);display:flex;align-items:center;
+                 justify-content:center;font-size:2rem">🎴</div>
+            <div>
+              <div style="font-size:0.8rem;font-weight:600">eBay best-match image</div>
+              <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">
+                Auto-fetched · may not be exact card
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row single">
+            <div>
+              <label class="field-label">Market Price (USD)</label>
+              <input class="field-input" id="poke-m-price" type="number"
+                step="0.01" min="0" placeholder="0.00" />
+            </div>
+          </div>
+          <button class="btn-add" onclick="addPokeManualCard()">Add to Inventory</button>
+        </div>
+
+      </div>
+
+      <!-- NFL FORM -->
+      <div id="form-nfl" style="display:none">
+        <p class="poke-search-hint">Search for a player — e.g. <code>Patrick Mahomes</code></p>
+        <div class="poke-input-row">
+          <input class="field-input poke-main-input" id="nfl-player" type="text"
+            placeholder="Patrick Mahomes" autocomplete="off"
+            oninput="onSportsPlayerInput('nfl', this.value)"
+            onkeydown="onSportsPlayerKeydown('nfl', event)" />
+          <div class="poke-status" id="nfl-search-status"></div>
+        </div>
+        <div class="search-results" id="nfl-player-results">
+          <div class="search-results-header" id="nfl-results-header">Select a player</div>
+          <div class="result-grid" id="nfl-result-grid"></div>
+        </div>
+        <div class="selected-preview" id="nfl-player-preview">
+          <img id="nfl-player-img" src="" alt="" style="width:60px;height:80px;object-fit:cover;border-radius:8px" />
+          <div class="prev-info">
+            <div class="prev-name" id="nfl-player-name-disp"></div>
+            <div class="prev-set"  id="nfl-player-team-disp"></div>
+          </div>
+          <button class="clear-btn" onclick="clearSportsSelection('nfl')">✕</button>
+        </div>
+        <div id="nfl-add-form" style="display:none">
+          <div class="form-row triple" style="margin-top:16px">
+            <div>
+              <label class="field-label">Year</label>
+              <input class="field-input" id="nfl-year" type="text" placeholder="e.g. 2020" oninput="updateSCPLink('nfl');refreshSportsPreview('nfl');triggerSCPVariants('nfl')" />
+            </div>
+            <div>
+              <label class="field-label">Brand / Set</label>
+              <div style="position:relative">
+                <input class="field-input" id="nfl-brand" type="text" placeholder="Panini Prizm" autocomplete="off"
+                  oninput="onBrandInput('nfl', this.value);refreshSportsPreview('nfl')"
+                  onfocus="onBrandFocus('nfl', this.value)"
+                  onblur="setTimeout(()=>hideBrandDropdown('nfl'), 200)" />
+                <div class="player-suggestions" id="nfl-brand-dropdown"></div>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Card #</label>
+              <input class="field-input" id="nfl-cardnum" type="text" placeholder="e.g. 136" oninput="updateSCPLink('nfl');refreshSportsPreview('nfl');triggerSCPVariants('nfl')" />
+            </div>
+          </div>
+          <!-- SCP variant picker -->
+          <div id="nfl-scp-variants" style="display:none;margin-top:4px;margin-bottom:8px">
+            <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+              Variants in this set <span id="nfl-scp-variants-status" style="font-weight:400;text-transform:none;letter-spacing:0"></span>
+            </div>
+            <div id="nfl-scp-variants-grid" style="display:flex;flex-wrap:wrap;gap:7px"></div>
+          </div>
+          <div class="form-row single">
+            <div>
+              <label class="field-label">Card Variant</label>
+              <div style="position:relative">
+                <input class="field-input" id="nfl-variant" type="text" placeholder="e.g. Silver Prizm, Base" autocomplete="off"
+                  oninput="onVariantInput('nfl', this.value); onSportsVariantChange('nfl')"
+                  onfocus="onVariantFocus('nfl', this.value)"
+                  onblur="setTimeout(()=>hideVariantDropdown('nfl'), 200)" />
+                <div class="player-suggestions" id="nfl-variant-dropdown"></div>
+              </div>
+            </div>
+          </div>
+          <!-- PSA cert lookup -->
+          <div style="margin-bottom:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--white)">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🏅 PSA Certificate (optional)</div>
+            <div style="display:flex;gap:8px">
+              <input class="field-input" id="nfl-psa-cert" type="text" placeholder="e.g. 83834764"
+                style="font-size:15px;flex:1" onkeydown="if(event.key==='Enter')lookupSportsPSACert('nfl')" />
+              <button class="btn-icon" id="nfl-psa-btn" onclick="lookupSportsPSACert('nfl')"
+                style="padding:9px 14px;font-weight:600;white-space:nowrap">Lookup</button>
+            </div>
+            <div id="nfl-psa-result"></div>
+          </div>
+          <div style="margin-top:4px">
+            <div class="condition-row-item" style="margin-bottom:4px">
+              <label class="field-label">Condition / Grade</label>
+              <label class="field-label">Qty</label>
+              <label class="field-label">Price (USD)</label>
+              <div></div>
+            </div>
+            <div id="nfl-condition-rows" class="condition-rows"></div>
+            <button class="add-condition-btn" onclick="addSportsConditionRow('nfl')">＋ Add another condition</button>
+          </div>
+          <div id="nfl-scp-row" style="display:none;margin-bottom:12px">
+            <a id="nfl-scp-link" href="#" target="_blank" style="font-size:0.85rem;color:var(--blue-dark)">Check prices on SportsCardsPro ↗</a>
+          </div>
+          <button class="btn-add" onclick="addSportsCard('nfl')">Add to Inventory</button>
+        </div>
+      </div>
+
+      <!-- PSA CERT FORM -->
+      <div id="form-psa" style="display:none">
+        <p class="poke-search-hint">Enter a PSA certificate number — grade, card details, and market price will be fetched automatically.</p>
+        <div style="display:flex;gap:10px;margin-bottom:4px">
+          <input class="field-input poke-main-input" id="psa-add-cert" type="text"
+            placeholder="PSA Certificate #" autocomplete="off"
+            oninput="document.getElementById('psa-add-result').innerHTML=''"
+            onkeydown="if(event.key==='Enter')lookupPSAForAdd()" />
+          <button class="btn-add" id="psa-add-lookup-btn" onclick="lookupPSAForAdd()"
+            style="width:auto;margin-top:0;padding:11px 22px;flex-shrink:0">Lookup</button>
+        </div>
+        <div id="psa-add-result" style="margin-top:16px"></div>
+      </div>
+
+      <!-- NBA FORM -->
+      <div id="form-nba" style="display:none">
+        <p class="poke-search-hint">Search for a player — e.g. <code>Victor Wembanyama</code></p>
+        <div class="poke-input-row">
+          <input class="field-input poke-main-input" id="nba-player" type="text"
+            placeholder="Victor Wembanyama" autocomplete="off"
+            oninput="onSportsPlayerInput('nba', this.value)"
+            onkeydown="onSportsPlayerKeydown('nba', event)" />
+          <div class="poke-status" id="nba-search-status"></div>
+        </div>
+        <div class="search-results" id="nba-player-results">
+          <div class="search-results-header" id="nba-results-header">Select a player</div>
+          <div class="result-grid" id="nba-result-grid"></div>
+        </div>
+        <div class="selected-preview" id="nba-player-preview">
+          <img id="nba-player-img" src="" alt="" style="width:60px;height:80px;object-fit:cover;border-radius:8px" />
+          <div class="prev-info">
+            <div class="prev-name" id="nba-player-name-disp"></div>
+            <div class="prev-set"  id="nba-player-team-disp"></div>
+          </div>
+          <button class="clear-btn" onclick="clearSportsSelection('nba')">✕</button>
+        </div>
+        <div id="nba-add-form" style="display:none">
+          <div class="form-row triple" style="margin-top:16px">
+            <div>
+              <label class="field-label">Year</label>
+              <input class="field-input" id="nba-year" type="text" placeholder="e.g. 2023" oninput="updateSCPLink('nba');refreshSportsPreview('nba');triggerSCPVariants('nba')" />
+            </div>
+            <div>
+              <label class="field-label">Brand / Set</label>
+              <div style="position:relative">
+                <input class="field-input" id="nba-brand" type="text" placeholder="Panini Prizm" autocomplete="off"
+                  oninput="onBrandInput('nba', this.value);refreshSportsPreview('nba')"
+                  onfocus="onBrandFocus('nba', this.value)"
+                  onblur="setTimeout(()=>hideBrandDropdown('nba'), 200)" />
+                <div class="player-suggestions" id="nba-brand-dropdown"></div>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Card #</label>
+              <input class="field-input" id="nba-cardnum" type="text" placeholder="e.g. 136" oninput="updateSCPLink('nba');refreshSportsPreview('nba');triggerSCPVariants('nba')" />
+            </div>
+          </div>
+          <!-- SCP variant picker -->
+          <div id="nba-scp-variants" style="display:none;margin-top:4px;margin-bottom:8px">
+            <div style="font-size:0.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+              Variants in this set <span id="nba-scp-variants-status" style="font-weight:400;text-transform:none;letter-spacing:0"></span>
+            </div>
+            <div id="nba-scp-variants-grid" style="display:flex;flex-wrap:wrap;gap:7px"></div>
+          </div>
+          <div class="form-row single">
+            <div>
+              <label class="field-label">Card Variant</label>
+              <div style="position:relative">
+                <input class="field-input" id="nba-variant" type="text" placeholder="e.g. Silver Prizm, Base" autocomplete="off"
+                  oninput="onVariantInput('nba', this.value); onSportsVariantChange('nba')"
+                  onfocus="onVariantFocus('nba', this.value)"
+                  onblur="setTimeout(()=>hideVariantDropdown('nba'), 200)" />
+                <div class="player-suggestions" id="nba-variant-dropdown"></div>
+              </div>
+            </div>
+          </div>
+          <!-- PSA cert lookup -->
+          <div style="margin-bottom:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--white)">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">🏅 PSA Certificate (optional)</div>
+            <div style="display:flex;gap:8px">
+              <input class="field-input" id="nba-psa-cert" type="text" placeholder="e.g. 83834764"
+                style="font-size:15px;flex:1" onkeydown="if(event.key==='Enter')lookupSportsPSACert('nba')" />
+              <button class="btn-icon" id="nba-psa-btn" onclick="lookupSportsPSACert('nba')"
+                style="padding:9px 14px;font-weight:600;white-space:nowrap">Lookup</button>
+            </div>
+            <div id="nba-psa-result"></div>
+          </div>
+          <div style="margin-top:4px">
+            <div class="condition-row-item" style="margin-bottom:4px">
+              <label class="field-label">Condition / Grade</label>
+              <label class="field-label">Qty</label>
+              <label class="field-label">Price (USD)</label>
+              <div></div>
+            </div>
+            <div id="nba-condition-rows" class="condition-rows"></div>
+            <button class="add-condition-btn" onclick="addSportsConditionRow('nba')">＋ Add another condition</button>
+          </div>
+          <div id="nba-scp-row" style="display:none;margin-bottom:12px">
+            <a id="nba-scp-link" href="#" target="_blank" style="font-size:0.85rem;color:var(--blue-dark)">Check prices on SportsCardsPro ↗</a>
+          </div>
+          <button class="btn-add" onclick="addSportsCard('nba')">Add to Inventory</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- PSA LOOKUP -->
+  <div class="view" id="view-psa">
+    <div class="page-header">
+      <div>
+        <h1>PSA Lookup</h1>
+        <p>Enter a certificate number to see grade, population, and card details</p>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div style="flex:1">
+          <label class="field-label" style="margin-bottom:5px;display:block">PSA Certificate Number</label>
+          <input class="field-input" id="psa-cert-input" type="text"
+            placeholder="e.g. 83834764"
+            autocomplete="off"
+            onkeydown="if(event.key==='Enter')lookupPSACert()" />
+        </div>
+        <button class="btn-add" id="psa-lookup-btn"
+          onclick="lookupPSACert()"
+          style="width:auto;margin-top:0;padding:11px 24px;flex-shrink:0">
+          Lookup
+        </button>
+      </div>
+      <div id="psa-result" style="margin-top:20px"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- BOTTOM NAV (visible on phones only) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <div class="bottom-nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
+    <span class="bn-icon">📊</span><span>Dashboard</span>
+  </div>
+  <div class="bottom-nav-item" data-view="inventory" onclick="switchView('inventory')">
+    <span class="bn-icon">🗂️</span><span>Inventory</span>
+  </div>
+  <div class="bottom-nav-item" data-view="add" onclick="switchView('add')">
+    <span class="bn-icon">➕</span><span>Add Card</span>
+  </div>
+  <div class="bottom-nav-item" data-view="psa" onclick="switchView('psa')">
+    <span class="bn-icon">🏅</span><span>PSA</span>
+  </div>
+</nav>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon"></span>
+  <span id="toast-msg"></span>
+</div>
+
+<script>
+  // ── FIREBASE ────────────────────────────────────────────
+  firebase.initializeApp({
+    apiKey:            'AIzaSyAePHTS9ZyVhvDqcAGf_tBj3fI-o-vDMs8',
+    authDomain:        'athletebridge-63176.firebaseapp.com',
+    projectId:         'athletebridge-63176',
+    storageBucket:     'athletebridge-63176.firebasestorage.app',
+    messagingSenderId: '107606691152',
+    appId:             '1:107606691152:web:dc2da7b7c84d6526013055'
+  });
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+  let currentUser = null;
+
+  function signInWithGoogle() {
+    auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .catch(e => showToast('Sign-in failed: ' + e.message, 'error'));
+  }
+
+  function signOutUser() {
+    auth.signOut().catch(e => showToast('Sign-out error.', 'error'));
+  }
+
+  function setSyncBadge(text) {
+    const el = document.getElementById('sync-badge');
+    if (el) el.textContent = text;
+  }
+
+  async function syncToFirestore() {
+    if (!currentUser) return;
+    setSyncBadge('Syncing…');
+    try {
+      await db.collection('users').doc(currentUser.uid)
+        .collection('clt').doc('inventory')
+        .set({ cards: inventory, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      setSyncBadge('✓ Synced');
+    } catch { setSyncBadge('Sync failed'); }
+  }
+
+  async function loadFromFirestore(uid) {
+    setSyncBadge('Loading…');
+    try {
+      const snap = await db.collection('users').doc(uid).collection('clt').doc('inventory').get();
+      if (snap.exists) {
+        inventory = snap.data().cards || [];
+      } else {
+        // First login — migrate any existing localStorage data
+        inventory = JSON.parse(localStorage.getItem('clt_inventory') || '[]');
+        if (inventory.length) await syncToFirestore();
+      }
+      localStorage.setItem('clt_inventory', JSON.stringify(inventory));
+      renderDashboard();
+      renderInventory();
+      updateSidebarTotal();
+      setSyncBadge('✓ Synced');
+    } catch { setSyncBadge('Sync failed'); }
+  }
+
+  // ── STATE ──────────────────────────────────────────────
+  let inventory = JSON.parse(localStorage.getItem('clt_inventory') || '[]');
+  let selectedPokemonCard = null;
+  let currentSport = 'pokemon';
+
+  function saveInventory() {
+    localStorage.setItem('clt_inventory', JSON.stringify(inventory));
+    if (currentUser) syncToFirestore();
+  }
+
+  function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
+  // ── NAVIGATION ─────────────────────────────────────────
+  function switchView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('view-' + name).classList.add('active');
+    document.querySelector(`.nav-item[data-view="${name}"]`)?.classList.add('active');
+    document.querySelector(`.bottom-nav-item[data-view="${name}"]`)?.classList.add('active');
+    // Scroll to top on mobile when switching views
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (name === 'dashboard') renderDashboard();
+    if (name === 'inventory') renderInventory();
+  }
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => switchView(item.dataset.view));
+  });
+
+  // ── SPORT SELECTOR ─────────────────────────────────────
+  function selectSport(sport) {
+    currentSport = sport;
+    document.querySelectorAll('.sport-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.sport-tab[data-sport="${sport}"]`).classList.add('active');
+    ['pokemon','nfl','nba','psa'].forEach(s => {
+      document.getElementById('form-' + s).style.display = s === sport ? 'block' : 'none';
+    });
+  }
+
+  // ── SETS INDEX (cached, loaded once) ──────────────────
+  let setsIndex = {};       // printedTotal → [{ id, name }]
+  let allSets   = [];       // [{id, name}] newest-first, for set search
+  let selectedPokeSet      = null;
+  let selectedPokeLanguage = 'en';
+  let pokeResultsMap = {};
+  let pokeSearchAbort = null;
+  let pokeDebounceTimer = null;
+  let setSearchDebounce = null;
+
+  const LANG_HINTS = {
+    en:      `Search by name or number — e.g. <code>Charizard ex</code>, <code>223</code>, or <code>223/197</code>`,
+    ja:      `Search by English name or number — e.g. <code>Charizard ex</code>, <code>110</code>, or <code>110/080</code>`,
+    ko:      `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    'pt-br': `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    fr:      `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    de:      `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    es:      `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    it:      `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+    'zh-tw': `Search by English name or number — e.g. <code>Charizard ex</code> or <code>223</code>`,
+  };
+
+  function selectPokeLanguage(lang) {
+    selectedPokeLanguage = lang;
+    document.querySelectorAll('.lang-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.lang === lang)
+    );
+    // Reset current search state
+    clearPokeSet();
+    document.getElementById('poke-search').value = '';
+    document.getElementById('poke-results').classList.remove('visible');
+    clearPokemonSelection();
+    setPokeStatus('');
+    // Update search hint
+    document.getElementById('poke-hint').innerHTML = LANG_HINTS[lang] || LANG_HINTS['en'];
+    document.getElementById('poke-search').placeholder = lang === 'en' ? 'Charizard ex' : 'Charizard ex or card number';
+    // Load language-specific sets
+    if (lang === 'ja') {
+      loadJapaneseSets();
+    } else if (lang === 'en') {
+      // Restore English set list from cache
+      const cached = localStorage.getItem('clt_sets_all_v1');
+      if (cached) allSets = JSON.parse(cached);
+    }
+  }
+
+  async function loadJapaneseSets() {
+    const KEY = 'clt_jp_sets_v1', KEY_T = 'clt_jp_sets_t';
+    const cached = localStorage.getItem(KEY);
+    const age    = Date.now() - parseInt(localStorage.getItem(KEY_T) || '0');
+    if (cached && age < 7 * 24 * 60 * 60 * 1000) {
+      allSets = JSON.parse(cached);
+      return;
+    }
+    setPokeStatus('<span style="font-size:0.75rem;color:var(--muted)">Loading Japanese sets…</span>');
+    try {
+      const res  = await fetch('/api/jp-sets');
+      const data = await res.json();
+      if (data.sets?.length) {
+        allSets = data.sets.map(s => ({ id: s.id, name: s.name }));
+        localStorage.setItem(KEY,   JSON.stringify(allSets));
+        localStorage.setItem(KEY_T, String(Date.now()));
+      }
+    } catch {}
+    setPokeStatus('');
+  }
+
+  async function loadSetsIndex() {
+    const KEY = 'clt_sets_v2', KEY_T = 'clt_sets_v2_t', KEY_ALL = 'clt_sets_all_v1';
+    const cached = localStorage.getItem(KEY);
+    const cachedAll = localStorage.getItem(KEY_ALL);
+    const age = Date.now() - parseInt(localStorage.getItem(KEY_T) || '0');
+    if (cached && cachedAll && age < 7 * 24 * 60 * 60 * 1000) {
+      setsIndex = JSON.parse(cached);
+      allSets   = JSON.parse(cachedAll);
+      return;
+    }
+    try {
+      const res = await fetch('https://api.pokemontcg.io/v2/sets?pageSize=250');
+      const data = await res.json();
+      setsIndex = {};
+      allSets   = [];
+      for (const s of (data.data || [])) {
+        const key = String(s.printedTotal || s.total);
+        if (!setsIndex[key]) setsIndex[key] = [];
+        setsIndex[key].push({ id: s.id, name: s.name });
+        allSets.push({ id: s.id, name: s.name });
+      }
+      allSets.reverse(); // newest sets first
+      localStorage.setItem(KEY,     JSON.stringify(setsIndex));
+      localStorage.setItem(KEY_ALL, JSON.stringify(allSets));
+      localStorage.setItem(KEY_T,   String(Date.now()));
+    } catch { /* silent — still works without it */ }
+  }
+
+  // ── SET SEARCH ─────────────────────────────────────────
+  function onPokeSetInput(val) {
+    clearTimeout(setSearchDebounce);
+    const q = val.trim().toLowerCase();
+    if (q.length < 2) { hideSetSuggestions(); return; }
+    setSearchDebounce = setTimeout(() => {
+      const hits = allSets.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8);
+      renderSetSuggestions(hits);
+    }, 200);
+  }
+
+  function renderSetSuggestions(sets) {
+    const el = document.getElementById('poke-set-suggestions');
+    if (!sets.length) { hideSetSuggestions(); return; }
+    el._sets = sets;
+    el.innerHTML = sets.map((s, i) => `
+      <div class="player-suggestion" onmousedown="selectPokeSet(${i})">
+        <div>
+          <div class="ps-name">${s.name}</div>
+          <div class="ps-meta">${s.id}</div>
+        </div>
+      </div>`).join('');
+    el.classList.add('visible');
+  }
+
+  function selectPokeSet(idx) {
+    const el = document.getElementById('poke-set-suggestions');
+    const s  = el._sets?.[idx];
+    if (!s) return;
+    selectedPokeSet = s;
+    document.getElementById('poke-set-search').value = s.name;
+    hideSetSuggestions();
+    document.getElementById('poke-set-chip-name').textContent = s.name;
+    document.getElementById('poke-set-chip').classList.add('visible');
+    document.getElementById('poke-search').placeholder = `Search within ${s.name}…`;
+    // Re-search with new set context (or browse set if input is empty)
+    const q = document.getElementById('poke-search').value.trim();
+    doPokeSearch(q);
+  }
+
+  function hideSetSuggestions() {
+    document.getElementById('poke-set-suggestions').classList.remove('visible');
+  }
+
+  function clearPokeSet() {
+    selectedPokeSet = null;
+    document.getElementById('poke-set-search').value = '';
+    document.getElementById('poke-set-chip').classList.remove('visible');
+    hideSetSuggestions();
+    document.getElementById('poke-search').placeholder = 'Charizard ex';
+    const q = document.getElementById('poke-search').value.trim();
+    if (q.length >= 3) doPokeSearch(q);
+    else document.getElementById('poke-results').classList.remove('visible');
+  }
+
+  // ── QUERY PARSER ───────────────────────────────────────
+  function parsePokeQuery(input) {
+    const q    = input.trim();
+    const isEn = selectedPokeLanguage === 'en';
+
+    // Helper: setClause from explicit set filter only
+    const explicitSet = selectedPokeSet ? ` set.id:${selectedPokeSet.id}` : '';
+
+    // Empty query + set selected → browse that set
+    if (!q && selectedPokeSet) {
+      return {
+        tcgQuery:   `set.id:${selectedPokeSet.id}`,
+        pcSearchUrl: isEn ? `https://www.pricecharting.com/search-products?q=pokemon+${encodeURIComponent(selectedPokeSet.name)}` : null
+      };
+    }
+
+    // Strip leading zeros from a card number so "094" → "94" for the TCG API
+    // (pokemontcg.io does exact string matching on the number field).
+    const stripLeadingZeros = n => String(parseInt(n, 10)) || n;
+
+    // Pure number or number/total: "204" or "204/165" or "110/080" or "094/088"
+    const pureNumMatch = q.match(/^(\d+)(?:\/\d+)?$/);
+    if (pureNumMatch) {
+      const num = stripLeadingZeros(pureNumMatch[1]);
+      return {
+        tcgQuery:    `number:${num}${explicitSet}`,
+        pcSearchUrl: isEn ? `https://www.pricecharting.com/search-products?q=pokemon+${encodeURIComponent(selectedPokeSet?.name || '')}+${num}` : null
+      };
+    }
+
+    // "Name 223/197" or "Name 094/088" — name + number/total
+    const numMatch = q.match(/^(.+?)\s+(\d+)\s*\/\s*(\d+)\s*$/);
+    if (numMatch) {
+      const [, name, rawNum, total] = numMatch;
+      const num = stripLeadingZeros(rawNum);
+      // Fix leading-zero bug: "110/080" → look up key "80" not "080"
+      const totalKey = String(parseInt(total, 10));
+      const set = selectedPokeSet || (setsIndex[totalKey] || [])[0];
+      return {
+        tcgQuery:    set ? `number:${num} set.id:${set.id}` : `name:"${name}" number:${num}`,
+        pcSearchUrl: isEn ? `https://www.pricecharting.com/search-products?q=pokemon+${encodeURIComponent(name)}+${num}` : null
+      };
+    }
+
+    // "Name 180" or "Name 094" — name + bare number (no /total)
+    const numOnlyMatch = q.match(/^(.+?)\s+(\d+)$/);
+    if (numOnlyMatch) {
+      const [, name, rawNum] = numOnlyMatch;
+      const num = stripLeadingZeros(rawNum);
+      return {
+        tcgQuery:    `name:"${name}" number:${num}${explicitSet}`,
+        pcSearchUrl: isEn ? `https://www.pricecharting.com/search-products?q=pokemon+${encodeURIComponent(name)}+${num}` : null
+      };
+    }
+
+    // Plain name — quote multi-word names; append explicit set filter if selected
+    const nameClause = q.includes(' ') ? `name:"${q}"` : `name:${q}*`;
+    return {
+      tcgQuery:    nameClause + explicitSet,
+      pcSearchUrl: isEn ? `https://www.pricecharting.com/search-products?q=pokemon+${encodeURIComponent(q)}` : null
+    };
+  }
+
+  // ── API CALLS ──────────────────────────────────────────
+  async function fetchTCGCards(tcgQuery, signal) {
+    // Note: api.pokemontcg.io does not have language-tagged cards — the
+    // `language:` filter returns 0 results. Language selection is used for
+    // inventory categorisation only; the TCG search runs unfiltered.
+    const res = await fetch(
+      `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(tcgQuery)}&pageSize=12`,
+      { signal }
+    );
+    if (!res.ok) throw new Error('tcg_error');
+    const data = await res.json();
+    return data.data || [];
+  }
+
+  // ── SEARCH FLOW ────────────────────────────────────────
+  function onPokeInput(val) {
+    clearTimeout(pokeDebounceTimer);
+    const q = val.trim();
+    // Hide results only when empty AND no set selected
+    if (!q && !selectedPokeSet) {
+      document.getElementById('poke-results').classList.remove('visible');
+      setPokeStatus('');
+      return;
+    }
+    // Allow short queries when: browsing a set (empty), OR input is purely numeric (card number)
+    const isNumeric = /^\d+(?:\/\d+)?$/.test(q);
+    if (q.length > 0 && q.length < 3 && !isNumeric) return;
+    setPokeStatus('<span style="font-size:0.75rem;color:var(--muted)">…</span>');
+    pokeDebounceTimer = setTimeout(() => {
+      setPokeStatus('<span class="spinner" style="border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span>');
+      doPokeSearch(q);
+    }, q ? 450 : 0);
+  }
+
+  function setPokeStatus(html) {
+    document.getElementById('poke-status').innerHTML = html;
+  }
+
+  async function doPokeSearch(query) {
+    if (pokeSearchAbort) pokeSearchAbort.abort();
+    pokeSearchAbort = new AbortController();
+    const signal = pokeSearchAbort.signal;
+    try {
+      if (selectedPokeLanguage === 'ja') {
+        await doJapaneseSearch(query, signal);
+      } else {
+        const { tcgQuery, pcSearchUrl } = parsePokeQuery(query);
+        const cards = await fetchTCGCards(tcgQuery, signal);
+        setPokeStatus('');
+        renderTCGResults(cards, pcSearchUrl);
+        // Append promo results asynchronously — don't block TCG display
+        const q = query.trim();
+        if (q.length >= 3 && selectedPokeLanguage === 'en') {
+          fetchAndAppendPromos(q, cards);
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setPokeStatus('');
+      showToast('Search error. Check your connection.', 'error');
+    }
+  }
+
+  let promoImgSeq = 0;
+
+  async function fetchAndAppendPromos(query, tcgCards) {
+    try {
+      const res = await fetch(`/api/search-promo?q=${encodeURIComponent(query)}`);
+      if (!res.ok) return;
+      const { cards } = await res.json();
+      if (!cards || !cards.length) return;
+
+      // Deduplicate against TCG results by matching PC URL
+      const tcgPcUrls = new Set(tcgCards.map(c => buildPokemonPCUrl(c)));
+      const querySlug = slugify(query);
+      const unique = cards.filter(p => {
+        if (tcgPcUrls.has(p.pcUrl)) return false;
+        const cardSlug = slugify(p.name);
+        return cardSlug.startsWith(querySlug) || querySlug.startsWith(cardSlug);
+      });
+      if (!unique.length) return;
+
+      // Only append if the results panel is still showing (user hasn't cleared)
+      const grid = document.getElementById('poke-result-grid');
+      if (!grid || !document.getElementById('poke-results').classList.contains('visible')) return;
+
+      // Update header count
+      const existing = grid.querySelectorAll('.result-card').length;
+      const header = document.getElementById('poke-results-header');
+      if (header) header.textContent = `${existing + unique.length} result${existing + unique.length !== 1 ? 's' : ''} — click to select`;
+
+      const batch = unique.slice(0, 6);
+      const baseSeq = promoImgSeq;
+      promoImgSeq += batch.length;
+
+      grid.insertAdjacentHTML('beforeend', batch.map((c, i) => `
+        <div class="result-card" onclick="selectPromoCard('${c.pcUrl}', '${c.name}', '${c.number}')">
+          <div id="promo-img-${baseSeq + i}" style="height:130px;display:flex;align-items:center;justify-content:center;font-size:2.8rem;background:var(--blue-light);border-radius:6px">🎴</div>
+          <div class="r-name">${c.name}</div>
+          <div class="r-set" style="color:#9333ea;font-weight:600">Promo</div>
+          <div class="r-num">#${c.number}</div>
+        </div>`).join(''));
+
+      // Fetch images asynchronously and swap in when ready
+      batch.forEach((c, i) => loadPromoGridImage(baseSeq + i, c.pcUrl));
+    } catch { /* silently ignore promo fetch errors */ }
+  }
+
+  async function loadJapaneseGridImage(idx, pcUrl) {
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+      if (!res.ok) return;
+      const { imageUrl } = await res.json();
+      if (!imageUrl) return;
+      const wrap = document.getElementById(`jp-img-${idx}`);
+      if (!wrap) return;
+      wrap.style.background = 'transparent';
+      wrap.style.fontSize   = '0';
+      wrap.innerHTML = `<img src="${imageUrl}" alt="" loading="lazy"
+        style="height:130px;width:100%;object-fit:contain;border-radius:6px"
+        onerror="this.parentNode.innerHTML='🎴';this.parentNode.style.fontSize='2.8rem';this.parentNode.style.background='var(--blue-bg)'">`;
+      // Also stash imageUrl on the card so selectJapaneseCard doesn't need to re-fetch it
+      const grid = document.getElementById('poke-result-grid');
+      if (grid?._jpCards?.[idx]) grid._jpCards[idx]._imageUrl = imageUrl;
+    } catch {}
+  }
+
+  async function loadPromoGridImage(idx, pcUrl) {
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+      if (!res.ok) return;
+      const { imageUrl } = await res.json();
+      if (!imageUrl) return;
+      const wrap = document.getElementById(`promo-img-${idx}`);
+      if (!wrap) return;
+      wrap.style.background = 'transparent';
+      wrap.style.fontSize   = '0';
+      wrap.innerHTML = `<img src="${imageUrl}" alt="" loading="lazy"
+        style="height:130px;width:100%;object-fit:contain;border-radius:6px"
+        onerror="this.parentNode.innerHTML='🎴';this.parentNode.style.fontSize='2.8rem';this.parentNode.style.background='var(--blue-light)'">`;
+    } catch {}
+  }
+
+  function selectPromoCard(pcUrl, name, number) {
+    selectedPokemonCard = { name, set: 'Promo', number, imageUrl: '', pcUrl, prices: null };
+
+    document.querySelectorAll('.result-card').forEach(el => el.classList.remove('selected'));
+    event.currentTarget?.classList.add('selected');
+
+    document.getElementById('poke-preview-img').src = '';
+    document.getElementById('poke-preview-name').textContent = name;
+    document.getElementById('poke-preview-set').textContent  = `Promo · #${number}`;
+    document.getElementById('poke-preview-prices').innerHTML =
+      `<span style="font-size:0.78rem;color:var(--muted)" id="price-fetch-status">Fetching prices…</span>`;
+
+    document.getElementById('poke-preview').classList.add('visible');
+    document.getElementById('poke-add-form').style.display = 'block';
+    initPokeConditionRows();
+    fetchPCPricesForCard(pcUrl);
+    document.getElementById('poke-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function doJapaneseSearch(query, signal) {
+    const setSlug = selectedPokeSet?.id?.replace('pokemon-japanese-', '') || '';
+    const params  = new URLSearchParams({ q: query });
+    if (setSlug) params.set('set', setSlug);
+    const res = await fetch(`/api/search-jp?${params}`, { signal });
+    if (!res.ok) throw new Error('jp_search_error');
+    const { cards } = await res.json();
+    setPokeStatus('');
+    renderJapaneseResults(cards || []);
+  }
+
+  function renderJapaneseResults(cards) {
+    const results = document.getElementById('poke-results');
+    const grid    = document.getElementById('poke-result-grid');
+    const header  = document.getElementById('poke-results-header');
+    results.classList.add('visible');
+
+    if (!cards.length) {
+      header.textContent = 'No results found';
+      grid.innerHTML = `<div class="no-results">Try a different search — e.g. <b>Charizard 110</b> with a set selected.</div>`;
+      return;
+    }
+
+    header.textContent = `${cards.length} result${cards.length !== 1 ? 's' : ''} — click to select`;
+    grid.innerHTML = cards.map((c, i) => `
+      <div class="result-card" onclick="selectJapaneseCard(${i})" data-jp="${i}">
+        <div id="jp-img-${i}" style="height:130px;display:flex;align-items:center;justify-content:center;
+             font-size:2.8rem;background:var(--blue-bg);border-radius:6px;color:var(--muted)">🎴</div>
+        <div class="r-name">${c.name}</div>
+        <div class="r-set">${c.setSlug.replace(/-/g, ' ')}</div>
+        <div class="r-num">#${c.number}</div>
+      </div>`).join('');
+
+    // Stash cards so selectJapaneseCard can access them
+    grid._jpCards = cards;
+
+    // Fetch images asynchronously — swap placeholders as they arrive
+    cards.forEach((c, i) => loadJapaneseGridImage(i, c.pcUrl));
+  }
+
+  async function selectJapaneseCard(idx) {
+    const grid = document.getElementById('poke-result-grid');
+    const card = grid._jpCards?.[idx];
+    if (!card) return;
+
+    document.querySelectorAll('.result-card').forEach(el => el.classList.remove('selected'));
+    document.querySelector(`.result-card[data-jp="${idx}"]`)?.classList.add('selected');
+
+    selectedPokemonCard = {
+      name:     card.name,
+      set:      card.setSlug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      number:   card.number,
+      imageUrl: '',
+      pcUrl:    card.pcUrl,
+      prices:   null
+    };
+
+    // Use image already fetched by loadJapaneseGridImage if available
+    const cachedImage = card._imageUrl || '';
+    document.getElementById('poke-preview-img').src = cachedImage;
+    document.getElementById('poke-preview-name').textContent = card.name;
+    document.getElementById('poke-preview-set').textContent  = `${selectedPokemonCard.set} · #${card.number}`;
+    document.getElementById('poke-preview-prices').innerHTML =
+      `<span style="font-size:0.78rem;color:var(--muted)" id="price-fetch-status">Fetching prices…</span>`;
+    document.getElementById('poke-preview').classList.add('visible');
+    document.getElementById('poke-add-form').style.display = 'block';
+    initPokeConditionRows();
+
+    // Fetch prices (and image if not already cached)
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(card.pcUrl)}`);
+      if (!res.ok) throw new Error('not found');
+      const { prices, imageUrl } = await res.json();
+      selectedPokemonCard.prices   = prices || null;
+      selectedPokemonCard.imageUrl = cachedImage || imageUrl || '';
+      if (!cachedImage && imageUrl) document.getElementById('poke-preview-img').src = imageUrl;
+      if (prices) fillPokeConditionPrices(prices);
+      const el = document.getElementById('price-fetch-status');
+      if (el) el.innerHTML = `<a href="${card.pcUrl}" target="_blank" style="font-size:0.78rem;color:var(--blue-dark)">View on PriceCharting ↗</a>`;
+    } catch {
+      const el = document.getElementById('price-fetch-status');
+      if (el) el.innerHTML = `<a href="${card.pcUrl}" target="_blank" style="font-size:0.78rem;color:var(--blue-dark)">Check on PriceCharting ↗</a>`;
+    }
+    document.getElementById('poke-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ── RENDER RESULTS ─────────────────────────────────────
+  function renderTCGResults(cards, pcSearchUrl) {
+    const results = document.getElementById('poke-results');
+    const grid    = document.getElementById('poke-result-grid');
+    const header  = document.getElementById('poke-results-header');
+    results.classList.add('visible');
+
+    pokeResultsMap = {};
+
+    if (!cards.length) {
+      const langNote = selectedPokeLanguage !== 'en'
+        ? ` Try the card number (e.g. <b>110/080</b>) or type the name in ${selectedPokeLanguage.toUpperCase()}.`
+        : ' Try including the card number: <b>Charizard ex 223/197</b>';
+      header.innerHTML = pcSearchUrl
+        ? `No results — <a href="${pcSearchUrl}" target="_blank" style="color:var(--blue-dark)">Search on PriceCharting ↗</a>`
+        : 'No results found';
+      grid.innerHTML = `<div class="no-results">${langNote}</div>`;
+      return;
+    }
+
+    const setCtx = selectedPokeSet ? ` in ${selectedPokeSet.name}` : '';
+    header.textContent = `${cards.length} result${cards.length !== 1 ? 's' : ''}${setCtx} — click to select`;
+
+    cards.forEach(c => { pokeResultsMap[c.id] = c; });
+
+    grid.innerHTML = cards.map(c => {
+      const img = c.images?.small
+        ? `<img src="${c.images.small}" alt="${c.name}" loading="lazy" style="height:130px;object-fit:contain;width:100%">`
+        : `<div style="height:130px;display:flex;align-items:center;justify-content:center;font-size:2.8rem;background:var(--blue-light);border-radius:6px">🎴</div>`;
+      return `
+        <div class="result-card" onclick="selectTCGCard('${c.id}')" data-id="${c.id}">
+          ${img}
+          <div class="r-name">${c.name}</div>
+          <div class="r-set">${c.set?.name || ''}</div>
+          <div class="r-num">#${c.number}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── SELECT CARD ────────────────────────────────────────
+  function buildPokemonPCUrl(card) {
+    const setName = card.set?.name || '';
+    const series  = card.set?.series || '';
+    // Promo sets on PriceCharting all live under "pokemon-promo" regardless of era.
+    // Detect them by set name or by IDs that end in "p" (svp, swshp, sump, xyp, bwp…).
+    const isPromo = setName.toLowerCase().includes('promo') ||
+                    setName.toLowerCase().includes('black star') ||
+                    /p$/i.test(card.set?.id || '');
+    if (isPromo) {
+      // Promo card numbers can be "024", "SWSH024", "SV024" etc. — PC uses just the digits.
+      const pcNum = (card.number.match(/\d+$/) || [card.number])[0].replace(/^0+/, '') || card.number;
+      return `https://www.pricecharting.com/game/pokemon-promo/${slugify(card.name)}-${pcNum}`;
+    }
+    return `https://www.pricecharting.com/game/pokemon-${buildPCSetSlug(setName, series)}/${slugify(card.name)}-${card.number}`;
+  }
+
+  function selectTCGCard(id) {
+    const card = pokeResultsMap[id];
+    if (!card) return;
+
+    const pcUrl = buildPokemonPCUrl(card);
+
+    selectedPokemonCard = {
+      name:     card.name,
+      set:      card.set?.name || '',
+      number:   card.number,
+      imageUrl: card.images?.small || '',
+      pcUrl,
+      prices:   null
+    };
+
+    document.querySelectorAll('.result-card').forEach(el => el.classList.remove('selected'));
+    document.querySelector(`.result-card[data-id="${id}"]`)?.classList.add('selected');
+
+    document.getElementById('poke-preview-img').src = selectedPokemonCard.imageUrl;
+    document.getElementById('poke-preview-name').textContent = selectedPokemonCard.name;
+    document.getElementById('poke-preview-set').textContent  = `${selectedPokemonCard.set} · #${selectedPokemonCard.number}`;
+    document.getElementById('poke-preview-prices').innerHTML =
+      `<span style="font-size:0.78rem;color:var(--muted)" id="price-fetch-status">Fetching prices…</span>`;
+
+    document.getElementById('poke-preview').classList.add('visible');
+    document.getElementById('poke-add-form').style.display = 'block';
+    initPokeConditionRows();
+
+    if (selectedPokeLanguage === 'en') {
+      fetchPCPricesForCard(pcUrl);
+    } else {
+      const el = document.getElementById('price-fetch-status');
+      if (el) el.innerHTML = `<span style="font-size:0.78rem;color:var(--muted)">Auto-pricing available for English cards only — enter price manually.</span>`;
+    }
+    document.getElementById('poke-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function fetchPCPricesForCard(pcUrl) {
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+      if (!res.ok) throw new Error('fetch failed');
+      const { prices, imageUrl } = await res.json();
+      if (selectedPokemonCard && selectedPokemonCard.pcUrl === pcUrl) {
+        // Set preview image when the card has no TCG image (e.g. promos)
+        if (imageUrl && !selectedPokemonCard.imageUrl) {
+          selectedPokemonCard.imageUrl = imageUrl;
+          const imgEl = document.getElementById('poke-preview-img');
+          if (imgEl) imgEl.src = imageUrl;
+        }
+        selectedPokemonCard.prices = prices;
+        fillPokeConditionPrices(prices);
+        document.getElementById('price-fetch-status').innerHTML =
+          `<a href="${pcUrl}" target="_blank" style="font-size:0.78rem;color:var(--blue-dark)">View on PriceCharting ↗</a>`;
+      }
+    } catch {
+      const el = document.getElementById('price-fetch-status');
+      if (el) el.innerHTML =
+        `<a href="${pcUrl}" target="_blank" style="font-size:0.78rem;color:var(--blue-dark)">Check prices on PriceCharting ↗</a>`;
+    }
+  }
+
+  function clearPokemonSelection() {
+    selectedPokemonCard = null;
+    pokeConditionRows   = [];
+    document.getElementById('poke-preview').classList.remove('visible');
+    document.getElementById('poke-add-form').style.display = 'none';
+    document.querySelectorAll('.result-card').forEach(el => el.classList.remove('selected'));
+  }
+
+  function addPokemonCard() {
+    if (!selectedPokemonCard) return;
+    const rows = pokeConditionRows.filter(r => r.qty > 0);
+    if (!rows.length) return;
+
+    for (const row of rows) {
+      inventory.unshift({
+        id:             genId(),
+        sport:          'pokemon',
+        name:           selectedPokemonCard.name,
+        set:            selectedPokemonCard.set || '',
+        number:         selectedPokemonCard.number || '',
+        imageUrl:       selectedPokemonCard.imageUrl || '',
+        pcUrl:          selectedPokeLanguage === 'en' ? (selectedPokemonCard.pcUrl || '') : '',
+        language:       selectedPokeLanguage,
+        condition:      row.condition,
+        quantity:       row.qty,
+        marketPrice:    parseFloat(row.price) || 0,
+        priceUpdatedAt: Date.now(),
+        addedAt:        Date.now()
+      });
+    }
+
+    saveInventory();
+    const total = rows.reduce((s, r) => s + r.qty, 0);
+    showToast(`${selectedPokemonCard.name} ×${total} added to inventory!`, 'success');
+
+    document.getElementById('poke-search').value = '';
+    document.getElementById('poke-results').classList.remove('visible');
+    clearPokemonSelection();
+    updateSidebarTotal();
+  }
+
+  // ── POKEMON MANUAL ENTRY (Japanese sets, promos, etc.) ────────────────────
+  let pokeManualEbayImage = null;
+  let pokeManualFetchTimer = null;
+
+  function togglePokeManual() {
+    const form = document.getElementById('poke-manual-form');
+    const isHidden = form.style.display === 'none';
+    form.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function onPokeManualInput() {
+    clearTimeout(pokeManualFetchTimer);
+    const name = document.getElementById('poke-m-name').value.trim();
+    const set  = document.getElementById('poke-m-set').value.trim();
+    const num  = document.getElementById('poke-m-number').value.trim().replace(/^#/, '');
+    if (!name && !set) return;
+
+    const wrap = document.getElementById('poke-m-img-wrap');
+    wrap.style.display = 'flex';
+
+    pokeManualFetchTimer = setTimeout(async () => {
+      const langPrefix = selectedPokeLanguage !== 'en' ? 'japanese ' : '';
+      const query = [langPrefix + set, name, num, 'pokemon card'].filter(Boolean).join(' ');
+      const slot  = document.getElementById('poke-m-img-slot');
+      slot.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span>`;
+      try {
+        const res  = await fetch(`/api/ebay-image?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        pokeManualEbayImage = data.imageUrl || null;
+        slot.innerHTML = pokeManualEbayImage
+          ? `<img src="${pokeManualEbayImage}" style="width:100%;height:100%;object-fit:contain;border-radius:6px">`
+          : '🎴';
+      } catch {
+        pokeManualEbayImage = null;
+        slot.innerHTML = '🎴';
+      }
+    }, 700);
+  }
+
+  function addPokeManualCard() {
+    const name  = document.getElementById('poke-m-name').value.trim();
+    const set   = document.getElementById('poke-m-set').value.trim();
+    const num   = document.getElementById('poke-m-number').value.trim();
+    const cond  = document.getElementById('poke-m-condition').value;
+    const qty   = parseInt(document.getElementById('poke-m-qty').value) || 1;
+    const price = parseFloat(document.getElementById('poke-m-price').value) || 0;
+
+    if (!name) { showToast('Please enter a card name.', 'error'); return; }
+
+    inventory.unshift({
+      id:             genId(),
+      sport:          'pokemon',
+      name,
+      set,
+      number:         num,
+      imageUrl:       pokeManualEbayImage || '',
+      pcUrl:          '',
+      language:       selectedPokeLanguage,
+      condition:      cond,
+      quantity:       qty,
+      marketPrice:    price,
+      priceUpdatedAt: Date.now(),
+      addedAt:        Date.now()
+    });
+
+    saveInventory();
+    showToast(`${name} added to inventory!`, 'success');
+
+    ['poke-m-name','poke-m-set','poke-m-number','poke-m-price'].forEach(id =>
+      document.getElementById(id).value = '');
+    document.getElementById('poke-m-qty').value = '1';
+    document.getElementById('poke-m-img-wrap').style.display = 'none';
+    pokeManualEbayImage = null;
+    updateSidebarTotal();
+  }
+
+  // ── MULTI-CONDITION ROWS ───────────────────────────────
+  const POKE_CONDITIONS   = ['Near Mint','Lightly Played','Moderately Played','Heavily Played','Damaged','PSA 10','PSA 9','PSA 8'];
+  const SPORTS_CONDITIONS = ['Near Mint','Lightly Played','Moderately Played','PSA 10','PSA 9','PSA 8','BGS 9.5','BGS 9'];
+  // Smart defaults when user clicks "+ Add another condition"
+  const EXTRA_DEFAULTS    = ['PSA 10','PSA 9','PSA 8','BGS 9.5','Near Mint'];
+
+  let pokeConditionRows = [];
+  const sportsConditionRows = { nfl: [], nba: [] };
+
+  function condOpts(list, selected) {
+    return list.map(c => `<option value="${c}"${c === selected ? ' selected' : ''}>${c}</option>`).join('');
+  }
+
+  function renderConditionRows(containerId, rows, condList, onChangeFn, onRemoveFn, onAddFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = rows.map((row, i) => `
+      <div class="condition-row-item">
+        <select class="field-select" onchange="${onChangeFn}(${i}, this.value)">
+          ${condOpts(condList, row.condition)}
+        </select>
+        <input class="field-input" type="number" value="${row.qty}" min="1" style="padding:8px 6px"
+          oninput="(${onAddFn}_rows||pokeConditionRows||sportsConditionRows)[${i}] && 0">
+        <input class="field-input" type="number" step="0.01" value="${row.price}" placeholder="0.00" style="padding:8px 6px"
+          oninput="(${onAddFn}_rows||pokeConditionRows||sportsConditionRows)[${i}] && 0">
+        <button class="btn-icon danger" onclick="${onRemoveFn}(${i})"
+          style="padding:4px 8px;${rows.length <= 1 ? 'visibility:hidden' : ''}">✕</button>
+      </div>`).join('');
+  }
+
+  // ── Pokemon condition rows ──────────────────────────────
+  function renderPokeConditionRows() {
+    const el = document.getElementById('poke-condition-rows');
+    if (!el) return;
+    el.innerHTML = pokeConditionRows.map((row, i) => `
+      <div class="condition-row-item">
+        <select class="field-select" onchange="onPokeRowCond(${i},this.value)">
+          ${condOpts(POKE_CONDITIONS, row.condition)}
+        </select>
+        <input class="field-input" type="number" value="${row.qty}" min="1" style="padding:8px 6px"
+          oninput="pokeConditionRows[${i}].qty=parseInt(this.value)||1">
+        <input class="field-input" type="number" step="0.01" value="${row.price}" placeholder="0.00" style="padding:8px 6px"
+          oninput="pokeConditionRows[${i}].price=this.value">
+        <button class="btn-icon danger" onclick="removePokeConditionRow(${i})"
+          style="padding:4px 8px;${pokeConditionRows.length <= 1 ? 'visibility:hidden' : ''}">✕</button>
+      </div>`).join('');
+  }
+
+  function initPokeConditionRows() {
+    pokeConditionRows = [{ condition: 'Near Mint', qty: 1, price: '' }];
+    renderPokeConditionRows();
+  }
+
+  function addPokeConditionRow() {
+    const def   = EXTRA_DEFAULTS[Math.min(pokeConditionRows.length - 1, EXTRA_DEFAULTS.length - 1)];
+    const price = selectedPokemonCard?.prices ? priceForCondition(selectedPokemonCard.prices, def) : null;
+    pokeConditionRows.push({ condition: def, qty: 1, price: price != null ? price.toFixed(2) : '' });
+    renderPokeConditionRows();
+  }
+
+  function removePokeConditionRow(idx) {
+    if (pokeConditionRows.length <= 1) return;
+    pokeConditionRows.splice(idx, 1);
+    renderPokeConditionRows();
+  }
+
+  function onPokeRowCond(idx, cond) {
+    pokeConditionRows[idx].condition = cond;
+    if (selectedPokemonCard?.prices) {
+      const p = priceForCondition(selectedPokemonCard.prices, cond);
+      if (p != null) { pokeConditionRows[idx].price = p.toFixed(2); renderPokeConditionRows(); }
+    }
+  }
+
+  function fillPokeConditionPrices(prices) {
+    pokeConditionRows.forEach((row, i) => {
+      const p = priceForCondition(prices, row.condition);
+      if (p != null) pokeConditionRows[i].price = p.toFixed(2);
+    });
+    renderPokeConditionRows();
+  }
+
+  // ── Sports condition rows ───────────────────────────────
+  function renderSportsConditionRows(sport) {
+    const el   = document.getElementById(`${sport}-condition-rows`);
+    const rows = sportsConditionRows[sport] || [];
+    if (!el) return;
+    el.innerHTML = rows.map((row, i) => `
+      <div class="condition-row-item">
+        <select class="field-select" onchange="onSportsRowCond('${sport}',${i},this.value)">
+          ${condOpts(SPORTS_CONDITIONS, row.condition)}
+        </select>
+        <input class="field-input" type="number" value="${row.qty}" min="1" style="padding:8px 6px"
+          oninput="sportsConditionRows['${sport}'][${i}].qty=parseInt(this.value)||1">
+        <input class="field-input" type="number" step="0.01" value="${row.price}" placeholder="0.00" style="padding:8px 6px"
+          oninput="sportsConditionRows['${sport}'][${i}].price=this.value">
+        <button class="btn-icon danger" onclick="removeSportsConditionRow('${sport}',${i})"
+          style="padding:4px 8px;${rows.length <= 1 ? 'visibility:hidden' : ''}">✕</button>
+      </div>`).join('');
+  }
+
+  function initSportsConditionRows(sport) {
+    sportsConditionRows[sport] = [{ condition: 'Near Mint', qty: 1, price: '' }];
+    renderSportsConditionRows(sport);
+  }
+
+  function addSportsConditionRow(sport) {
+    const rows  = sportsConditionRows[sport] || [];
+    const def   = EXTRA_DEFAULTS[Math.min(rows.length - 1, EXTRA_DEFAULTS.length - 1)];
+    const price = sportsPCPrices[sport] ? priceForCondition(sportsPCPrices[sport], def) : null;
+    sportsConditionRows[sport].push({ condition: def, qty: 1, price: price != null ? price.toFixed(2) : '' });
+    renderSportsConditionRows(sport);
+  }
+
+  function removeSportsConditionRow(sport, idx) {
+    if (sportsConditionRows[sport].length <= 1) return;
+    sportsConditionRows[sport].splice(idx, 1);
+    renderSportsConditionRows(sport);
+  }
+
+  function onSportsRowCond(sport, idx, cond) {
+    sportsConditionRows[sport][idx].condition = cond;
+    if (sportsPCPrices[sport]) {
+      const p = priceForCondition(sportsPCPrices[sport], cond);
+      if (p != null) { sportsConditionRows[sport][idx].price = p.toFixed(2); renderSportsConditionRows(sport); }
+    }
+  }
+
+  function fillSportsConditionPrices(sport, prices) {
+    (sportsConditionRows[sport] || []).forEach((row, i) => {
+      const p = priceForCondition(prices, row.condition);
+      if (p != null) sportsConditionRows[sport][i].price = p.toFixed(2);
+    });
+    renderSportsConditionRows(sport);
+  }
+
+  // ── SPORTS PLAYER SEARCH (TheSportsDB, free/CORS-open) ──────────────────
+  const sportsTimers = {};
+  const sportsAbort  = {};
+
+  function onSportsPlayerInput(sport, val) {
+    clearTimeout(sportsTimers[sport]);
+    const q = val.trim();
+    const statusEl = document.getElementById(`${sport}-search-status`);
+    if (q.length < 2) {
+      document.getElementById(`${sport}-player-results`).classList.remove('visible');
+      statusEl.innerHTML = '';
+      return;
+    }
+    statusEl.innerHTML = '<span style="font-size:0.75rem;color:var(--muted)">…</span>';
+    sportsTimers[sport] = setTimeout(() => {
+      statusEl.innerHTML = '<span class="spinner" style="border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span>';
+      fetchSportsPlayers(sport, q);
+    }, 400);
+  }
+
+  function onSportsPlayerKeydown(sport, event) {
+    if (event.key !== 'Enter') return;
+    const q = document.getElementById(`${sport}-player`).value.trim();
+    if (!q) return;
+    event.preventDefault();
+    // Cancel any in-flight search and proceed immediately with the typed name.
+    clearTimeout(sportsTimers[sport]);
+    if (sportsAbort[sport]) sportsAbort[sport].abort();
+    const gridEl = document.getElementById(`${sport}-result-grid`);
+    // If the search already returned hits, select the top result.
+    // Otherwise manufacture a synthetic player from the typed name.
+    if (!gridEl._players?.length) {
+      gridEl._players = [{ strPlayer: q, strTeam: '', strPosition: '', strThumb: '', strCutout: '' }];
+    }
+    selectSportsPlayer(sport, 0);
+  }
+
+  async function fetchSportsPlayers(sport, query) {
+    if (sportsAbort[sport]) sportsAbort[sport].abort();
+    sportsAbort[sport] = new AbortController();
+    const sportName = sport === 'nfl' ? 'American Football' : 'Basketball';
+    try {
+      const res = await fetch(
+        `https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=${encodeURIComponent(query)}`,
+        { signal: sportsAbort[sport].signal }
+      );
+      const { player } = await res.json();
+      const hits = (player || []).filter(p => p.strSport === sportName).slice(0, 12);
+      document.getElementById(`${sport}-search-status`).innerHTML = '';
+      renderSportsResults(sport, hits, query);
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      document.getElementById(`${sport}-search-status`).innerHTML = '';
+    }
+  }
+
+  // ── TEAM COLORS ───────────────────────────────────────
+  // ── NBA OFFICIAL HEADSHOTS ────────────────────────────
+  // cdn.nba.com serves these without API key; <img src> bypasses CORS restriction.
+  // IDs sourced from stats.nba.com player index (2023-24 season + key rookies).
+  const NBA_IDS = {
+    'Victor Wembanyama':1641705,'LeBron James':2544,'Stephen Curry':201939,
+    'Kevin Durant':201142,'Giannis Antetokounmpo':203507,'Luka Doncic':1629029,
+    'Jayson Tatum':1628369,'Nikola Jokic':203999,'Joel Embiid':203954,
+    'Damian Lillard':203081,'Shai Gilgeous-Alexander':1628983,'Ja Morant':1629630,
+    'Zion Williamson':1629627,'Anthony Edwards':1630162,'Karl-Anthony Towns':1626157,
+    'Tyrese Haliburton':1630169,'Cade Cunningham':1630595,'Evan Mobley':1630596,
+    'Franz Wagner':1630532,'Scottie Barnes':1630567,'James Harden':201935,
+    'Kawhi Leonard':202695,'Anthony Davis':203076,'Rudy Gobert':203497,
+    'Devin Booker':1626164,'Donovan Mitchell':1628378,'Bam Adebayo':1628389,
+    'Paul George':202331,'Jalen Brunson':1628973,'Chris Paul':101108,
+    'Trae Young':1629029,'Kyrie Irving':202681,'Bradley Beal':203078,
+    'Jaylen Brown':1627759,'Julius Randle':203944,'Darius Garland':1629636,
+    'Tyrese Maxey':1630178,'Paolo Banchero':1631094,'Jabari Smith Jr.':1631095,
+    'Keegan Murray':1631099,'Bennedict Mathurin':1631100,'Ochai Agbaji':1631168,
+    'Jaden Ivey':1631093,'Ousmane Dieng':1631101,'Johnny Davis':1631096,
+    'Jeremy Sochan':1631109,'Mark Williams':1631108,'Dyson Daniels':1631106,
+    'A.J. Griffin':1631107,'Jalen Duren':1631102,'Patrick Williams':1630170,
+    'Precious Achiuwa':1630173,'Killian Hayes':1630174,'James Wiseman':1630164,
+    'Josh Green':1630179,'Saddiq Bey':1630180,'Desmond Bane':1630217,
+    'Immanuel Quickley':1630193,'Payton Pritchard':1630202,'Tre Mann':1630544,
+    'Alperen Sengun':1630578,'Josh Giddey':1630581,'Jalen Green':1630224,
+    'Evan Fournier':203095,'Khris Middleton':203114,'Brook Lopez':201572,
+    'Draymond Green':203110,'Klay Thompson':202691,'Andrew Wiggins':203952,
+    'Jordan Poole':1629673,'Gary Payton II':1627780,'Jerami Grant':203924,
+    'Fred VanVleet':1627832,'OG Anunoby':1628384,'Pascal Siakam':1627783,
+    'Scottie Pippen Jr.':1631217,'Ziaire Williams':1630533,'Brandon Clarke':1629634,
+    'Desmond Bane':1630217,'John Konchar':1629723,'Steven Adams':203500,
+    'Nikola Vucevic':202696,'DeMar DeRozan':201942,'Zach LaVine':203897,
+    'Patrick Beverley':201976,'Alex Caruso':1028365,'Lonzo Ball':1628366,
+    'RJ Barrett':1629628,'Mitchell Robinson':1629011,'Obi Toppin':1630167,
+    'Quentin Grimes':1630598,'Immanuel Quickley':1630193,'Miles McBride':1630540,
+    'LaMelo Ball':1630163,'Miles Bridges':1628970,'Kelly Oubre Jr.':1626162,
+    'Terry Rozier':1626179,'Gordon Hayward':202330,'Melo Ball':1630163,
+    'Markelle Fultz':1628384,'Cole Anthony':1630175,'Wendell Carter Jr.':1628976,
+    'Mo Bamba':1629048,'Jonathan Isaac':1628371,'Franz Wagner':1630532,
+    'Anfernee Simons':1629014,'Jerami Grant':203924,'Nassir Little':1629642,
+    'Anfernee Simons':1629014,'Brandon Williams':1631213,'Greg Brown III':1630534,
+    'Deni Avdija':1630166,'Rui Hachimura':1629060,'Kyle Kuzma':1628398,
+    'Daniel Gafford':1629655,'Corey Kispert':1630527,'Isaiah Todd':1630535,
+    'Darius Garland':1629636,'Isaac Okoro':1630168,'Dean Wade':1629731,
+    'Lauri Markkanen':1628374,'Jarrett Allen':1628386,'Caris LeVert':1627747,
+    'Collin Sexton':1629012,'Kevin Love':201567,'Donovan Mitchell':1628378,
+  };
+
+  function getNBAHeadshotUrl(playerName) {
+    const id = NBA_IDS[playerName];
+    return id ? `https://cdn.nba.com/headshots/nba/latest/1040x760/${id}.png` : null;
+  }
+
+  // ── TEAM COLORS ───────────────────────────────────────
+  const TEAM_COLORS = {
+    // NBA
+    'Atlanta Hawks':{'bg':'#1E1E1E','g1':'#C1D32F','g2':'#E03A3E'},
+    'Boston Celtics':{'bg':'#003018','g1':'#007A33','g2':'#FFFFFF'},
+    'Brooklyn Nets':{'bg':'#0D0D0D','g1':'#444','g2':'#FFFFFF'},
+    'Charlotte Hornets':{'bg':'#0D0830','g1':'#1D1160','g2':'#00788C'},
+    'Chicago Bulls':{'bg':'#1A0008','g1':'#CE1141','g2':'#000000'},
+    'Cleveland Cavaliers':{'bg':'#1A000A','g1':'#860038','g2':'#FDBB30'},
+    'Dallas Mavericks':{'bg':'#001830','g1':'#00538C','g2':'#002B5E'},
+    'Denver Nuggets':{'bg':'#071628','g1':'#0E2240','g2':'#FEC524'},
+    'Detroit Pistons':{'bg':'#0A0018','g1':'#C8102E','g2':'#1D428A'},
+    'Golden State Warriors':{'bg':'#0A1020','g1':'#1D428A','g2':'#FFC72C'},
+    'Houston Rockets':{'bg':'#1A0008','g1':'#CE1141','g2':'#C4CED4'},
+    'Indiana Pacers':{'bg':'#001020','g1':'#002D62','g2':'#FDBB30'},
+    'Los Angeles Clippers':{'bg':'#150008','g1':'#C8102E','g2':'#1D428A'},
+    'Los Angeles Lakers':{'bg':'#15003A','g1':'#552583','g2':'#FDB927'},
+    'Memphis Grizzlies':{'bg':'#0A0F1E','g1':'#5D76A9','g2':'#12173F'},
+    'Miami Heat':{'bg':'#1A000A','g1':'#98002E','g2':'#F9A01B'},
+    'Milwaukee Bucks':{'bg':'#001A0A','g1':'#00471B','g2':'#EEE1C6'},
+    'Minnesota Timberwolves':{'bg':'#060E18','g1':'#0C2340','g2':'#236192'},
+    'New Orleans Pelicans':{'bg':'#060E18','g1':'#0C2340','g2':'#C8102E'},
+    'New York Knicks':{'bg':'#001835','g1':'#006BB6','g2':'#F58426'},
+    'Oklahoma City Thunder':{'bg':'#001E30','g1':'#007AC1','g2':'#EF3B24'},
+    'Orlando Magic':{'bg':'#001E30','g1':'#0077C0','g2':'#C4CED4'},
+    'Philadelphia 76ers':{'bg':'#001830','g1':'#006BB6','g2':'#ED174C'},
+    'Phoenix Suns':{'bg':'#0D0830','g1':'#1D1160','g2':'#E56020'},
+    'Portland Trail Blazers':{'bg':'#1A0000','g1':'#E03A3E','g2':'#000000'},
+    'Sacramento Kings':{'bg':'#15083A','g1':'#5A2D81','g2':'#63727A'},
+    'San Antonio Spurs':{'bg':'#0A0A0A','g1':'#C4CED4','g2':'#000000'},
+    'Toronto Raptors':{'bg':'#1A0008','g1':'#CE1141','g2':'#000000'},
+    'Utah Jazz':{'bg':'#001A0A','g1':'#00471B','g2':'#F9A01B'},
+    'Washington Wizards':{'bg':'#00101E','g1':'#002B5C','g2':'#E31837'},
+    // NFL
+    'Arizona Cardinals':{'bg':'#1A0008','g1':'#97233F','g2':'#000000'},
+    'Atlanta Falcons':{'bg':'#1A0008','g1':'#A71930','g2':'#000000'},
+    'Baltimore Ravens':{'bg':'#0A0630','g1':'#241773','g2':'#9E7C0C'},
+    'Buffalo Bills':{'bg':'#000E20','g1':'#00338D','g2':'#C60C30'},
+    'Carolina Panthers':{'bg':'#001825','g1':'#0085CA','g2':'#101820'},
+    'Chicago Bears':{'bg':'#050A15','g1':'#0B162A','g2':'#C83803'},
+    'Cincinnati Bengals':{'bg':'#1A0800','g1':'#FB4F14','g2':'#000000'},
+    'Cleveland Browns':{'bg':'#1A0800','g1':'#FF3C00','g2':'#311D00'},
+    'Dallas Cowboys':{'bg':'#000C1E','g1':'#003594','g2':'#869397'},
+    'Denver Broncos':{'bg':'#1A0800','g1':'#FB4F14','g2':'#002244'},
+    'Detroit Lions':{'bg':'#001825','g1':'#0076B6','g2':'#B0B7BC'},
+    'Green Bay Packers':{'bg':'#0D1C18','g1':'#203731','g2':'#FFB612'},
+    'Houston Texans':{'bg':'#01080E','g1':'#03202F','g2':'#A71930'},
+    'Indianapolis Colts':{'bg':'#001020','g1':'#002C5F','g2':'#A2AAAD'},
+    'Jacksonville Jaguars':{'bg':'#001828','g1':'#006778','g2':'#9F792C'},
+    'Kansas City Chiefs':{'bg':'#1A0008','g1':'#E31837','g2':'#FFB81C'},
+    'Las Vegas Raiders':{'bg':'#0A0A0A','g1':'#000000','g2':'#A5ACAF'},
+    'Los Angeles Chargers':{'bg':'#001825','g1':'#0080C6','g2':'#FFC20E'},
+    'Los Angeles Rams':{'bg':'#000E20','g1':'#003594','g2':'#FFA300'},
+    'Miami Dolphins':{'bg':'#001820','g1':'#008E97','g2':'#FC4C02'},
+    'Minnesota Vikings':{'bg':'#12082A','g1':'#4F2683','g2':'#FFC62F'},
+    'New England Patriots':{'bg':'#000A18','g1':'#002244','g2':'#C60C30'},
+    'New Orleans Saints':{'bg':'#1A1000','g1':'#D3BC8D','g2':'#101820'},
+    'New York Giants':{'bg':'#050F2F','g1':'#0B2265','g2':'#A71930'},
+    'New York Jets':{'bg':'#081A10','g1':'#125740','g2':'#FFFFFF'},
+    'Philadelphia Eagles':{'bg':'#001018','g1':'#004C54','g2':'#A5ACAF'},
+    'Pittsburgh Steelers':{'bg':'#0A0800','g1':'#FFB612','g2':'#101820'},
+    'San Francisco 49ers':{'bg':'#1A0000','g1':'#AA0000','g2':'#B3995D'},
+    'Seattle Seahawks':{'bg':'#000A18','g1':'#002244','g2':'#69BE28'},
+    'Tampa Bay Buccaneers':{'bg':'#1A0000','g1':'#D50A0A','g2':'#FF7900'},
+    'Tennessee Titans':{'bg':'#060E18','g1':'#0C2340','g2':'#418FDE'},
+    'Washington Commanders':{'bg':'#100404','g1':'#5A1414','g2':'#FFB612'},
+  };
+
+  function getTeamColors(teamName) {
+    return TEAM_COLORS[teamName] || { bg: '#0d1b2a', g1: '#1a3a5c', g2: '#5bb8f5' };
+  }
+
+  function getBrandClass(brand) {
+    const b = (brand || '').toLowerCase();
+    if (b.includes('prizm'))          return 'brand-prizm';
+    if (b.includes('optic'))          return 'brand-optic';
+    if (b.includes('mosaic'))         return 'brand-mosaic';
+    if (b.includes('select'))         return 'brand-select';
+    if (b.includes('hoops'))          return 'brand-hoops';
+    if (b.includes('donruss'))        return 'brand-optic';
+    if (b.includes('national treasure') || b.includes('immaculate') || b.includes('flawless')) return 'brand-nt';
+    return 'brand-prizm';
+  }
+
+  function getBrandLabel(brand) {
+    if (!brand) return '';
+    const b = brand.toUpperCase();
+    if (b.includes('PANINI')) return b.replace('PANINI ', '');
+    return b;
+  }
+
+  function buildCardFace(player, year, brand, cardnum, variant) {
+    const tc     = getTeamColors(player?.strTeam || '');
+    const bClass = getBrandClass(brand);
+    const vStyle = variantStyle(variant);
+    // NBA official headshots use the same photoshoots Panini licenses.
+    // Falls back to TheSportsDB for NFL/players not in the lookup table.
+    const thumb = getNBAHeadshotUrl(player?.strPlayer || '')
+                  || player?.strCutout || player?.strThumb || '';
+    const border = vStyle.border;
+    const shimmer = vStyle.shimmer;
+
+    const nameText   = player?.strPlayer || '—';
+    const teamText   = [player?.strTeam, player?.strPosition].filter(Boolean).join(' · ');
+    const brandLabel = getBrandLabel(brand);
+    const varLabel   = variant ? variant.toUpperCase() : '';
+
+    // Sky gradient: team colors fade down from top
+    const skyBg = `linear-gradient(180deg, ${tc.g1}dd 0%, ${tc.g1}66 35%, ${tc.bg} 65%)`;
+
+    const photoEl = thumb
+      ? `<img src="${thumb}" alt="${nameText}" loading="lazy"
+           style="max-width:88%;max-height:100%;object-fit:contain;object-position:bottom center;
+                  display:block;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.75))"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <div style="display:none;font-size:1.8rem;color:rgba(255,255,255,.25);width:100%;height:100%;align-items:center;justify-content:center">👤</div>`
+      : `<div style="font-size:1.8rem;color:rgba(255,255,255,.25);width:100%;height:100%;display:flex;align-items:center;justify-content:center">👤</div>`;
+
+    return `
+      <div class="card-face ${bClass} ${shimmer}"
+           style="background:${skyBg};border:2px solid ${border}">
+        <!-- brand pattern fills the whole card -->
+        <div class="card-pattern"></div>
+
+        <!-- top header: brand + year -->
+        <div style="position:absolute;top:0;left:0;right:0;z-index:5;padding:3px 5px;
+          display:flex;justify-content:space-between;align-items:center;
+          background:linear-gradient(to bottom,rgba(0,0,0,0.6),transparent)">
+          <span style="font-size:0.44rem;font-weight:900;letter-spacing:.1em;
+            text-transform:uppercase;color:${border};text-shadow:0 1px 3px rgba(0,0,0,.9)">
+            ${brandLabel || 'CARD'}
+          </span>
+          <span style="font-size:0.42rem;color:rgba(255,255,255,.5);font-weight:600">${year || ''}</span>
+        </div>
+
+        <!-- player photo — lower 65%, centred, not full-bleed so sky shows above -->
+        <div style="position:absolute;bottom:20%;left:0;right:0;top:12%;z-index:3;
+          display:flex;align-items:flex-end;justify-content:center;overflow:hidden">
+          ${photoEl}
+        </div>
+
+        <!-- left variant accent stripe -->
+        ${varLabel ? `<div style="position:absolute;left:0;top:15%;bottom:18%;z-index:4;width:2px;
+          background:linear-gradient(to bottom,transparent,${border} 40%,${border} 60%,transparent)"></div>` : ''}
+
+        <!-- bottom name bar -->
+        <div style="position:absolute;bottom:0;left:0;right:0;z-index:5;
+          background:linear-gradient(to top,rgba(0,0,0,.95) 60%,transparent);
+          padding:5px 6px 4px">
+          <div style="font-size:0.62rem;font-weight:900;color:#fff;letter-spacing:.04em;
+            text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            text-shadow:0 1px 4px rgba(0,0,0,.9);line-height:1.2">${nameText}</div>
+          <div style="font-size:0.4rem;color:rgba(255,255,255,.5);margin-top:1px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${teamText}</div>
+          ${cardnum ? `<div style="position:absolute;bottom:3px;right:5px;
+            font-size:0.42rem;font-weight:700;color:${border};opacity:.8">#${cardnum}</div>` : ''}
+        </div>
+
+        <!-- bottom accent line in variant colour -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:2px;z-index:6;
+          background:linear-gradient(to right,transparent,${border},transparent)"></div>
+      </div>`;
+  }
+
+  // ── VARIANT STYLES ─────────────────────────────────────
+  // Returns { bg, border, shimmer } based on variant string
+  function variantStyle(variant) {
+    const v = (variant || '').toLowerCase();
+    if (v.includes('gold vinyl') || v.includes('superfractor'))
+      return { bg: 'linear-gradient(160deg,#7a5c00,#f5d020,#7a5c00)', border: '#f5d020', shimmer: 'shimmer-gold' };
+    if (v.includes('gold'))
+      return { bg: 'linear-gradient(160deg,#5c4000,#d4a017,#5c4000)', border: '#d4a017', shimmer: 'shimmer-gold' };
+    if (v.includes('silver') || v.includes('holo silver') || v.includes('prizm') && !v.includes('red') && !v.includes('blue') && !v.includes('gold') && !v.includes('purple') && !v.includes('green') && !v.includes('orange') && !v.includes('pink'))
+      return { bg: 'linear-gradient(160deg,#1e1e2e,#3a3a5c,#1e1e2e)', border: '#a0a8c8', shimmer: 'shimmer-silver' };
+    if (v.includes('rainbow') || v.includes('mojo') || v.includes('hyper'))
+      return { bg: 'linear-gradient(160deg,#1a0030,#6b0080,#003080)', border: '#cc00ff', shimmer: 'shimmer-rainbow' };
+    if (v.includes('red'))
+      return { bg: 'linear-gradient(160deg,#3a0000,#9b0000,#3a0000)', border: '#e53e3e', shimmer: '' };
+    if (v.includes('blue'))
+      return { bg: 'linear-gradient(160deg,#00103a,#00319b,#00103a)', border: '#4299e1', shimmer: '' };
+    if (v.includes('purple') || v.includes('disco'))
+      return { bg: 'linear-gradient(160deg,#1a0038,#5b0099,#1a0038)', border: '#9f7aea', shimmer: 'shimmer-rainbow' };
+    if (v.includes('green'))
+      return { bg: 'linear-gradient(160deg,#00200a,#006b22,#00200a)', border: '#48bb78', shimmer: '' };
+    if (v.includes('orange'))
+      return { bg: 'linear-gradient(160deg,#3a1500,#c05500,#3a1500)', border: '#ed8936', shimmer: '' };
+    if (v.includes('pink') || v.includes('shock'))
+      return { bg: 'linear-gradient(160deg,#3a0028,#9b0069,#3a0028)', border: '#f687b3', shimmer: '' };
+    if (v.includes('black'))
+      return { bg: 'linear-gradient(160deg,#000,#111,#000)', border: '#555', shimmer: '' };
+    if (v.includes('auto') || v.includes('patch') || v.includes('logoman'))
+      return { bg: 'linear-gradient(160deg,#1a1000,#3d2800,#1a1000)', border: '#b7791f', shimmer: 'shimmer-gold' };
+    // default: base card
+    return { bg: 'linear-gradient(160deg,#0d1b2a,#1a3a5c,#0d1b2a)', border: 'rgba(255,255,255,0.12)', shimmer: '' };
+  }
+
+  function renderSportsResults(sport, players, query) {
+    const resultsEl = document.getElementById(`${sport}-player-results`);
+    const gridEl    = document.getElementById(`${sport}-result-grid`);
+    const headerEl  = document.getElementById(`${sport}-results-header`);
+    resultsEl.classList.add('visible');
+    gridEl._players = players;
+
+    if (!players.length) {
+      // Not in TheSportsDB (common for new rookies) — auto-select the typed name
+      // so the card form appears immediately without any extra step.
+      gridEl._players = [{ strPlayer: query, strTeam: '', strPosition: '', strThumb: '', strCutout: '' }];
+      selectSportsPlayer(sport, 0);
+      resultsEl.classList.remove('visible');
+      return;
+    }
+
+    headerEl.textContent = `${players.length} player${players.length !== 1 ? 's' : ''} — click to select`;
+    gridEl.innerHTML = players.map((p, i) => {
+      // Each search result is a mini card face using the same buildCardFace renderer
+      return `
+        <div onclick="selectSportsPlayer('${sport}', ${i})" data-idx="${i}"
+             style="cursor:pointer;transition:transform .15s,box-shadow .15s;border-radius:10px;overflow:hidden"
+             onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 8px 24px rgba(0,0,0,.4)'"
+             onmouseout="this.style.transform='';this.style.boxShadow=''">
+          ${buildCardFace(p, '', '', '', '')}
+        </div>`;
+    }).join('');
+  }
+
+  // Stored per sport so we can re-style the preview when variant changes
+  const sportsSelectedPlayer   = {};
+  const sportsEbayPreviewImage = { nfl: null, nba: null };  // holds the fetched image url
+  const sportsPCUrl            = { nfl: null, nba: null };  // holds the pricecharting url
+  const sportsPCPrices         = { nfl: null, nba: null };  // holds fetched price data
+  const sportsEbayFetchTimer   = {};
+
+  // Build a PriceCharting URL for a sports card — same slug format as SportsCardsPro.
+  // Returns null when required fields are missing.
+  // Normalise a card number to match PriceCharting/SCP slug format.
+  // "SG23" → "sg-23", "PB8" → "pb-8", "136" → "136", "SG-23" → "sg-23"
+  function normalizeCardNum(raw) {
+    return (raw || '').replace(/^#/, '').trim()
+      .toLowerCase()
+      .replace(/([a-z]+)(\d)/g, '$1-$2');
+  }
+
+  function buildSportsPCUrl(sport, year, brand, player, cardNum, variant) {
+    const num = normalizeCardNum(cardNum);
+    if (!year || !brand || !player || !num) return null;
+    const sportStr = sport === 'nfl' ? 'football' : 'basketball';
+    const v = (variant || '').trim().toLowerCase();
+    const variantPart = (v && v !== 'base') ? '-' + slugify(variant) : '';
+    return `https://www.pricecharting.com/game/${sportStr}-cards-${year}-${slugify(brand)}/${slugify(player)}${variantPart}-${num}`;
+  }
+
+  // Fetch card image + prices from PriceCharting when enough form fields are filled.
+  // Fires 700 ms after the last field change.
+  function triggerSportsPCFetch(sport) {
+    clearTimeout(sportsEbayFetchTimer[sport]);
+    const player = document.getElementById(`${sport}-player`).value.trim();
+    const brand  = document.getElementById(`${sport}-brand`).value.trim();
+    if (!player || !brand) return;
+
+    sportsEbayFetchTimer[sport] = setTimeout(async () => {
+      const year    = document.getElementById(`${sport}-year`).value.trim();
+      const cardnum = document.getElementById(`${sport}-cardnum`).value.trim();
+      const variant = document.getElementById(`${sport}-variant`).value.trim();
+      const pcUrl   = buildSportsPCUrl(sport, year, brand, player, cardnum, variant);
+      if (!pcUrl) return;
+      if (pcUrl === sportsPCUrl[sport]) return;
+
+      // Spinner
+      const slot = document.getElementById(`${sport}-card-img-preview`);
+      if (slot) slot.innerHTML = `
+        <div style="width:100%;height:100%;display:flex;align-items:center;
+          justify-content:center;background:var(--blue-bg);border-radius:8px">
+          <span class="spinner" style="border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span>
+        </div>`;
+
+      try {
+        const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+        if (!res.ok) throw new Error('not found');
+        const { prices, imageUrl } = await res.json();
+
+        sportsEbayPreviewImage[sport] = imageUrl || null;
+        sportsPCUrl[sport]           = pcUrl;
+        sportsPCPrices[sport]        = prices || null;
+
+        // Update image slot
+        const slot2 = document.getElementById(`${sport}-card-img-preview`);
+        if (slot2) slot2.innerHTML = imageUrl
+          ? `<img src="${imageUrl}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:8px"
+               onerror="this.parentNode.innerHTML='<span style=font-size:2rem>🏈</span>'">`
+          : `<div style="width:100%;height:100%;display:flex;align-items:center;
+               justify-content:center;font-size:2rem;background:var(--blue-bg);border-radius:8px">🏈</div>`;
+
+        // Auto-fill price rows from PC data
+        if (prices) fillSportsConditionPrices(sport, prices);
+      } catch {
+        sportsEbayPreviewImage[sport] = null;
+        sportsPCUrl[sport]           = null;
+        sportsPCPrices[sport]        = null;
+        const slot2 = document.getElementById(`${sport}-card-img-preview`);
+        if (slot2) slot2.innerHTML = `
+          <div style="width:100%;height:100%;display:flex;align-items:center;
+            justify-content:center;font-size:2rem;background:var(--blue-bg);border-radius:8px">🏈</div>`;
+      }
+    }, 700);
+  }
+
+  // Re-compute price when condition changes (if PC prices are already loaded)
+  function onSportsConditionChange(sport) {
+    const prices = sportsPCPrices[sport];
+    if (!prices) return;
+    const cond  = document.getElementById(`${sport}-condition`).value;
+    const price = priceForCondition(prices, cond);
+    if (price != null) document.getElementById(`${sport}-price`).value = price.toFixed(2);
+  }
+
+  function selectSportsPlayer(sport, idx) {
+    const gridEl = document.getElementById(`${sport}-result-grid`);
+    const p = gridEl._players?.[idx];
+    if (!p) return;
+
+    // Highlight selection — outline the selected card wrapper
+    gridEl.querySelectorAll('[data-idx]').forEach(el => el.style.outline = '');
+    const selEl = gridEl.querySelector(`[data-idx="${idx}"]`);
+    if (selEl) selEl.style.outline = '2px solid var(--blue)';
+
+    // Store player for preview re-styling
+    sportsSelectedPlayer[sport] = p;
+
+    // Fill player name field
+    document.getElementById(`${sport}-player`).value = p.strPlayer;
+
+    // Render card-style preview
+    renderSportsPreview(sport, p, '', '', '', '');
+
+    // Reveal card details form
+    document.getElementById(`${sport}-add-form`).style.display = 'block';
+    initSportsConditionRows(sport);
+
+    updateSCPLink(sport);
+    triggerSCPVariants(sport);
+    document.getElementById(`${sport}-player-preview`).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderSportsPreview(sport, p, year, brand, cardnum, variant) {
+    const preview  = document.getElementById(`${sport}-player-preview`);
+    const vStyle   = variantStyle(variant);
+    const teamText = [p.strTeam, p.strPosition].filter(Boolean).join(' · ');
+    const ebayImg  = sportsEbayPreviewImage[sport];
+
+    // Left slot: always a named div so triggerSportsPCFetch can update it safely.
+    // If an image is available show it; otherwise show the CSS card face.
+    const cardInner = ebayImg
+      ? `<img src="${ebayImg}" alt=""
+             style="width:100%;height:100%;object-fit:contain;border-radius:8px;display:block"
+             onerror="this.style.display='none'">`
+      : buildCardFace(p, year, brand, cardnum, variant);
+    const cardSlot = `
+      <div id="${sport}-card-img-preview"
+           style="width:76px;height:106px;flex-shrink:0;align-self:center;
+                  border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.2)">
+        ${cardInner}
+      </div>`;
+
+    preview.innerHTML = `
+      ${cardSlot}
+      <div class="prev-info">
+        <div class="prev-name" id="${sport}-player-name-disp">${p.strPlayer}</div>
+        <div class="prev-set"  id="${sport}-player-team-disp">${teamText}</div>
+        ${variant ? `<div style="margin-top:4px;font-size:0.75rem;color:${vStyle.border};font-weight:600">${variant}</div>` : ''}
+        ${year || brand ? `<div style="margin-top:3px;font-size:0.7rem;color:var(--muted)">${[year,brand].filter(Boolean).join(' · ')}</div>` : ''}
+      </div>
+      <button class="clear-btn" onclick="clearSportsSelection('${sport}')">✕</button>`;
+    preview.classList.add('visible');
+  }
+
+  function refreshSportsPreview(sport) {
+    const p = sportsSelectedPlayer[sport];
+    if (!p) return;
+    const year    = document.getElementById(`${sport}-year`).value.trim();
+    const brand   = document.getElementById(`${sport}-brand`).value.trim();
+    const cardnum = document.getElementById(`${sport}-cardnum`).value.trim();
+    const variant = document.getElementById(`${sport}-variant`).value.trim();
+    renderSportsPreview(sport, p, year, brand, cardnum, variant);
+    triggerSportsPCFetch(sport);
+  }
+
+  function onSportsVariantChange(sport) { refreshSportsPreview(sport); }
+
+  function clearSportsSelection(sport) {
+    sportsSelectedPlayer[sport]   = null;
+    sportsEbayPreviewImage[sport] = null;
+    sportsPCUrl[sport]            = null;
+    sportsPCPrices[sport]         = null;
+    sportsConditionRows[sport]    = [];
+    clearTimeout(sportsEbayFetchTimer[sport]);
+    clearTimeout(scpVariantTimers[sport]);
+    document.getElementById(`${sport}-player`).value = '';
+    document.getElementById(`${sport}-player-results`).classList.remove('visible');
+    document.getElementById(`${sport}-player-preview`).classList.remove('visible');
+    document.getElementById(`${sport}-add-form`).style.display = 'none';
+    ['year','brand','cardnum','variant'].forEach(f =>
+      document.getElementById(`${sport}-${f}`).value = '');
+    document.getElementById(`${sport}-scp-row`).style.display = 'none';
+    document.getElementById(`${sport}-scp-variants`).style.display = 'none';
+    const psaR = document.getElementById(`${sport}-psa-result`);
+    const psaI = document.getElementById(`${sport}-psa-cert`);
+    if (psaR) psaR.innerHTML = '';
+    if (psaI) psaI.value = '';
+  }
+
+  // ── SCP VARIANT AUTO-FETCH ─────────────────────────────
+  const scpVariantTimers = {};
+  const scpVariantCache  = {};  // key: "sport|player|year|brand|cardNum" → cards[]
+
+  function triggerSCPVariants(sport) {
+    clearTimeout(scpVariantTimers[sport]);
+    const player = document.getElementById(`${sport}-player`).value.trim();
+    const year   = document.getElementById(`${sport}-year`).value.trim();
+    const brand  = document.getElementById(`${sport}-brand`).value.trim();
+    if (!player || !year || !brand) return;
+    scpVariantTimers[sport] = setTimeout(() => fetchSCPVariants(sport), 800);
+  }
+
+  async function fetchSCPVariants(sport) {
+    const player  = document.getElementById(`${sport}-player`).value.trim();
+    const year    = document.getElementById(`${sport}-year`).value.trim();
+    const brand   = document.getElementById(`${sport}-brand`).value.trim();
+    const cardNum = document.getElementById(`${sport}-cardnum`).value.trim().replace(/^#/, '');
+    if (!player || !year || !brand) return;
+
+    const cacheKey = `${sport}|${player}|${year}|${brand}|${cardNum}`;
+    if (scpVariantCache[cacheKey]) {
+      renderSCPVariants(sport, scpVariantCache[cacheKey]);
+      return;
+    }
+
+    const statusEl  = document.getElementById(`${sport}-scp-variants-status`);
+    const variantsEl = document.getElementById(`${sport}-scp-variants`);
+    variantsEl.style.display = 'block';
+    statusEl.innerHTML = '<span class="spinner" style="border-color:rgba(91,184,245,.35);border-top-color:var(--blue);width:11px;height:11px;border-width:1.5px"></span>';
+    document.getElementById(`${sport}-scp-variants-grid`).innerHTML = '';
+
+    try {
+      const params = new URLSearchParams({ sport, player, year, brand });
+      if (cardNum) params.set('cardNum', cardNum);
+      const res = await fetch(`/api/search-scp?${params}`);
+      if (!res.ok) throw new Error('fetch failed');
+      const { cards } = await res.json();
+      scpVariantCache[cacheKey] = cards || [];
+      renderSCPVariants(sport, scpVariantCache[cacheKey]);
+    } catch {
+      statusEl.textContent = '';
+      variantsEl.style.display = 'none';
+    }
+  }
+
+  function renderSCPVariants(sport, cards) {
+    const variantsEl = document.getElementById(`${sport}-scp-variants`);
+    const statusEl   = document.getElementById(`${sport}-scp-variants-status`);
+    const gridEl     = document.getElementById(`${sport}-scp-variants-grid`);
+    statusEl.textContent = '';
+
+    if (!cards || !cards.length) {
+      variantsEl.style.display = 'none';
+      return;
+    }
+
+    variantsEl.style.display = 'block';
+    gridEl.innerHTML = cards.map(c => `
+      <button type="button"
+        onclick="selectSCPVariant('${sport}', '${c.variant}', '${c.number}', '${c.scpUrl}', '${c.pcUrl}', this)"
+        style="background:var(--white);border:1.5px solid var(--border);border-radius:8px;
+               padding:5px 11px;font-size:0.78rem;font-weight:600;cursor:pointer;color:var(--text);
+               transition:border-color 0.12s,background 0.12s;white-space:nowrap"
+        onmouseover="this.style.borderColor='var(--blue)';this.style.background='var(--blue-bg)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--white)'">
+        ${c.variant}<span style="color:var(--muted);font-weight:400;margin-left:4px">#${c.number}</span>
+      </button>`).join('');
+  }
+
+  function selectSCPVariant(sport, variant, number, scpUrl, pcUrl, btn) {
+    document.getElementById(`${sport}-variant`).value = variant;
+    document.getElementById(`${sport}-cardnum`).value = number;
+    // Highlight the selected chip
+    const grid = document.getElementById(`${sport}-scp-variants-grid`);
+    grid.querySelectorAll('button').forEach(b => {
+      b.style.borderColor = 'var(--border)';
+      b.style.background  = 'var(--white)';
+    });
+    if (btn) {
+      btn.style.borderColor = 'var(--blue-dark)';
+      btn.style.background  = 'var(--blue-bg)';
+    }
+    // Set SCP price link
+    const link = document.getElementById(`${sport}-scp-link`);
+    const row  = document.getElementById(`${sport}-scp-row`);
+    if (scpUrl) {
+      link.href         = scpUrl;
+      link.textContent  = 'Check card price on SportsCardsPro ↗';
+      row.style.display = 'block';
+    }
+    sportsPCUrl[sport]            = null;
+    sportsEbayPreviewImage[sport] = null;
+    sportsPCPrices[sport]         = null;
+    if (pcUrl) {
+      // Fetch prices using the exact URL from the SCP picker rather than
+      // rebuilding it via buildSportsPCUrl, which may produce different word
+      // order (e.g. "zebra-prizm-die-cut" vs "die-cut-zebra-prizm").
+      triggerSportsPCFetchByUrl(sport, pcUrl);
+    } else {
+      refreshSportsPreview(sport);
+    }
+  }
+
+  function triggerSportsPCFetchByUrl(sport, pcUrl) {
+    clearTimeout(sportsEbayFetchTimer[sport]);
+    sportsEbayFetchTimer[sport] = setTimeout(async () => {
+      const slot = document.getElementById(`${sport}-card-img-preview`);
+      if (slot) slot.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;
+        justify-content:center;background:var(--blue-bg);border-radius:8px">
+        <span class="spinner" style="border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span></div>`;
+      try {
+        const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+        if (!res.ok) throw new Error('not found');
+        const { prices, imageUrl } = await res.json();
+        sportsEbayPreviewImage[sport] = imageUrl || null;
+        sportsPCPrices[sport]        = prices || null;
+        // Cache the URL so triggerSportsPCFetch skips if it would build the same one.
+        sportsPCUrl[sport]           = pcUrl;
+        const slot2 = document.getElementById(`${sport}-card-img-preview`);
+        if (slot2) slot2.innerHTML = imageUrl
+          ? `<img src="${imageUrl}" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:8px">`
+          : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;background:var(--blue-bg);border-radius:8px">🏀</div>`;
+        if (prices) fillSportsConditionPrices(sport, prices);
+        // Re-render the preview card face without triggering another price fetch.
+        const p = sportsSelectedPlayer[sport];
+        if (p) {
+          const year    = document.getElementById(`${sport}-year`)?.value.trim()    || '';
+          const brand   = document.getElementById(`${sport}-brand`)?.value.trim()   || '';
+          const cardnum = document.getElementById(`${sport}-cardnum`)?.value.trim() || '';
+          const variant = document.getElementById(`${sport}-variant`)?.value.trim() || '';
+          renderSportsPreview(sport, p, year, brand, cardnum, variant);
+        }
+      } catch {
+        sportsEbayPreviewImage[sport] = null;
+        sportsPCPrices[sport]        = null;
+      }
+    }, 0);
+  }
+
+  // ── CARD VARIANT SEARCHABLE DROPDOWN ──────────────────
+  // Sourced from Panini Prizm / Optic / Mosaic / Select / Contenders / Donruss
+  // parallel structures for NBA & NFL (2018-present)
+  const CARD_VARIANTS = [
+    // ── Base ──
+    'Base',
+    'Rookie',
+    'Short Print',
+    'Variation',
+    // ── Prizm parallels (most popular set, NBA + NFL) ──
+    'Silver Prizm',
+    'Holo Silver',
+    'Hyper Prizm',
+    'Red Prizm',
+    'Blue Prizm',
+    'Purple Prizm',
+    'Orange Prizm',
+    'Pink Prizm',
+    'Green Prizm',
+    'Gold Prizm',
+    'Ruby Wave Prizm',
+    'Carolina Blue Wave Prizm',
+    'Disco Prizm',
+    'Blue Ice Prizm',
+    'Mojo Prizm',
+    'Fast Break Prizm',
+    'Teal Explosion Prizm',
+    'Choice Prizm',
+    'Gold Vinyl',
+    'Black Prizm',
+    // ── Optic parallels ──
+    'Holo',
+    'Shock',
+    'Pink Shock',
+    'Blue Shock',
+    'Red Wave',
+    'Blue Wave',
+    'Aqua',
+    'Yellow',
+    'Lime Green',
+    // ── Mosaic parallels ──
+    'Genesis',
+    'Pink Camo',
+    'Blue Fluorescent',
+    'Reactive Blue',
+    'Reactive Yellow',
+    'Lazer Blue',
+    'Lazer Pink',
+    'Mosaic',
+    // ── Select parallels ──
+    'Concourse',
+    'Premier Level',
+    'Field Level',
+    'Tri-Color Prizm',
+    'White',
+    // ── Contenders / other ──
+    'Cracked Ice',
+    'Playoff Ticket',
+    'Championship Ticket',
+    'Legendary Contenders',
+    // ── NFL-specific ──
+    'Red White & Blue Prizm',
+    'Patriotic Prizm',
+    'Camo',
+    'Stars & Stripes',
+    'Donruss Rated Rookie',
+    // ── Auto & Patch ──
+    'Autograph',
+    'Rookie Autograph',
+    'Silver Prizm Autograph',
+    'Gold Prizm Autograph',
+    'Rookie Patch Autograph',
+    'Patch Autograph',
+    'Logoman',
+    'Superfractor',
+    // ── Graded context (sometimes listed as variant) ──
+    'PSA 10',
+    'PSA 9',
+    'BGS 9.5',
+  ];
+
+  function onVariantFocus(sport, val) {
+    renderVariantDropdown(sport, val);
+  }
+
+  function onVariantInput(sport, val) {
+    renderVariantDropdown(sport, val);
+  }
+
+  function renderVariantDropdown(sport, val) {
+    const el = document.getElementById(`${sport}-variant-dropdown`);
+    const q  = val.trim().toLowerCase();
+    const hits = q
+      ? CARD_VARIANTS.filter(v => v.toLowerCase().includes(q))
+      : CARD_VARIANTS;
+    if (!hits.length) { el.classList.remove('visible'); return; }
+    el.innerHTML = hits.map(v => `
+      <div class="player-suggestion" onmousedown="selectVariant('${sport}', '${v.replace(/'/g, "\\'")}')">
+        <div><div class="ps-name">${v}</div></div>
+      </div>`).join('');
+    el.classList.add('visible');
+  }
+
+  function selectVariant(sport, value) {
+    document.getElementById(`${sport}-variant`).value = value;
+    hideVariantDropdown(sport);
+    onSportsVariantChange(sport);
+  }
+
+  function hideVariantDropdown(sport) {
+    document.getElementById(`${sport}-variant-dropdown`).classList.remove('visible');
+  }
+
+  // ── BRAND / SET SEARCHABLE DROPDOWN ───────────────────
+  const CARD_SETS = [
+    // ── Shared (NBA + NFL) ──────────────────────────────
+    'Panini Prizm',
+    'Panini Prizm Draft Picks',
+    'Panini Mosaic',
+    'Panini Select',
+    'Panini Contenders',
+    'Panini Spectra',
+    'Panini Obsidian',
+    'Panini National Treasures',
+    'Panini Immaculate',
+    'Panini Flawless',
+    'Panini Chronicles',
+    'Panini One',
+    // ── NBA ────────────────────────────────────────────
+    'Panini Optic',
+    'Panini Hoops',
+    'Panini Revolution',
+    'Panini Court Kings',
+    'Panini Status',
+    'Panini Gold Standard',
+    'Panini Noir',
+    'Panini XR',
+    'Panini Kaboom',
+    // ── NFL ────────────────────────────────────────────
+    'Panini Donruss Optic',
+    'Panini Donruss Optic Uptowns',
+    'Panini Donruss Optic Rated Rookie',
+    'Panini Donruss',
+    'Panini Score',
+    'Panini Absolute',
+    'Panini Certified',
+    'Panini Contenders Draft Picks',
+    'Panini Prestige',
+    'Panini Origins',
+    'Panini Phoenix',
+    'Panini Mosaic Stained Glass',
+    'Panini Prizm Stained Glass',
+    'Panini Illusions',
+    // ── MLB ────────────────────────────────────────────
+    'Topps Chrome',
+    'Topps Finest',
+    'Bowman Chrome',
+    'Upper Deck SP Authentic',
+  ];
+
+  function onBrandFocus(sport, val) {
+    renderBrandDropdown(sport, val);
+  }
+
+  function onBrandInput(sport, val) {
+    renderBrandDropdown(sport, val);
+    updateSCPLink(sport);
+  }
+
+  function renderBrandDropdown(sport, val) {
+    const el = document.getElementById(`${sport}-brand-dropdown`);
+    const q  = val.trim().toLowerCase();
+    const hits = q
+      ? CARD_SETS.filter(s => s.toLowerCase().includes(q))
+      : CARD_SETS;
+    if (!hits.length) { el.classList.remove('visible'); return; }
+    el.innerHTML = hits.map(s => `
+      <div class="player-suggestion" onmousedown="selectBrandSet('${sport}', '${s.replace(/'/g, "\\'")}')">
+        <div><div class="ps-name">${s}</div></div>
+      </div>`).join('');
+    el.classList.add('visible');
+  }
+
+  function selectBrandSet(sport, value) {
+    document.getElementById(`${sport}-brand`).value = value;
+    hideBrandDropdown(sport);
+    updateSCPLink(sport);
+    refreshSportsPreview(sport);
+    triggerSCPVariants(sport);
+  }
+
+  function hideBrandDropdown(sport) {
+    document.getElementById(`${sport}-brand-dropdown`).classList.remove('visible');
+  }
+
+  // ── SPORTSCARDSPRO LINK ────────────────────────────────
+  function slugify(str) {
+    return str
+      .replace(/[‘’‛]/g, "'") // normalize Unicode single-quotes → ASCII '
+      .toLowerCase()
+      .replace(/\s*&\s*/g, '-')
+      .replace(/[/\\]/g, '-')          // slashes → dashes
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9'-]/g, '')    // keep ASCII apostrophe for names like "Ja'Marr"
+      .replace(/-+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Like slugify but keeps & literal — PriceCharting uses it in set slugs
+  // e.g. "Scarlet & Violet 151" → "scarlet-&-violet-151"
+  function pokeSetSlug(str) {
+    return str.toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9&-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Builds the correct PriceCharting console slug from TCG API set data.
+  // Purely numeric set names (e.g. "151") need the series prepended because
+  // pricecharting.com/game/pokemon-151/... doesn't exist — it must be
+  // pricecharting.com/game/pokemon-scarlet-&-violet-151/...
+  function buildPCSetSlug(setName, series) {
+    if (/^\d+$/.test(setName.trim()) && series) {
+      return pokeSetSlug(series + ' ' + setName);
+    }
+    return pokeSetSlug(setName);
+  }
+
+  function buildSCPUrl(sport, year, brand, player, number, variant) {
+    const sportSlug = sport === 'nfl' ? 'football' : 'basketball';
+    const num = normalizeCardNum(number);
+    if (!year || !brand) return '';
+    const setSlug = `${sportSlug}-cards-${year}-${slugify(brand)}`;
+    if (player && num) {
+      const v = (variant || '').trim().toLowerCase();
+      const variantPart = (v && v !== 'base') ? '-' + slugify(variant) : '';
+      return `https://www.sportscardspro.com/game/${setSlug}/${slugify(player)}${variantPart}-${num}`;
+    }
+    return `https://www.sportscardspro.com/console/${setSlug}`;
+  }
+
+  function updateSCPLink(sport) {
+    const player  = document.getElementById(`${sport}-player`).value.trim();
+    const year    = document.getElementById(`${sport}-year`).value.trim();
+    const brand   = document.getElementById(`${sport}-brand`).value.trim();
+    const num     = document.getElementById(`${sport}-cardnum`).value.trim();
+    const variant = (document.getElementById(`${sport}-variant`) || {value:''}).value.trim();
+    const url     = buildSCPUrl(sport, year, brand, player, num, variant);
+    const row    = document.getElementById(`${sport}-scp-row`);
+    const link   = document.getElementById(`${sport}-scp-link`);
+    row.style.display = url ? 'block' : 'none';
+    if (url) {
+      link.href = url;
+      link.textContent = (player && num)
+        ? 'Check card price on SportsCardsPro ↗'
+        : 'Browse this set on SportsCardsPro ↗';
+    }
+  }
+
+  // ── SPORTS CARD (NFL / NBA) ─────────────────────────────
+  function addSportsCard(sport) {
+    const player  = document.getElementById(`${sport}-player`).value.trim();
+    const year    = document.getElementById(`${sport}-year`).value.trim();
+    const brand   = document.getElementById(`${sport}-brand`).value.trim();
+    const variant = document.getElementById(`${sport}-variant`).value.trim();
+    const cardnum = document.getElementById(`${sport}-cardnum`).value.trim().replace(/^#/, '');
+
+    if (!player) { showToast('Please enter a player name.', 'error'); return; }
+
+    const rows = (sportsConditionRows[sport] || []).filter(r => r.qty > 0);
+    if (!rows.length) return;
+
+    const name = `${year ? year + ' ' : ''}${player}`;
+    const set  = [brand, variant].filter(Boolean).join(' · ');
+
+    for (const row of rows) {
+      inventory.unshift({
+        id:          genId(),
+        sport,
+        name,
+        set,
+        player,
+        year,
+        brand,
+        variant,
+        cardNumber:  cardnum,
+        imageUrl:    sportsEbayPreviewImage[sport] || '',
+        pcUrl:       sportsPCUrl[sport] || '',
+        condition:   row.condition,
+        quantity:    row.qty,
+        marketPrice: parseFloat(row.price) || 0,
+        addedAt:     Date.now()
+      });
+    }
+
+    saveInventory();
+    const total = rows.reduce((s, r) => s + r.qty, 0);
+    showToast(`${name} ×${total} added to inventory!`, 'success');
+
+    // Reset
+    ['player','year','brand','variant','cardnum'].forEach(f => {
+      document.getElementById(`${sport}-${f}`).value = '';
+    });
+    document.getElementById(`${sport}-scp-row`).style.display = 'none';
+    document.getElementById(`${sport}-player-preview`).classList.remove('visible');
+    document.getElementById(`${sport}-add-form`).style.display = 'none';
+    document.getElementById(`${sport}-player-results`).classList.remove('visible');
+    updateSidebarTotal();
+  }
+
+  // ── RENDER DASHBOARD ───────────────────────────────────
+  function renderDashboard() {
+    const bysSport = { pokemon: [], nfl: [], nba: [] };
+    inventory.forEach(c => bysSport[c.sport]?.push(c));
+
+    const totalVal = inventory.reduce((s, c) => s + (c.marketPrice * c.quantity), 0);
+    const totalCount = inventory.reduce((s, c) => s + c.quantity, 0);
+
+    const fmt = v => '$' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+    document.getElementById('stat-total').textContent = fmt(totalVal);
+    document.getElementById('stat-cards-total').textContent = totalCount + ' card' + (totalCount !== 1 ? 's' : '');
+
+    ['pokemon','nfl','nba'].forEach(s => {
+      const cards = bysSport[s];
+      const val = cards.reduce((sum, c) => sum + (c.marketPrice * c.quantity), 0);
+      const cnt = cards.reduce((sum, c) => sum + c.quantity, 0);
+      document.getElementById(`stat-${s}-val`).textContent = fmt(val);
+      document.getElementById(`stat-${s}-count`).textContent = cnt + ' card' + (cnt !== 1 ? 's' : '');
+    });
+
+    updateSidebarTotal();
+
+    // Recent list
+    const list = document.getElementById('recent-list');
+    const recent = inventory.slice(0, 6);
+    if (!recent.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-icon">🃏</div><h3>No cards yet</h3><p>Add your first card to get started.</p></div>`;
+      return;
+    }
+    list.innerHTML = recent.map(c => {
+      const cachedEbay = !c.imageUrl && ebayImgCache[c.id];
+      const imgContent = c.imageUrl
+        ? `<img src="${c.imageUrl}" alt="" loading="lazy"/>`
+        : cachedEbay
+          ? `<img src="${cachedEbay}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`
+          : sportEmoji(c.sport);
+      return `
+      <div class="recent-item">
+        <div class="recent-item-img" id="recent-img-${c.id}"${!c.imageUrl && !cachedEbay ? ' data-ebay-pending="1"' : ''}>
+          ${imgContent}
+        </div>
+        <div class="recent-item-info">
+          <div class="recent-item-name">${c.name}</div>
+          <div class="recent-item-meta">${c.set || c.sport.toUpperCase()} · ${c.condition}</div>
+        </div>
+        <div class="recent-item-price">${c.marketPrice ? '$' + (c.marketPrice * c.quantity).toFixed(2) : '—'}</div>
+      </div>`;
+    }).join('');
+
+    lazyLoadEbayImages(recent);
+  }
+
+  // ── RENDER INVENTORY ───────────────────────────────────
+  function renderInventory() {
+    const query  = (document.getElementById('inv-search')?.value || '').toLowerCase();
+    const filter = document.getElementById('inv-filter')?.value || 'all';
+
+    let cards = inventory;
+    if (filter !== 'all') cards = cards.filter(c => c.sport === filter);
+    if (query) cards = cards.filter(c =>
+      c.name.toLowerCase().includes(query) ||
+      (c.set||'').toLowerCase().includes(query) ||
+      (c.player||'').toLowerCase().includes(query)
+    );
+
+    const total = inventory.reduce((s,c) => s + c.quantity, 0);
+    const el = document.getElementById('inv-count-label');
+    if (el) el.textContent = `${total} card${total !== 1 ? 's' : ''} in your collection`;
+
+    const grid = document.getElementById('card-grid');
+    if (!cards.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🔍</div><h3>${inventory.length ? 'No matches' : 'No cards yet'}</h3><p>${inventory.length ? 'Try a different search or filter.' : 'Head to "Add Card" to build your collection.'}</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = cards.map(c => {
+      const cachedEbay = !c.imageUrl && ebayImgCache[c.id];
+      const imgContent = c.imageUrl
+        ? `<img src="${c.imageUrl}" alt="" loading="lazy"/>`
+        : cachedEbay
+          ? `<img src="${cachedEbay}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:contain;padding:2px">`
+          : sportEmoji(c.sport);
+      return `
+      <div class="inv-card">
+        <div class="inv-card-img" id="inv-img-${c.id}"${!c.imageUrl && !cachedEbay ? ' data-ebay-pending="1"' : ''}>
+          ${imgContent}
+        </div>
+        <div class="inv-card-body">
+          <span class="inv-card-sport sport-${c.sport}">${c.sport.toUpperCase()}</span>
+          ${c.language && c.language !== 'en' ? `<span class="inv-card-sport" style="background:#6366f1;margin-left:4px">${c.language.toUpperCase()}</span>` : ''}
+          <div class="inv-card-name">${c.name}</div>
+          <div class="inv-card-set">${c.set || '—'}</div>
+          <div class="inv-card-footer">
+            <span class="inv-card-price">${c.marketPrice ? '$' + (c.marketPrice * c.quantity).toFixed(2) : '—'}</span>
+            <span class="inv-card-qty">×${c.quantity}</span>
+          </div>
+          <div style="margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+            <span class="cond-badge">${c.condition}</span>
+            ${c.certNumber ? `<span class="cond-badge" style="background:#f5f3ff;color:#7c3aed">PSA #${c.certNumber}</span>` : ''}
+          </div>
+          ${c.priceUpdatedAt ? `<div style="font-size:0.62rem;color:var(--muted);margin-top:3px">Updated ${timeAgo(c.priceUpdatedAt)}</div>` : ''}
+          <div class="inv-card-actions">
+            ${c.sport === 'pokemon' && c.pcUrl ? `<button class="btn-icon" id="refresh-price-${c.id}" onclick="refreshPokemonPrice('${c.id}')">↻</button>` : ''}
+            <button class="btn-icon" onclick="editQty('${c.id}')" title="Edit quantity">×${c.quantity}</button>
+            <button class="btn-icon" onclick="editPrice('${c.id}')" title="Edit price">✏️</button>
+            <button class="btn-icon danger" onclick="deleteCard('${c.id}')">🗑</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Show "Refresh Prices" batch button only when Pokemon cards with pcUrl are visible
+    const refreshAllBtn = document.getElementById('refresh-all-btn');
+    if (refreshAllBtn) {
+      const hasPokemon = cards.some(c => c.sport === 'pokemon' && c.pcUrl);
+      refreshAllBtn.style.display = hasPokemon ? '' : 'none';
+    }
+
+    lazyLoadEbayImages(cards);
+  }
+
+  function editQty(id) {
+    const card = inventory.find(c => c.id === id);
+    if (!card) return;
+    const val = prompt(`Update quantity for ${card.name} (current: ${card.quantity}):`, card.quantity);
+    if (val === null) return;
+    const qty = parseInt(val);
+    if (isNaN(qty) || qty < 1) { showToast('Quantity must be at least 1.', 'error'); return; }
+    card.quantity = qty;
+    saveInventory();
+    renderInventory();
+    updateSidebarTotal();
+    showToast('Quantity updated.', 'success');
+  }
+
+  function editPrice(id) {
+    const card = inventory.find(c => c.id === id);
+    if (!card) return;
+    const val = prompt(`Update market price for ${card.name} (current: $${card.marketPrice?.toFixed(2) || '0.00'}):`, card.marketPrice?.toFixed(2) || '0');
+    if (val === null) return;
+    const price = parseFloat(val);
+    if (isNaN(price) || price < 0) { showToast('Invalid price.', 'error'); return; }
+    card.marketPrice = price;
+    saveInventory();
+    renderInventory();
+    updateSidebarTotal();
+    showToast('Price updated.', 'success');
+  }
+
+  function deleteCard(id) {
+    const card = inventory.find(c => c.id === id);
+    if (!card) return;
+    if (!confirm(`Remove "${card.name}" from your inventory?`)) return;
+    inventory = inventory.filter(c => c.id !== id);
+    saveInventory();
+    renderInventory();
+    updateSidebarTotal();
+    showToast('Card removed.', 'success');
+  }
+
+  // ── EBAY BEST-GUESS IMAGES ─────────────────────────────
+  // Sandbox App ID — swap to production ID when ready:
+  //   ZiHernWo-CLT-PRD-... (production endpoint: svcs.ebay.com)
+  const EBAY_APP_ID       = 'ZiHernWo-CLT-PRD-98affa531-0663489e';
+  const EBAY_ENDPOINT     = 'https://svcs.ebay.com/services/search/FindingService/v1';
+  const EBAY_CACHE_KEY    = 'clt_ebay_img_v2';
+  let   ebayImgCache      = {};   // cardId → url string ('' = confirmed miss)
+
+  function loadEbayImgCache() {
+    try { ebayImgCache = JSON.parse(localStorage.getItem(EBAY_CACHE_KEY) || '{}'); } catch { ebayImgCache = {}; }
+  }
+
+  function saveEbayImgCache() {
+    try { localStorage.setItem(EBAY_CACHE_KEY, JSON.stringify(ebayImgCache)); } catch {}
+  }
+
+  function buildEbayQuery(card) {
+    const shortBrand = (card.brand || '').replace(/^(panini|topps|upper deck|bowman)\s+/i, '').trim() || card.brand || '';
+    if (card.sport === 'pokemon') {
+      return [card.name, card.set].filter(Boolean).join(' ');
+    }
+    const variantPart = card.variant && card.variant.toLowerCase() !== 'base' ? card.variant : '';
+    return [card.player || card.name, card.year, shortBrand, card.cardNumber, variantPart]
+      .filter(Boolean).join(' ');
+  }
+
+  async function fetchEbayImage(card) {
+    const cached = ebayImgCache[card.id];
+    if (cached !== undefined) return cached || null;
+
+    const query = buildEbayQuery(card);
+    try {
+      const res    = await fetch(`/api/ebay-image?q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data   = await res.json();
+      const imgUrl = data.imageUrl || null;
+      ebayImgCache[card.id] = imgUrl || '';
+      saveEbayImgCache();
+      return imgUrl;
+    } catch {
+      ebayImgCache[card.id] = '';
+      saveEbayImgCache();
+      return null;
+    }
+  }
+
+  function applyEbayImageToDOM(cardId, url) {
+    const imgTag = `<img src="${url}" alt="" loading="lazy"
+      style="width:100%;height:100%;object-fit:contain;padding:2px"
+      onerror="this.parentNode.innerHTML=sportEmoji(this.dataset.sport)"
+      data-sport="unknown">`;
+    const recentTag = `<img src="${url}" alt="" loading="lazy"
+      style="width:100%;height:100%;object-fit:cover;border-radius:6px"
+      onerror="this.parentNode.innerHTML='🃏'">`;
+
+    const invEl    = document.getElementById(`inv-img-${cardId}`);
+    const recentEl = document.getElementById(`recent-img-${cardId}`);
+    if (invEl    && invEl.dataset.ebayPending)    invEl.innerHTML    = imgTag;
+    if (recentEl && recentEl.dataset.ebayPending) recentEl.innerHTML = recentTag;
+  }
+
+  async function lazyLoadEbayImages(cards) {
+    for (const card of cards) {
+      if (card.imageUrl) continue;
+      const cached = ebayImgCache[card.id];
+      if (cached !== undefined) {
+        if (cached) applyEbayImageToDOM(card.id, cached);
+        continue;
+      }
+      await new Promise(r => setTimeout(r, 200));
+      const url = await fetchEbayImage(card);
+      if (url) applyEbayImageToDOM(card.id, url);
+    }
+  }
+
+  // ── HELPERS ────────────────────────────────────────────
+  function sportEmoji(sport) {
+    return { pokemon:'🎴', nfl:'🏈', nba:'🏀' }[sport] || '🃏';
+  }
+
+  function updateSidebarTotal() {
+    const total = inventory.reduce((s, c) => s + (c.marketPrice * c.quantity), 0);
+    const fmt = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    document.getElementById('sidebar-total').textContent = fmt;
+    const mob = document.getElementById('mobile-total');
+    if (mob) mob.textContent = fmt;
+  }
+
+  function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.className = 'toast ' + type;
+    document.getElementById('toast-msg').textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // ── POKEMON LIVE PRICE REFRESH ─────────────────────────
+  function priceForCondition(prices, condition) {
+    if (condition === 'PSA 10')   return prices.psa10;
+    if (condition === 'PSA 9')    return prices.grade9;
+    if (condition === 'PSA 8')    return prices.grade8;
+    if (condition === 'BGS 9.5')  return prices.grade95;
+    return prices.ungraded;
+  }
+
+  async function refreshPokemonPrice(id) {
+    const card = inventory.find(c => c.id === id);
+    if (!card || !card.pcUrl) return;
+
+    const btn = document.getElementById(`refresh-price-${id}`);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner" style="width:11px;height:11px;border-width:2px;border-color:rgba(91,184,245,.35);border-top-color:var(--blue)"></span>'; }
+
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(card.pcUrl)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { prices } = await res.json();
+      if (!prices) throw new Error('No prices');
+
+      const price = priceForCondition(prices, card.condition);
+      if (price != null) {
+        card.marketPrice    = price;
+        card.priceUpdatedAt = Date.now();
+        saveInventory();
+        renderInventory();
+        renderDashboard();
+        updateSidebarTotal();
+        showToast(`${card.name} → $${price.toFixed(2)}`, 'success');
+      } else {
+        showToast('No price data for this condition.', 'error');
+        if (btn) { btn.disabled = false; btn.innerHTML = '↻'; }
+      }
+    } catch(e) {
+      showToast('Price fetch failed. Try again.', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = '↻'; }
+    }
+  }
+
+  async function refreshAllPokemonPrices() {
+    const btn = document.getElementById('refresh-all-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '↻ Refreshing…'; }
+
+    const filter  = document.getElementById('inv-filter')?.value || 'all';
+    const targets = inventory.filter(c =>
+      c.sport === 'pokemon' && c.pcUrl &&
+      (filter === 'all' || filter === 'pokemon')
+    );
+
+    let updated = 0;
+    for (const card of targets) {
+      try {
+        const res = await fetch(`/api/prices?url=${encodeURIComponent(card.pcUrl)}`);
+        if (!res.ok) continue;
+        const { prices } = await res.json();
+        if (!prices) continue;
+        const price = priceForCondition(prices, card.condition);
+        if (price != null) { card.marketPrice = price; card.priceUpdatedAt = Date.now(); updated++; }
+      } catch { /* skip */ }
+      await new Promise(r => setTimeout(r, 400)); // be polite to PriceCharting
+    }
+
+    saveInventory();
+    renderInventory();
+    renderDashboard();
+    updateSidebarTotal();
+    showToast(`Updated ${updated} of ${targets.length} Pokémon prices.`, 'success');
+    if (btn) { btn.disabled = false; btn.innerHTML = '↻ Refresh Prices'; }
+  }
+
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60)   return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+
+  // ── INIT ───────────────────────────────────────────────
+  loadEbayImgCache();
+  renderDashboard();
+  updateSidebarTotal();
+  loadSetsIndex();
+
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      // Sidebar auth
+      document.getElementById('auth-signed-out').style.display = 'none';
+      document.getElementById('auth-signed-in').style.display  = 'block';
+      document.getElementById('auth-name').textContent         = user.displayName || user.email;
+      document.getElementById('auth-avatar').src               = user.photoURL || '';
+      // Mobile header auth
+      document.getElementById('mobile-signed-out').style.display = 'none';
+      document.getElementById('mobile-signed-in').style.display  = 'block';
+      const mobAvatar = document.getElementById('mobile-avatar');
+      if (mobAvatar) mobAvatar.src = user.photoURL || '';
+      loadFromFirestore(user.uid);
+    } else {
+      // Sidebar auth
+      document.getElementById('auth-signed-out').style.display = 'block';
+      document.getElementById('auth-signed-in').style.display  = 'none';
+      // Mobile header auth
+      document.getElementById('mobile-signed-out').style.display = 'block';
+      document.getElementById('mobile-signed-in').style.display  = 'none';
+      inventory = JSON.parse(localStorage.getItem('clt_inventory') || '[]');
+      renderDashboard();
+      renderInventory();
+      updateSidebarTotal();
+    }
+  });
+
+  // ── PSA ADD-CARD PRIMARY FLOW ────────────────────────────
+  let psaAddCard = null;       // current looked-up cert data
+  let psaAddPrice = 0;
+  let psaAddImageUrl = '';
+  let psaAddPCUrl = '';
+  let psaAddSCPUrl = '';
+  let psaAddSCPCards = [];   // all SCP variants found for the looked-up cert
+
+  function detectSportFromPSA(category) {
+    const c = (category || '').toUpperCase();
+    if (c.includes('BASKETBALL')) return 'nba';
+    if (c.includes('FOOTBALL'))   return 'nfl';
+    if (c.includes('POKEMON'))    return 'pokemon';
+    if (c.includes('BASEBALL'))   return 'mlb';
+    return 'nba';
+  }
+
+  // Normalise a PSA variety string for use as a PriceCharting URL variant slug.
+  //
+  // Two cases:
+  // 1. Variety IS contained in the brand name (e.g. variety "PRIZM BLACK" for brand
+  //    "PANINI CHRONICLES PRIZM BLACK") → this is the base card; return "" so no
+  //    variant segment appears in the URL.
+  // 2. Variety has the brand's trailing keyword appended (e.g. "RED/WHITE/BLUE PRIZM"
+  //    for brand "PANINI PRIZM") → strip that keyword so slugify produces the right slug.
+  function normalizeVarietyFromPSA(variety, brand) {
+    if (!variety) return '';
+    const v = variety.trim();
+    const b = (brand || '').trim().toUpperCase();
+
+    // Case 1: variety is a substring of the brand → base card, no variant
+    if (b.includes(v.toUpperCase())) return '';
+
+    // Case 2: variety ends with the brand's last word → strip it
+    const lastWord = b.split(/\s+/).pop() || '';
+    if (lastWord && v.toUpperCase().endsWith(' ' + lastWord)) {
+      return v.slice(0, -(lastWord.length + 1)).trim();
+    }
+
+    return v;
+  }
+
+  function buildPCUrlFromPSA(d) {
+    const sport     = detectSportFromPSA(d.category);
+    const brandTC   = toTitleCase(d.brand);
+    const subjectTC = toTitleCase(d.subject);
+    // Strip trailing brand keyword from variety so slugs match PriceCharting's format
+    const varietyClean = normalizeVarietyFromPSA(d.variety, d.brand);
+    const varietyTC    = toTitleCase(varietyClean);
+    if (sport === 'nba' || sport === 'nfl') {
+      return buildSportsPCUrl(sport, d.year, brandTC, subjectTC, d.cardNumber, varietyTC);
+    }
+    if (sport === 'pokemon') {
+      const setSlug  = slugify(d.brand);
+      const cardSlug = slugify(d.subject);
+      return `https://www.pricecharting.com/game/pokemon-${setSlug}/${cardSlug}-${d.cardNumber}`;
+    }
+    return null;
+  }
+
+  async function lookupPSAForAdd() {
+    const input  = document.getElementById('psa-add-cert');
+    const result = document.getElementById('psa-add-result');
+    const btn    = document.getElementById('psa-add-lookup-btn');
+    const cert   = (input.value || '').trim().replace(/\D/g, '');
+    if (!cert) { input.focus(); return; }
+
+    psaAddCard = null; psaAddPrice = 0; psaAddImageUrl = ''; psaAddPCUrl = ''; psaAddSCPUrl = ''; psaAddSCPCards = [];
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-color:rgba(255,255,255,.4);border-top-color:#fff;width:14px;height:14px"></span>';
+    result.innerHTML = `<div style="text-align:center;padding:28px"><span class="spinner" style="width:20px;height:20px"></span></div>`;
+
+    try {
+      const res = await fetch(`/api/psa-cert?cert=${encodeURIComponent(cert)}`);
+      if (!res.ok) throw new Error('not found');
+      const d = await res.json();
+      psaAddCard = d;
+      renderPSAAddCard(d, null, null, null);   // initial render — no price yet
+
+      let pcUrl    = buildPCUrlFromPSA(d);
+      psaAddPCUrl  = pcUrl || '';
+
+      // Build SCP search fetch if we have enough data (sport card + card number).
+      // SCP search scrapes PriceCharting for the real slug, which is more reliable
+      // than reconstructing it from the PSA variety string whose naming can differ.
+      const sport       = detectSportFromPSA(d.category);
+      const matchedBrand = matchBrandFromPSA(d.brand);
+      let scpSearchFetch = null;
+      if ((sport === 'nfl' || sport === 'nba') && d.subject && d.year && matchedBrand && d.cardNumber) {
+        const params = new URLSearchParams({
+          sport, player: toTitleCase(d.subject), year: d.year, brand: matchedBrand, cardNum: d.cardNumber,
+        });
+        scpSearchFetch = fetch(`/api/search-scp?${params}`);
+      }
+
+      // Run price fetch and SCP search in parallel.
+      // Note: the price fetch uses the URL built from PSA variety strings, which
+      // may not match PriceCharting's actual slug — SCP search gives us the real URL.
+      const priceFetchUrl = pcUrl;
+      const [priceRes, scpRes] = await Promise.all([
+        pcUrl ? fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`) : Promise.resolve(null),
+        scpSearchFetch || Promise.resolve(null),
+      ]);
+
+      if (priceRes?.ok) {
+        const { prices, imageUrl } = await priceRes.json();
+        psaAddImageUrl = imageUrl || '';
+        const price = priceForCondition(prices, d.grade) ?? null;
+        psaAddPrice  = price ?? 0;
+      }
+
+      if (scpRes?.ok) {
+        const { cards: scpCards } = await scpRes.json();
+        psaAddSCPCards = scpCards || [];
+        if (psaAddSCPCards.length > 0) {
+          const varietySlug = slugify(toTitleCase(normalizeVarietyFromPSA(d.variety, d.brand)));
+          const exact = varietySlug ? psaAddSCPCards.find(c => slugify(c.variant) === varietySlug) : null;
+          if (exact) {
+            psaAddSCPUrl = exact.scpUrl || '';
+            if (exact.pcUrl) pcUrl = exact.pcUrl;
+          } else if (psaAddSCPCards.length === 1) {
+            psaAddSCPUrl = psaAddSCPCards[0].scpUrl || '';
+            if (psaAddSCPCards[0].pcUrl) pcUrl = psaAddSCPCards[0].pcUrl;
+          }
+        }
+      }
+
+      // Fallback: derive SCP URL from PC URL (identical path, different domain).
+      if (!psaAddSCPUrl && !psaAddSCPCards.length && pcUrl) {
+        psaAddSCPUrl = pcUrl.replace('https://www.pricecharting.com/', 'https://www.sportscardspro.com/');
+      }
+      psaAddPCUrl = pcUrl || '';
+
+      // If SCP search gave us a different (more reliable) PC URL, re-fetch prices
+      // from it — the parallel fetch above may have used a reconstructed URL that
+      // doesn't match PriceCharting's actual slug.
+      if (pcUrl && pcUrl !== priceFetchUrl) {
+        try {
+          const rr = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+          if (rr.ok) {
+            const { prices, imageUrl } = await rr.json();
+            psaAddImageUrl = imageUrl || psaAddImageUrl;
+            const price = priceForCondition(prices, d.grade) ?? null;
+            psaAddPrice  = price ?? 0;
+          }
+        } catch { /* leave existing price */ }
+      }
+
+      renderPSAAddCard(d, psaAddPrice || null, psaAddImageUrl, pcUrl);
+    } catch {
+      result.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <h3>Certificate not found</h3>
+          <p>Check the number and try again.</p>
+        </div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Lookup';
+    }
+  }
+
+  function renderPSAAddCard(d, price, imageUrl, pcUrl) {
+    const result = document.getElementById('psa-add-result');
+    const gradeNum = (d.grade || '').replace('PSA ', '');
+    const n = parseFloat(gradeNum);
+    let badgeBg = '#374151', badgeText = '#fff', badgeName = '';
+    if (n === 10)    { badgeBg = 'linear-gradient(135deg,#7a5c00,#f5d020,#7a5c00)'; badgeText = '#f5d020'; badgeName = 'GEM MINT'; }
+    else if (n >= 9) { badgeBg = 'linear-gradient(135deg,#1e3a5f,#2563eb)';         badgeText = '#93c5fd'; badgeName = 'MINT';     }
+    else if (n >= 8) { badgeBg = 'linear-gradient(135deg,#14532d,#16a34a)';         badgeText = '#86efac'; badgeName = 'NM-MT';    }
+    else             { badgeBg = 'linear-gradient(135deg,#1c1917,#44403c)';         badgeText = '#d6d3d1'; badgeName = '';         }
+
+    const sport     = detectSportFromPSA(d.category);
+    const sportLabel = sport === 'nba' ? '🏀 NBA' : sport === 'nfl' ? '🏈 NFL' : sport === 'pokemon' ? '🎴 Pokémon' : '🃏 Card';
+    const priceStr   = price != null ? `$${price.toFixed(2)}` : '—';
+    const priceNote  = price != null ? `<a href="${pcUrl}" target="_blank" style="font-size:0.7rem;color:var(--blue-dark)">via PriceCharting ↗</a>` : `<span style="font-size:0.7rem;color:var(--muted)">Price not found on PriceCharting</span>`;
+    // SCP link — use the already-resolved psaAddSCPUrl (may be empty if a picker is needed).
+    const scpLinkHtml = psaAddSCPUrl
+      ? `<div style="margin-top:4px"><a href="${psaAddSCPUrl}" target="_blank" style="font-size:0.7rem;color:var(--blue-dark)">Check prices on SportsCardsPro ↗</a></div>`
+      : '';
+    // Variant picker — shown whenever multiple SCP variants exist for this card number.
+    // The auto-selected variant (if any) is pre-highlighted so the user can see which
+    // one was chosen and switch if needed.
+    const showPicker = psaAddSCPCards.length > 1;
+    const pickerHtml = showPicker ? (() => {
+      const buttons = psaAddSCPCards.map(c => {
+        const sel = c.scpUrl === psaAddSCPUrl;
+        return `<button type="button"
+              onclick="selectPSASCPVariant('${c.scpUrl}', '${c.pcUrl}', this)"
+              ${sel ? 'data-sel="1"' : ''}
+              style="background:${sel ? 'var(--blue-bg)' : 'var(--white)'};
+                     border:1.5px solid ${sel ? 'var(--blue)' : 'var(--border)'};
+                     border-radius:8px;padding:5px 11px;font-size:0.78rem;font-weight:600;
+                     cursor:pointer;color:var(--text);transition:border-color 0.12s,background 0.12s;white-space:nowrap"
+              onmouseover="this.style.borderColor='var(--blue)';this.style.background='var(--blue-bg)'"
+              onmouseout="if(!this.dataset.sel){this.style.borderColor='var(--border)';this.style.background='var(--white)'}">
+              ${c.variant}<span style="color:var(--muted);font-weight:400;margin-left:4px">#${c.number}</span>
+            </button>`;
+      }).join('');
+      return `
+      <div style="margin-bottom:16px">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Variant</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${buttons}</div>
+      </div>`;
+    })() : '';
+
+    result.innerHTML = `
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px">
+
+        <!-- Card image -->
+        <div id="psa-add-card-img" style="width:90px;height:126px;border-radius:10px;overflow:hidden;flex-shrink:0;
+             background:var(--blue-light);display:flex;align-items:center;justify-content:center;
+             box-shadow:0 4px 14px rgba(0,0,0,.18)">
+          ${imageUrl
+            ? `<img src="${imageUrl}" alt="" style="width:100%;height:100%;object-fit:contain">`
+            : `<span style="font-size:2.4rem">🃏</span>`}
+        </div>
+
+        <!-- Details -->
+        <div style="flex:1;min-width:180px">
+          <!-- Grade badge -->
+          <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="background:${badgeBg};border-radius:8px;padding:6px 12px;text-align:center">
+              <div style="font-size:0.55rem;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.1em">${badgeName || 'PSA'}</div>
+              <div style="font-size:1.8rem;font-weight:900;color:${badgeText};line-height:1">${gradeNum}</div>
+            </div>
+            <div>
+              <div style="font-size:0.65rem;color:var(--muted)">${sportLabel} · Cert #${d.certNumber}</div>
+              <div style="font-size:0.8rem;color:var(--muted)">Pop: ${(d.population||0).toLocaleString()} · Higher: ${(d.populationHigher||0).toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div style="font-size:1.1rem;font-weight:800;margin-bottom:4px">${toTitleCase(d.subject) || '—'}</div>
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:2px">${[d.year, toTitleCase(d.brand)].filter(Boolean).join(' · ')}</div>
+          ${d.variety   ? `<div style="font-size:0.78rem;color:var(--muted)">${toTitleCase(d.variety)}</div>` : ''}
+          ${d.cardNumber ? `<div style="font-size:0.78rem;color:var(--muted)">Card #${d.cardNumber}</div>` : ''}
+
+          <!-- Market price -->
+          <div style="margin-top:12px;padding:10px 12px;background:var(--blue-bg);border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:0.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Market Price (${d.grade})</div>
+            <div id="psa-add-price-value" style="font-size:1.4rem;font-weight:900;color:var(--text)">${priceStr}</div>
+            <div id="psa-add-price-note">${priceNote}</div>
+            <div id="psa-add-scp-link-slot">${scpLinkHtml}</div>
+          </div>
+        </div>
+      </div>
+
+      ${pickerHtml}
+
+      <!-- Qty -->
+      <div style="margin-bottom:16px">
+        <label class="field-label">Quantity</label>
+        <input class="field-input" id="psa-add-qty" type="number" value="1" min="1" style="width:80px;margin-top:4px" />
+      </div>
+
+      <button class="btn-add" onclick="addPSACertCard()">Add to Inventory</button>`;
+  }
+
+  function addPSACertCard() {
+    const d = psaAddCard;
+    if (!d) return;
+    const qty = parseInt(document.getElementById('psa-add-qty')?.value || '1') || 1;
+
+    inventory.unshift({
+      id:          genId(),
+      sport:       detectSportFromPSA(d.category),
+      name:        toTitleCase(d.subject) || d.certNumber,
+      set:         [d.year, toTitleCase(d.brand)].filter(Boolean).join(' '),
+      player:      toTitleCase(d.subject),
+      year:        d.year || '',
+      brand:       toTitleCase(d.brand),
+      variant:     toTitleCase(normalizeVarietyFromPSA(d.variety, d.brand)),
+      cardNumber:  d.cardNumber || '',
+      certNumber:  d.certNumber || '',
+      imageUrl:    psaAddImageUrl,
+      pcUrl:       psaAddPCUrl,
+      scpUrl:      psaAddSCPUrl,
+      condition:   d.grade,
+      quantity:    qty,
+      marketPrice: psaAddPrice,
+      addedAt:     Date.now()
+    });
+
+    saveInventory();
+    updateSidebarTotal();
+    showToast(`${toTitleCase(d.subject)} ${d.grade} ×${qty} added!`, 'success');
+
+    // Reset form
+    psaAddCard = null; psaAddPrice = 0; psaAddImageUrl = ''; psaAddPCUrl = ''; psaAddSCPUrl = ''; psaAddSCPCards = [];
+    document.getElementById('psa-add-cert').value = '';
+    document.getElementById('psa-add-result').innerHTML = '';
+  }
+
+  async function selectPSASCPVariant(scpUrl, pcUrl, btn) {
+    psaAddSCPUrl = scpUrl;
+    if (pcUrl) psaAddPCUrl = pcUrl;
+
+    // Highlight selected chip.
+    const picker = btn.closest('div[style*="flex-wrap"]');
+    if (picker) {
+      picker.querySelectorAll('button').forEach(b => {
+        b.style.borderColor = 'var(--border)';
+        b.style.background  = 'var(--white)';
+        delete b.dataset.sel;
+      });
+    }
+    btn.style.borderColor = 'var(--blue)';
+    btn.style.background  = 'var(--blue-bg)';
+    btn.dataset.sel = '1';
+
+    // Update the SCP link immediately.
+    const slot = document.getElementById('psa-add-scp-link-slot');
+    if (slot) {
+      slot.innerHTML = `<div style="margin-top:4px"><a href="${scpUrl}" target="_blank" style="font-size:0.7rem;color:var(--blue-dark)">Check prices on SportsCardsPro ↗</a></div>`;
+    }
+
+    // Fetch PriceCharting price for the selected variant.
+    if (!pcUrl) return;
+    const priceEl = document.getElementById('psa-add-price-value');
+    const noteEl  = document.getElementById('psa-add-price-note');
+    if (priceEl) priceEl.textContent = '…';
+    try {
+      const res = await fetch(`/api/prices?url=${encodeURIComponent(pcUrl)}`);
+      if (!res.ok) throw new Error('not found');
+      const { prices, imageUrl } = await res.json();
+      if (imageUrl) {
+        psaAddImageUrl = imageUrl;
+        const imgSlot = document.getElementById('psa-add-card-img');
+        if (imgSlot) imgSlot.innerHTML = `<img src="${imageUrl}" alt="" style="width:100%;height:100%;object-fit:contain">`;
+      }
+      const grade = psaAddCard?.grade || '';
+      const price = priceForCondition(prices, grade) ?? null;
+      psaAddPrice = price ?? 0;
+      if (priceEl) priceEl.textContent = price != null ? `$${price.toFixed(2)}` : '—';
+      if (noteEl)  noteEl.innerHTML = price != null
+        ? `<a href="${pcUrl}" target="_blank" style="font-size:0.7rem;color:var(--blue-dark)">via PriceCharting ↗</a>`
+        : `<span style="font-size:0.7rem;color:var(--muted)">Price not found on PriceCharting</span>`;
+    } catch {
+      if (priceEl) priceEl.textContent = '—';
+      if (noteEl)  noteEl.innerHTML = `<span style="font-size:0.7rem;color:var(--muted)">Price not found on PriceCharting</span>`;
+    }
+  }
+
+  // ── PSA CERT IN ADD-CARD FORMS ───────────────────────────
+  async function lookupSportsPSACert(sport) {
+    const certInput = document.getElementById(`${sport}-psa-cert`);
+    const resultEl  = document.getElementById(`${sport}-psa-result`);
+    const btn       = document.getElementById(`${sport}-psa-btn`);
+    const cert      = (certInput.value || '').trim().replace(/\D/g, '');
+    if (!cert) { certInput.focus(); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--blue-dark);width:12px;height:12px;border-width:1.5px"></span>';
+    resultEl.innerHTML = '';
+
+    try {
+      const res = await fetch(`/api/psa-cert?cert=${encodeURIComponent(cert)}`);
+      if (!res.ok) throw new Error('not found');
+      const d = await res.json();
+      resultEl.innerHTML = psaCertBadge(d);
+      applyPSAGradeToSports(sport, d.grade);
+      // Auto-fill empty form fields from PSA data
+      autoFillSportsFromPSA(sport, d);
+    } catch {
+      resultEl.innerHTML = `<div style="font-size:0.8rem;color:var(--danger);margin-top:6px">Certificate not found.</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Lookup';
+    }
+  }
+
+  async function lookupPokePSACert() {
+    const certInput = document.getElementById('poke-psa-cert');
+    const resultEl  = document.getElementById('poke-psa-result');
+    const btn       = document.getElementById('poke-psa-btn');
+    const cert      = (certInput.value || '').trim().replace(/\D/g, '');
+    if (!cert) { certInput.focus(); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-color:rgba(0,0,0,.2);border-top-color:var(--blue-dark);width:12px;height:12px;border-width:1.5px"></span>';
+    resultEl.innerHTML = '';
+
+    try {
+      const res = await fetch(`/api/psa-cert?cert=${encodeURIComponent(cert)}`);
+      if (!res.ok) throw new Error('not found');
+      const d = await res.json();
+      resultEl.innerHTML = psaCertBadge(d);
+      applyPSAGradeToPokemon(d.grade);
+    } catch {
+      resultEl.innerHTML = `<div style="font-size:0.8rem;color:var(--danger);margin-top:6px">Certificate not found.</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Lookup';
+    }
+  }
+
+  function psaCertBadge(d) {
+    const gradeNum = (d.grade || '').replace('PSA ', '');
+    const n = parseFloat(gradeNum);
+    let badgeBg = '#374151', badgeText = '#fff';
+    if (n === 10)    { badgeBg = '#92400e'; badgeText = '#f5d020'; }
+    else if (n >= 9) { badgeBg = '#1e3a5f'; badgeText = '#93c5fd'; }
+    else if (n >= 8) { badgeBg = '#14532d'; badgeText = '#86efac'; }
+    const details = [d.year, d.brand].filter(Boolean).join(' · ');
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 10px;
+           background:var(--blue-bg);border-radius:8px;border:1px solid var(--border)">
+        <div style="background:${badgeBg};border-radius:6px;padding:4px 9px;
+             font-size:0.82rem;font-weight:900;color:${badgeText};flex-shrink:0;white-space:nowrap">
+          PSA ${gradeNum}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:0.82rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${d.subject || '—'}${d.cardNumber ? ' · #' + d.cardNumber : ''}
+          </div>
+          ${details ? `<div style="font-size:0.7rem;color:var(--muted)">${details}${d.variety ? ' · ' + d.variety : ''}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:0.6rem;color:var(--muted)">Pop</div>
+          <div style="font-size:0.8rem;font-weight:700">${(d.population||0).toLocaleString()}</div>
+        </div>
+      </div>`;
+  }
+
+  function applyPSAGradeToSports(sport, grade) {
+    // Set the first condition row to the PSA grade, or add a row for it
+    const rows = sportsConditionRows[sport];
+    if (!rows || !rows.length) return;
+    // Use the normalised grade ("PSA 10", "PSA 9" etc.) — maps directly to SPORTS_CONDITIONS
+    if (SPORTS_CONDITIONS.includes(grade)) {
+      rows[0].condition = grade;
+      const prices = sportsPCPrices[sport];
+      if (prices) {
+        const p = priceForCondition(prices, grade);
+        if (p != null) rows[0].price = p.toFixed(2);
+      }
+      renderSportsConditionRows(sport);
+    }
+  }
+
+  function applyPSAGradeToPokemon(grade) {
+    if (!pokeConditionRows.length) return;
+    if (POKE_CONDITIONS.includes(grade)) {
+      pokeConditionRows[0].condition = grade;
+      const prices = selectedPokemonCard?.prices;
+      if (prices) {
+        const p = priceForCondition(prices, grade);
+        if (p != null) pokeConditionRows[0].price = p.toFixed(2);
+      }
+      renderPokeConditionRows();
+    }
+  }
+
+  // Returns the CARD_SETS entry that best matches a raw PSA brand string, or null.
+  function matchBrandFromPSA(brand) {
+    const psaBrand = (brand || '').toLowerCase();
+    return CARD_SETS.find(s => {
+      const sl = s.toLowerCase();
+      return psaBrand.includes(sl) || sl.includes(psaBrand);
+    }) || null;
+  }
+
+  function autoFillSportsFromPSA(sport, d) {
+    const yearEl    = document.getElementById(`${sport}-year`);
+    const brandEl   = document.getElementById(`${sport}-brand`);
+    const cardnumEl = document.getElementById(`${sport}-cardnum`);
+    const variantEl = document.getElementById(`${sport}-variant`);
+
+    if (yearEl    && !yearEl.value.trim()    && d.year)        yearEl.value    = d.year;
+    if (cardnumEl && !cardnumEl.value.trim() && d.cardNumber)  cardnumEl.value = d.cardNumber;
+    if (variantEl && !variantEl.value.trim() && d.variety) {
+      const normalizedVariety = normalizeVarietyFromPSA(d.variety, d.brand);
+      variantEl.value = toTitleCase(normalizedVariety);
+    }
+
+    // Match PSA brand to closest CARD_SETS entry
+    if (brandEl && !brandEl.value.trim() && d.brand) {
+      const match = matchBrandFromPSA(d.brand);
+      if (match) brandEl.value = match;
+    }
+
+    // Trigger SCP link + preview refresh after filling
+    updateSCPLink(sport);
+    refreshSportsPreview(sport);
+    triggerSCPVariants(sport);
+  }
+
+  function toTitleCase(str) {
+    return (str || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  // ── PSA CERT LOOKUP ─────────────────────────────────────
+  async function lookupPSACert() {
+    const input  = document.getElementById('psa-cert-input');
+    const result = document.getElementById('psa-result');
+    const btn    = document.getElementById('psa-lookup-btn');
+    const cert   = (input.value || '').trim().replace(/\D/g, '');
+    if (!cert) { input.focus(); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-color:rgba(255,255,255,.4);border-top-color:#fff;width:14px;height:14px"></span>';
+    result.innerHTML = '';
+
+    try {
+      const res = await fetch(`/api/psa-cert?cert=${encodeURIComponent(cert)}`);
+      if (!res.ok) throw new Error('not found');
+      const data = await res.json();
+      renderPSAResult(data);
+    } catch {
+      result.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <h3>Certificate not found</h3>
+          <p>Check the number and try again.</p>
+        </div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Lookup';
+    }
+  }
+
+  function gradeColor(grade) {
+    const n = parseFloat((grade || '').replace(/[^0-9.]/g, ''));
+    if (n === 10)           return { bg: 'linear-gradient(135deg,#7a5c00,#f5d020,#7a5c00)', text: '#f5d020' };
+    if (n >= 9)             return { bg: 'linear-gradient(135deg,#1e1e2e,#3a3a5c)',         text: '#a0a8c8' };
+    if (n >= 8)             return { bg: 'linear-gradient(135deg,#0a2010,#1a5c30)',         text: '#48bb78' };
+    if (n >= 7)             return { bg: 'linear-gradient(135deg,#102030,#1a4060)',         text: '#63b3ed' };
+    return                         { bg: 'linear-gradient(135deg,#1a1a1a,#2a2a2a)',         text: '#a0a0a0' };
+  }
+
+  function renderPSAResult(d) {
+    const result = document.getElementById('psa-result');
+    const { bg, text } = gradeColor(d.grade);
+    const gradeNum = (d.grade || '').replace('PSA ', '');
+    const details  = [d.year, d.brand, d.variety].filter(Boolean).join(' · ');
+    const fmt = n => Number(n).toLocaleString();
+
+    result.innerHTML = `
+      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+
+        <!-- Grade badge -->
+        <div style="background:${bg};border-radius:14px;padding:22px 28px;text-align:center;flex-shrink:0;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+          <div style="font-size:0.65rem;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px">PSA</div>
+          <div style="font-size:3.2rem;font-weight:900;color:${text};line-height:1;letter-spacing:-2px">${gradeNum}</div>
+          <div style="font-size:0.6rem;color:rgba(255,255,255,.35);margin-top:5px;white-space:nowrap">${d.gradeRaw}</div>
+        </div>
+
+        <!-- Card details -->
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:1.3rem;font-weight:800;margin-bottom:6px">${d.subject || '—'}</div>
+          ${details ? `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:4px">${details}</div>` : ''}
+          ${d.cardNumber ? `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">Card #${d.cardNumber}${d.category ? ' · ' + d.category : ''}</div>` : ''}
+
+          <!-- Pop report -->
+          <div style="display:flex;gap:20px;margin-top:10px;padding:12px 14px;background:var(--blue-bg);border-radius:10px;border:1px solid var(--border)">
+            <div>
+              <div style="font-size:0.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Population</div>
+              <div style="font-size:1.5rem;font-weight:900;color:var(--text)">${fmt(d.population)}</div>
+            </div>
+            <div>
+              <div style="font-size:0.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">Pop Higher</div>
+              <div style="font-size:1.5rem;font-weight:900;color:var(--text)">${fmt(d.populationHigher)}</div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;font-size:0.72rem;color:var(--muted)">Cert #${d.certNumber}</div>
+        </div>
+      </div>`;
+  }
+</script>
+</body>
+</html>

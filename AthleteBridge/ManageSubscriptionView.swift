@@ -86,16 +86,6 @@ struct ManageSubscriptionView: View {
                     await subscriptionStore.loadProducts()
                 }
             }
-            .onAppear {
-                // Real-time listener keeps firestore.currentCoach.subscriptionTier in sync
-                // so PaymentsView and AcceptBookingView gate features correctly
-                if let uid = auth.user?.uid {
-                    firestore.startSubscriptionListener(for: uid)
-                }
-            }
-            .onDisappear {
-                firestore.stopSubscriptionListener()
-            }
         }
     }
 

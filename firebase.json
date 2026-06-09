@@ -2,6 +2,9 @@
   "functions": {
     "source": "AthleteBridge/functions"
   },
+  "firestore": {
+    "rules": "AthleteBridge/firestore.rules"
+  },
   "hosting": {
     "public": "public",
     "ignore": [
@@ -13,6 +16,34 @@
       {
         "source": "/api/signup",
         "function": "signupApi"
+      },
+      {
+        "source": "/api/prices",
+        "function": "getPCPrices"
+      },
+      {
+        "source": "/api/ebay-image",
+        "function": "getEbayImage"
+      },
+      {
+        "source": "/api/search-jp",
+        "function": "searchJapanesePC"
+      },
+      {
+        "source": "/api/jp-sets",
+        "function": "getJapaneseSets"
+      },
+      {
+        "source": "/api/search-scp",
+        "function": "searchSCP"
+      },
+      {
+        "source": "/api/search-promo",
+        "function": "searchPCPromos"
+      },
+      {
+        "source": "/api/psa-cert",
+        "function": "getPSACert"
       }
     ]
   }

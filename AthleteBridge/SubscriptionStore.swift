@@ -114,8 +114,19 @@ final class SubscriptionStore: ObservableObject {
     private func syncTierToFirestore() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let tierValue = currentTier.rawValue
-        try? await db.collection("coaches").document(uid)
-            .setData(["subscriptionTier": tierValue], mergeFields: ["subscriptionTier"])
+        for attempt in 1...3 {
+            do {
+                try await db.collection("coaches").document(uid)
+                    .setData(["subscriptionTier": tierValue], mergeFields: ["subscriptionTier"])
+                return
+            } catch {
+                print("[SubscriptionStore] syncTierToFirestore attempt \(attempt) failed: \(error)")
+                if attempt < 3 {
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
+                }
+            }
+        }
+        print("[SubscriptionStore] syncTierToFirestore gave up after 3 attempts — tier may be stale in Firestore")
     }
 
     private func listenForTransactions() -> Task<Void, Never> {

@@ -1211,9 +1211,11 @@ class FirestoreManager: ObservableObject {
     func updateLastSeen() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let timestamp = FieldValue.serverTimestamp()
-        // Write to both collections so it works regardless of userType
-        db.collection("clients").document(uid).setData(["lastSeen": timestamp], merge: true)
-        db.collection("coaches").document(uid).setData(["lastSeen": timestamp], merge: true)
+        // Use updateData (not setData) so that if the document doesn't exist the call
+        // fails silently rather than creating a bare {"lastSeen": ...} document that
+        // overwrites the real profile on the next full write.
+        db.collection("clients").document(uid).updateData(["lastSeen": timestamp]) { _ in }
+        db.collection("coaches").document(uid).updateData(["lastSeen": timestamp]) { _ in }
     }
 
     /// Fetch lastSeen timestamps for a list of client IDs and populate clientLastSeen.

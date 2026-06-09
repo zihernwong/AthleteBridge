@@ -43,9 +43,9 @@ struct CoachHomeView: View {
                             Text("View Client Roster")
                                 .font(.body)
                             Spacer()
-                            let count = uniqueClientCount
-                            if count > 0 {
-                                Text("\(count)")
+                            let upcoming = upcomingSessionCount
+                            if upcoming > 0 {
+                                Text("\(upcoming) upcoming")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -290,17 +290,15 @@ struct CoachHomeView: View {
 
     // MARK: - Computed Properties
 
-    /// Returns the number of unique clients this coach has worked with
-    private var uniqueClientCount: Int {
-        guard let uid = auth.user?.uid else { return 0 }
-        var ids = Set<String>()
-        for booking in firestore.coachBookings {
-            if !booking.clientID.isEmpty && booking.clientID != uid { ids.insert(booking.clientID) }
-            if let clientIds = booking.clientIDs {
-                for id in clientIds where !id.isEmpty && id != uid { ids.insert(id) }
-            }
-        }
-        return ids.count
+    /// Upcoming confirmed sessions in the next 7 days
+    private var upcomingSessionCount: Int {
+        let now = Date()
+        let sevenDays = now.addingTimeInterval(7 * 24 * 3600)
+        return firestore.coachBookings.filter {
+            let s = ($0.status ?? "").lowercased()
+            guard s == "confirmed", let start = $0.startAt else { return false }
+            return start >= now && start <= sevenDays
+        }.count
     }
 
     /// Returns the count of active stringing orders (accepted or stringing) for the current user

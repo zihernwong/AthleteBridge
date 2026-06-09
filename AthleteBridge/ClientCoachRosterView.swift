@@ -1,19 +1,17 @@
 import SwiftUI
 
-// MARK: - Client Summary Model
+// MARK: - Coach Summary Model
 
-private struct ClientSummary: Identifiable {
-    let id: String             // clientID
+private struct CoachSummary: Identifiable {
+    let id: String          // coachID
     let name: String
-    let photoURL: String?
     let totalSessions: Int
-    let totalPaid: Double      // sum of price for confirmed bookings
     let lastSessionDate: Date?
 }
 
-// MARK: - CoachClientRosterView
+// MARK: - ClientCoachRosterView
 
-struct CoachClientRosterView: View {
+struct ClientCoachRosterView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
 
@@ -21,62 +19,44 @@ struct CoachClientRosterView: View {
     @State private var isCreatingChat: Bool = false
     @State private var chatToOpen: String? = nil
 
-    // Aggregate unique clients from coachBookings
-    private var allClients: [ClientSummary] {
+    // Aggregate unique coaches from bookings
+    private var allCoaches: [CoachSummary] {
         guard let myUID = auth.user?.uid else { return [] }
-        var map: [String: (name: String, photoURL: String?, sessions: Int, paid: Double, lastDate: Date?)] = [:]
+        var map: [String: (name: String, sessions: Int, lastDate: Date?)] = [:]
 
-        for booking in firestore.coachBookings {
-            // Collect all client IDs from this booking (single or group)
-            var clientIds: [(id: String, name: String)] = []
-            if !booking.clientID.isEmpty {
-                clientIds.append((booking.clientID, booking.clientName ?? booking.clientID))
+        for booking in firestore.bookings {
+            let coachId = booking.coachID
+            guard !coachId.isEmpty, coachId != myUID else { continue }
+            let coachName = booking.coachName ?? coachId
+            var entry = map[coachId] ?? (name: coachName, sessions: 0, lastDate: nil)
+            entry.sessions += 1
+            if let start = booking.startAt {
+                if entry.lastDate == nil || start > entry.lastDate! { entry.lastDate = start }
             }
-            if let ids = booking.clientIDs, let names = booking.clientNames {
-                for (id, name) in zip(ids, names) where !id.isEmpty && id != booking.clientID {
-                    clientIds.append((id, name))
-                }
-            }
-
-            let isConfirmed = (booking.status ?? "").lowercased() == "confirmed"
-            let sessionPrice = booking.RateUSD ?? 0.0
-
-            for (clientId, clientName) in clientIds {
-                if clientId == myUID { continue }  // skip self
-                var entry = map[clientId] ?? (name: clientName, photoURL: nil, sessions: 0, paid: 0.0, lastDate: nil)
-                entry.sessions += 1
-                if isConfirmed { entry.paid += sessionPrice }
-                if let start = booking.startAt {
-                    if entry.lastDate == nil || start > entry.lastDate! { entry.lastDate = start }
-                }
-                // Prefer a non-empty name
-                if entry.name.isEmpty || entry.name == clientId { entry.name = clientName }
-                map[clientId] = entry
-            }
+            if entry.name.isEmpty || entry.name == coachId { entry.name = coachName }
+            map[coachId] = entry
         }
 
         return map.map { (id, val) in
-            ClientSummary(id: id, name: val.name, photoURL: val.photoURL,
-                          totalSessions: val.sessions, totalPaid: val.paid,
-                          lastSessionDate: val.lastDate)
+            CoachSummary(id: id, name: val.name, totalSessions: val.sessions, lastSessionDate: val.lastDate)
         }
         .sorted { ($0.lastSessionDate ?? .distantPast) > ($1.lastSessionDate ?? .distantPast) }
     }
 
-    private var filteredClients: [ClientSummary] {
-        if searchText.isEmpty { return allClients }
-        return allClients.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    private var filteredCoaches: [CoachSummary] {
+        if searchText.isEmpty { return allCoaches }
+        return allCoaches.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {
         Group {
-            if allClients.isEmpty {
+            if allCoaches.isEmpty {
                 VStack(spacing: 16) {
                     Spacer()
                     Image(systemName: "person.2")
                         .font(.system(size: 48))
                         .foregroundColor(.secondary)
-                    Text("No clients present within the last 7 days")
+                    Text("No coaches present within the last 7 days")
                         .font(.headline)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
@@ -84,23 +64,23 @@ struct CoachClientRosterView: View {
                 }
             } else {
                 List {
-                    ForEach(filteredClients) { client in
-                        NavigationLink(destination: CoachClientDetailView(clientId: client.id, clientName: client.name)
+                    ForEach(filteredCoaches) { coach in
+                        NavigationLink(destination: ClientCoachDetailView(coachId: coach.id, coachName: coach.name)
                             .environmentObject(firestore)
                             .environmentObject(auth)
                         ) {
-                            ClientRosterRow(client: client, onMessage: {
-                                messageClient(clientId: client.id)
+                            CoachRosterRow(coach: coach, onMessage: {
+                                messageCoach(coachId: coach.id)
                             })
                             .environmentObject(firestore)
                         }
                     }
                 }
                 .listStyle(.insetGrouped)
-                .searchable(text: $searchText, prompt: "Search clients")
+                .searchable(text: $searchText, prompt: "Search coaches")
             }
         }
-        .navigationTitle("My Clients")
+        .navigationTitle("My Coaches")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $chatToOpen) { chatId in
             ChatView(chatId: chatId)
@@ -118,18 +98,13 @@ struct CoachClientRosterView: View {
         }
         .onAppear {
             // Always fetch regardless of whether the list is currently empty
-            firestore.fetchBookingsForCurrentCoachSubcollection()
-            if !allClients.isEmpty {
-                firestore.fetchLastSeen(for: allClients.map { $0.id })
-            }
+            firestore.fetchBookingsForCurrentClientSubcollection()
         }
     }
 
-    private func messageClient(clientId: String) {
+    private func messageCoach(coachId: String) {
         isCreatingChat = true
-        // createOrGetChat sorts both UIDs to form a deterministic chat ID, so passing
-        // clientId here produces the same result as the client calling it with the coachId.
-        firestore.createOrGetChat(withCoachId: clientId) { chatId in
+        firestore.createOrGetChat(withCoachId: coachId) { chatId in
             DispatchQueue.main.async {
                 self.isCreatingChat = false
                 if let cid = chatId {
@@ -140,34 +115,25 @@ struct CoachClientRosterView: View {
     }
 }
 
-// MARK: - Client Roster Row
+// MARK: - Coach Roster Row
 
-private struct ClientRosterRow: View {
-    let client: ClientSummary
+private struct CoachRosterRow: View {
+    let coach: CoachSummary
     let onMessage: () -> Void
     @EnvironmentObject var firestore: FirestoreManager
 
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
             AvatarView(url: resolvedPhotoURL, size: 44, useCurrentUser: false)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(client.name)
+                Text(coach.name)
                     .font(.headline)
                 HStack(spacing: 6) {
-                    Text("\(client.totalSessions) session\(client.totalSessions == 1 ? "" : "s")")
+                    Text("\(coach.totalSessions) session\(coach.totalSessions == 1 ? "" : "s")")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    if client.totalPaid > 0 {
-                        Text("·")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(String(format: "$%.0f", client.totalPaid))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    if let date = client.lastSessionDate {
+                    if let date = coach.lastSessionDate {
                         Text("·")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -176,7 +142,6 @@ private struct ClientRosterRow: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                presenceView
             }
 
             Spacer()
@@ -195,38 +160,7 @@ private struct ClientRosterRow: View {
     }
 
     private var resolvedPhotoURL: URL? {
-        (firestore.clientPhotoURLs[client.id] ?? nil) ?? (firestore.coachPhotoURLs[client.id] ?? nil)
-    }
-
-    @ViewBuilder
-    private var presenceView: some View {
-        if let lastSeen = firestore.clientLastSeen[client.id] {
-            let secondsAgo = Date().timeIntervalSince(lastSeen)
-            if secondsAgo < 300 {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 7, height: 7)
-                    Text("Online")
-                        .font(.caption2)
-                        .foregroundColor(.green)
-                }
-            } else {
-                Text("Last seen \(lastSeenString(lastSeen))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    private func lastSeenString(_ date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 3600 { return "\(seconds / 60)m ago" }
-        if seconds < 86400 { return "\(seconds / 3600)h ago" }
-        let days = seconds / 86400
-        if days == 1 { return "yesterday" }
-        if days < 7 { return "\(days)d ago" }
-        return DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .none)
+        (firestore.coachPhotoURLs[coach.id] ?? nil) ?? (firestore.clientPhotoURLs[coach.id] ?? nil)
     }
 
     private func relativeDateString(_ date: Date) -> String {
@@ -239,27 +173,27 @@ private struct ClientRosterRow: View {
     }
 }
 
-// MARK: - Coach Client Detail View
+// MARK: - Client Coach Detail View
 
-struct CoachClientDetailView: View {
-    let clientId: String
-    let clientName: String
+struct ClientCoachDetailView: View {
+    let coachId: String
+    let coachName: String
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
 
-    private var clientBookings: [FirestoreManager.BookingItem] {
-        firestore.coachBookings
-            .filter { $0.clientID == clientId || ($0.clientIDs?.contains(clientId) ?? false) }
+    private var coachBookings: [FirestoreManager.BookingItem] {
+        firestore.bookings
+            .filter { $0.coachID == coachId }
             .sorted { ($0.startAt ?? .distantPast) > ($1.startAt ?? .distantPast) }
     }
 
     var body: some View {
         List {
-            if clientBookings.isEmpty {
+            if coachBookings.isEmpty {
                 Text("No bookings found")
                     .foregroundColor(.secondary)
             } else {
-                ForEach(clientBookings) { booking in
+                ForEach(coachBookings) { booking in
                     NavigationLink(destination: BookingDetailView(booking: booking)
                         .environmentObject(firestore)
                         .environmentObject(auth)
@@ -270,7 +204,7 @@ struct CoachClientDetailView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(clientName)
+        .navigationTitle(coachName)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -319,10 +253,12 @@ private struct ClientBookingRow: View {
     }
 }
 
-struct CoachClientRosterView_Previews: PreviewProvider {
+struct ClientCoachRosterView_Previews: PreviewProvider {
     static var previews: some View {
-        CoachClientRosterView()
-            .environmentObject(FirestoreManager())
-            .environmentObject(AuthViewModel())
+        NavigationStack {
+            ClientCoachRosterView()
+                .environmentObject(FirestoreManager())
+                .environmentObject(AuthViewModel())
+        }
     }
 }

@@ -810,22 +810,11 @@ struct ProfileView: View {
     }
 
     private func loadInitial() {
+        // Only set the role picker and kick off subject fetch — safe to repeat on every appear.
+        // Field population (name, goals, etc.) is owned by populateFromExisting() which
+        // guards against overwriting user input via hasPopulatedFromExisting.
         if let t = firestore.currentUserType?.uppercased() { role = (t == "COACH") ? .coach : .client }
         firestore.fetchSubjects()
-        if let client = firestore.currentClient {
-            name = client.name
-            selectedGoals = Set(client.goals)
-            selectedClientAvailability = Set(client.preferredAvailability)
-            clientBioText = client.bio ?? ""
-            clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
-        }
-        if let coach = firestore.currentCoach {
-            name = coach.name
-            selectedSpecialties = Set(coach.specialties)
-            experienceYears = coach.experienceYears
-            bioText = coach.bio ?? ""
-            coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
-        }
     }
 
     private func lookupCity(forZip zip: String, completion: ((String?) -> Void)? = nil) {

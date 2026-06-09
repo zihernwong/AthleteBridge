@@ -38,6 +38,29 @@ struct ClientFormView: View {
         return firestore.stringerIncomingOrders.filter { $0.status == "accepted" || $0.status == "stringing" }.count
     }
 
+    /// Upcoming confirmed sessions in the next 7 days
+    private var upcomingSessionCount: Int {
+        let now = Date()
+        let sevenDays = now.addingTimeInterval(7 * 24 * 3600)
+        return firestore.bookings.filter {
+            let s = ($0.status ?? "").lowercased()
+            guard s == "confirmed", let start = $0.startAt else { return false }
+            return start >= now && start <= sevenDays
+        }.count
+    }
+
+    /// Coaches with past confirmed sessions that the client hasn't reviewed yet
+    private var unreviewedCoachCount: Int {
+        guard let uid = auth.user?.uid else { return 0 }
+        let now = Date()
+        let pastCoachIds = Set(firestore.bookings.filter {
+            let s = ($0.status ?? "").lowercased()
+            return s == "confirmed" && (($0.endAt ?? .distantFuture) <= now) && !$0.coachID.isEmpty
+        }.map { $0.coachID })
+        let reviewedCoachIds = Set(firestore.reviews.filter { $0.clientID == uid }.map { $0.coachID })
+        return pastCoachIds.subtracting(reviewedCoachIds).count
+    }
+
     // Computed suggestions for improvement areas based on coaches' specialties
     private var goalSuggestions: [String] {
         // Get the last item being typed (after the last comma)
@@ -73,6 +96,54 @@ struct ClientFormView: View {
                 }
 
                 Form {
+                    Section(header: Text("My Coaches").font(.subheadline).fontWeight(.semibold)) {
+                        NavigationLink {
+                            ClientCoachRosterView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2.fill")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("View coaches")
+                                    .font(.body)
+                                Spacer()
+                                let upcoming = upcomingSessionCount
+                                if upcoming > 0 {
+                                    Text("\(upcoming) upcoming")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    let pendingReviews = unreviewedCoachCount
+                    if pendingReviews > 0 {
+                        Section(header: Text("Pending Reviews").font(.subheadline).fontWeight(.semibold)) {
+                            NavigationLink {
+                                ReviewsView()
+                                    .environmentObject(firestore)
+                                    .environmentObject(auth)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "star.bubble")
+                                        .foregroundColor(Color("LogoBlue"))
+                                    Text("Leave a review")
+                                        .font(.body)
+                                    Spacer()
+                                    Text("\(pendingReviews)")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color("LogoBlue"))
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                    }
+
                     Section(header: Text("Search by coach name (optional)")) {
                         VStack(spacing: 6) {
                             TextField("Search coaches by name", text: $searchText)
@@ -150,29 +221,32 @@ struct ClientFormView: View {
                         AvailabilityChipSelect(items: availabilityOptions, selection: $selectedAvailability)
                     }
                     
-                    NavigationLink("Find Coaches") {
-                        LazyView {
-                            // Only filter by availability if user explicitly selected preferences
-                            let prefs = Array(selectedAvailability)
-                            let client = Client(name: "You",
-                                                goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
-                                                preferredAvailability: prefs)
+                    Section(header: Text("Find a Coach").font(.subheadline).fontWeight(.semibold)) {
+                        NavigationLink("Find Coaches") {
+                            LazyView {
+                                // Only filter by availability if user explicitly selected preferences
+                                let prefs = Array(selectedAvailability)
+                                let client = Client(name: "You",
+                                                    goals: goals.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) },
+                                                    preferredAvailability: prefs)
 
-                            // Determine whether the signed-in user should be treated as a coach.
-                            let isCoachUser: Bool = {
-                                if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
-                                if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
-                                if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
-                                return false
-                            }()
+                                // Determine whether the signed-in user should be treated as a coach.
+                                let isCoachUser: Bool = {
+                                    if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+                                        return t == "COACH"
+                                    }
+                                    if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
+                                    return false
+                                }()
 
-                            if isCoachUser {
-                                CoachLogoView()
-                            } else {
-                                MatchResultsView(client: client, searchQuery: searchText)
+                                if isCoachUser {
+                                    CoachLogoView()
+                                } else {
+                                    MatchResultsView(client: client, searchQuery: searchText)
+                                }
                             }
                         }
-                     }
+                    }
 
                     Section(header: Text("Tournaments")) {
                         NavigationLink {
@@ -324,6 +398,8 @@ struct ClientFormView: View {
                      if firestore.coaches.isEmpty {
                          firestore.fetchCoaches()
                      }
+                     firestore.fetchBookingsForCurrentClientSubcollection()
+                     firestore.fetchAllReviews()
                      firestore.fetchClients()
                      firestore.fetchOrdersForBuyer()
                      if firestore.stringers.isEmpty {

@@ -14,11 +14,16 @@ struct MainAppView: View {
     // Flag set when the user manually selects a tab so we don't override their choice
     @State private var userDidSelectTab: Bool = false
 
-    // Computed flag: true when the signed-in user should be treated as a coach
+    // Computed flag: true when the signed-in user should be treated as a coach.
+    // currentUserType is the authoritative source once loaded; the coach-profile
+    // fallback only applies while the userType document is still being fetched.
     private var isCoachUserComputed: Bool {
-        if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), t == "COACH" { return true }
+        if let t = firestore.currentUserType?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+            return t == "COACH"
+        }
+        // userType not yet loaded — fall back to coach profile so coaches don't
+        // briefly see the client home on cold start.
         if let coach = firestore.currentCoach, coach.id == auth.user?.uid { return true }
-        if let uid = auth.user?.uid, firestore.coaches.contains(where: { $0.id == uid }) { return true }
         return false
     }
 
@@ -78,6 +83,9 @@ struct MainAppView: View {
             if let uid = auth.user?.uid {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
+                if isCoachUserComputed {
+                    firestore.startSubscriptionListener(for: uid)
+                }
             }
             if let clientURL = firestore.currentClientPhotoURL { loadTabAvatar(from: clientURL) }
             else if let coachURL = firestore.currentCoachPhotoURL { loadTabAvatar(from: coachURL) }
@@ -123,12 +131,19 @@ struct MainAppView: View {
             if let uid = _new {
                 firestore.fetchCurrentProfiles(for: uid)
                 firestore.fetchUserType(for: uid)
+            } else {
+                // User logged out — stop subscription listener
+                firestore.stopSubscriptionListener()
             }
         }
         .onChange(of: isCoachUserComputed) { _old, isCoach in
             if isCoach && selectedTab != 0 && !didAutoSelectCoachHome && !userDidSelectTab {
                 selectedTab = 1
                 didAutoSelectCoachHome = true
+            }
+            // Keep subscription listener alive for the full session
+            if isCoach, let uid = auth.user?.uid {
+                firestore.startSubscriptionListener(for: uid)
             }
         }
         .onChange(of: firestore.currentClientPhotoURL) { _old, new in

@@ -24,6 +24,15 @@ Pods/
 
 # Editor files
 *.swp
+
+# Sensitive credentials — never commit
+AthleteBridge/GoogleService-Info.plist
+AthleteBridge/Certificates.p12
+AthleteBridge/aps.cer
+AthleteBridge/functions/athletebridge-sa.json
+AthleteBridge/functions/.env
+**/GoogleService-Info.plist
+
 # Ignore Firebase functions and node modules
 AthleteBridge/functions/
 **/node_modules/

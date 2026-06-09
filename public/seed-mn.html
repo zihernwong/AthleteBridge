@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seed: MN Hmong Tournament 2026</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 24px; max-width: 900px; margin: 0 auto; }
+  h2 { color: #8dc63f; }
+  .warn { color: #ffcc44; background: #2a2a00; padding: 10px 14px; border-radius: 6px; margin: 12px 0; }
+  button { background: #2d5a7b; color: white; border: none; padding: 12px 28px; font-size: 15px; cursor: pointer; border-radius: 6px; margin: 6px 4px; }
+  button:hover { background: #3a7299; }
+  button:disabled { opacity: .5; cursor: default; }
+  #authBox { background: #0d1f2d; border: 1px solid #2d5a7b; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  #authStatus { margin-bottom: 10px; }
+  #log { background: #0d0d1a; padding: 16px; border-radius: 8px; margin-top: 16px; max-height: 520px; overflow-y: auto; font-size: 12px; line-height: 1.7; white-space: pre-wrap; }
+  .ok  { color: #8dc63f; }
+  .err { color: #ff6b6b; }
+  .hdr { color: #5bc0de; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>Seed: 2026 MN Hmong Tournament</h2>
+<p>Creates player profiles with per-event (MD + XD) ratings and the full tournament in Firestore.</p>
+<div class="warn">⚠ A few names were truncated/unclear in screenshots and have been best-guessed.</div>
+
+<div id="authBox">
+  <div id="authStatus">⏳ Checking sign-in status…</div>
+  <div id="authControls"></div>
+</div>
+
+<button id="btnSeed" onclick="runSeed()" disabled>▶ Run Seed</button>
+<button onclick="document.getElementById('log').textContent=''">Clear Log</button>
+<div id="log"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyBxn8JJE3KFzJ06VgqM3yAyZFW5CgiVEF8",
+  authDomain:"athletebridge-63176.firebaseapp.com",
+  projectId:"athletebridge-63176",
+  storageBucket:"athletebridge-63176.firebasestorage.app",
+  messagingSenderId:"107606691152"
+});
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+// ── Auth state UI ─────────────────────────────────────────
+auth.onAuthStateChanged(user => {
+  const statusEl = document.getElementById('authStatus');
+  const ctrlEl   = document.getElementById('authControls');
+  const seedBtn  = document.getElementById('btnSeed');
+  if (user) {
+    statusEl.innerHTML = `✅ Signed in as <strong>${user.displayName || user.email || user.uid}</strong>`;
+    ctrlEl.innerHTML = `<button onclick="auth.signOut()">Sign out</button>`;
+    seedBtn.disabled = false;
+  } else {
+    statusEl.textContent = '🔒 Not signed in';
+    ctrlEl.innerHTML = `
+      <button onclick="signInGoogle()">Sign in with Google</button>
+      <span style="margin:0 8px;color:#666">or</span>
+      <input id="em" placeholder="email" style="padding:8px;border-radius:4px;border:1px solid #2d5a7b;background:#111;color:#eee;width:200px">
+      <input id="pw" placeholder="password" type="password" style="padding:8px;border-radius:4px;border:1px solid #2d5a7b;background:#111;color:#eee;width:140px">
+      <button onclick="signInEmail()">Sign in</button>`;
+    seedBtn.disabled = true;
+  }
+});
+function signInGoogle() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>alert(e.message)); }
+function signInEmail() { auth.signInWithEmailAndPassword(document.getElementById('em').value, document.getElementById('pw').value).catch(e=>alert(e.message)); }
+
+// ── Logging ───────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function log(msg, cls='') {
+  const s = document.createElement('span');
+  if (cls) s.className = cls;
+  s.textContent = msg + '\n';
+  logEl.appendChild(s);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MD DATA (Men's Doubles)
+// ═══════════════════════════════════════════════════════════
+const MD_PLAYER_NAMES = [
+  'Rueben Tan','Ares Zhou',
+  'Karan Jaswani','Anup Thatte',
+  'Vichai Thao','Ger Vang',
+  'Mathew Walter','Noel Chavez Payume',
+  'Kenneth Barta','Zi-En Huang',
+  'Xeng Yang','Tom Chang',
+  'Terry Li','Yan Xu',
+  'Raghuveer Gunnam','Prem Singh Bhutani',
+  'Chai Chang','Jason Ung',
+  'An Nguyen','Qimin Feng',
+  'Sanjith Celestine','Anunay Gupta',
+  'Peter Yip','Samarth Shirahatti',
+  'Phu Truong','Adarsh Kodandapani',
+  'Shimanto Mohajan','Niko Scherer',
+  'Hern Wong','Aaron Low',
+  'Arun Jayaraman','Bharat Vege',
+  'Satya Deep Tekumudi','Srikanth Baki',
+  'Ya Visal Yin','Vissoth Nguonrattanak',
+  'Mathew Paramben','Drik Sarkar',
+  'Andres Climent','Theodore Thayib',
+  'Kaleb Wirtzfeld','Dylan Vang',
+  'Wenhao Deng','Jin Guo',
+  'Roman Fenzi','Aman Verma',
+  'Kent Sta Maria','Kunal Suresh',
+  'Ron Teoh','Subash Shrestha',
+  'Ashish Bhide','Pavan Kumar Padmare',
+  'Vignesh Ezhilmaran','Nine Chindavon',
+  'Yanting Chi','Yiwen Xie',
+  'Viet Nguyen','Hung Nguyen',
+  'Pao Choua Thao','Kuab Vang',
+  'Mahin','Nhan Nguyen',
+  'Devi Das','Lorj Carillo',
+  'Jeffrey Vang','Tong Thao',
+  'Pasee Yang','Lukas Ye',
+  'Tao Huang','Oung Kant',
+  'Saleh Mamun','Vignesh Asokan',
+  'Andy Tan','Anthony Ho',
+  'Seif Jandal','Prem Charumilinda',
+  'Steve Yang','Jeemeng Yang',
+  'Dick Chng','Akkhasith Chindavong',
+];
+
+const MD_TEAM_MAP = {
+  'Rueben Tan / Ares Zhou':                ['Rueben Tan','Ares Zhou'],
+  'Karan Jaswani / Anup Thatte':           ['Karan Jaswani','Anup Thatte'],
+  'Vichai Thao / Ger Vang':               ['Vichai Thao','Ger Vang'],
+  'Mathew Walter / Noel Chavez Payume':    ['Mathew Walter','Noel Chavez Payume'],
+  'Kenneth Barta / Zi-En Huang':          ['Kenneth Barta','Zi-En Huang'],
+  'Xeng Yang / Tom Chang':                ['Xeng Yang','Tom Chang'],
+  'Terry Li / Yan Xu':                    ['Terry Li','Yan Xu'],
+  'Raghuveer Gunnam / Prem Singh Bhutani':['Raghuveer Gunnam','Prem Singh Bhutani'],
+  'Chai Chang / Jason Ung':               ['Chai Chang','Jason Ung'],
+  'An Nguyen / Qimin Feng':               ['An Nguyen','Qimin Feng'],
+  'Sanjith Celestine / Anunay Gupta':     ['Sanjith Celestine','Anunay Gupta'],
+  'Peter Yip / Samarth Shirahatti':       ['Peter Yip','Samarth Shirahatti'],
+  'Phu Truong / Adarsh Kodandapani':      ['Phu Truong','Adarsh Kodandapani'],
+  'Shimanto Mohajan / Niko Scherer':      ['Shimanto Mohajan','Niko Scherer'],
+  'Hern Wong / Aaron Low':               ['Hern Wong','Aaron Low'],
+  'Arun Jayaraman / Bharat Vege':         ['Arun Jayaraman','Bharat Vege'],
+  'Satya Deep Tekumudi / Srikanth Baki':  ['Satya Deep Tekumudi','Srikanth Baki'],
+  'Ya Visal Yin / Vissoth Nguonrattanak': ['Ya Visal Yin','Vissoth Nguonrattanak'],
+  'Mathew Paramben / Drik Sarkar':        ['Mathew Paramben','Drik Sarkar'],
+  'Andres Climent / Theodore Thayib':     ['Andres Climent','Theodore Thayib'],
+  'Kaleb Wirtzfeld / Dylan Vang':         ['Kaleb Wirtzfeld','Dylan Vang'],
+  'Wenhao Deng / Jin Guo':               ['Wenhao Deng','Jin Guo'],
+  'Roman Fenzi / Aman Verma':             ['Roman Fenzi','Aman Verma'],
+  'Kent Sta Maria / Kunal Suresh':        ['Kent Sta Maria','Kunal Suresh'],
+  'Ron Teoh / Subash Shrestha':           ['Ron Teoh','Subash Shrestha'],
+  'Ashish Bhide / Pavan Kumar Padmare':   ['Ashish Bhide','Pavan Kumar Padmare'],
+  'Vignesh Ezhilmaran / Nine Chindavon':  ['Vignesh Ezhilmaran','Nine Chindavon'],
+  'Yanting Chi / Yiwen Xie':             ['Yanting Chi','Yiwen Xie'],
+  'Viet Nguyen / Hung Nguyen':            ['Viet Nguyen','Hung Nguyen'],
+  'Pao Choua Thao / Kuab Vang':           ['Pao Choua Thao','Kuab Vang'],
+  'Mahin / Nhan Nguyen':                  ['Mahin','Nhan Nguyen'],
+  'Devi Das / Lorj Carillo':              ['Devi Das','Lorj Carillo'],
+  'Jeffrey Vang / Tong Thao':             ['Jeffrey Vang','Tong Thao'],
+  'Pasee Yang / Lukas Ye':               ['Pasee Yang','Lukas Ye'],
+  'Tao Huang / Oung Kant':               ['Tao Huang','Oung Kant'],
+  'Saleh Mamun / Vignesh Asokan':         ['Saleh Mamun','Vignesh Asokan'],
+  'Andy Tan / Anthony Ho':               ['Andy Tan','Anthony Ho'],
+  'Seif Jandal / Prem Charumilinda':      ['Seif Jandal','Prem Charumilinda'],
+  'Steve Yang / Jeemeng Yang':            ['Steve Yang','Jeemeng Yang'],
+  'Dick Chng / Akkhasith Chindavong':     ['Dick Chng','Akkhasith Chindavong'],
+};
+
+const MD_MATCHES = [
+  {id:'A-1',  t1:'Rueben Tan / Ares Zhou',               t2:'Karan Jaswani / Anup Thatte',            score:'21-10,21-10',       wt:1, round:'1st Round A'},
+  {id:'A-2',  t1:'Vichai Thao / Ger Vang',              t2:'Mathew Walter / Noel Chavez Payume',      score:'21-12,21-9',        wt:1, round:'1st Round A'},
+  {id:'A-3',  t1:'Kenneth Barta / Zi-En Huang',          t2:'Xeng Yang / Tom Chang',                   score:'21-11,21-9',        wt:1, round:'1st Round A'},
+  {id:'A-4',  t1:'Terry Li / Yan Xu',                    t2:'Raghuveer Gunnam / Prem Singh Bhutani',   score:'21-8,21-19',        wt:1, round:'1st Round A'},
+  {id:'A-5',  t1:'Chai Chang / Jason Ung',               t2:'An Nguyen / Qimin Feng',                  score:'21-13,21-10',       wt:1, round:'1st Round A'},
+  {id:'A-6',  t1:'Sanjith Celestine / Anunay Gupta',     t2:'Peter Yip / Samarth Shirahatti',          score:'21-15,23-21',       wt:2, round:'1st Round A'},
+  {id:'A-7',  t1:'Phu Truong / Adarsh Kodandapani',      t2:'Shimanto Mohajan / Niko Scherer',         score:'21-9,21-10',        wt:1, round:'1st Round A'},
+  {id:'A-8',  t1:'Hern Wong / Aaron Low',               t2:'Arun Jayaraman / Bharat Vege',            score:'21-5,21-11',        wt:1, round:'1st Round A'},
+  {id:'A-9',  t1:'Satya Deep Tekumudi / Srikanth Baki',  t2:'Ya Visal Yin / Vissoth Nguonrattanak',    score:'',                  wt:2, round:'2nd Round A'},
+  {id:'A-10', t1:'Rueben Tan / Ares Zhou',               t2:'Mathew Paramben / Drik Sarkar',           score:'21-6,21-8',         wt:1, round:'2nd Round A'},
+  {id:'A-11', t1:'Vichai Thao / Ger Vang',              t2:'Andres Climent / Theodore Thayib',        score:'21-16,16-21,21-17', wt:2, round:'2nd Round A'},
+  {id:'A-12', t1:'Kaleb Wirtzfeld / Dylan Vang',         t2:'Wenhao Deng / Jin Guo',                   score:'21-16,21-17',       wt:1, round:'2nd Round A'},
+  {id:'A-13', t1:'Roman Fenzi / Aman Verma',             t2:'Kenneth Barta / Zi-En Huang',             score:'21-7,21-14',        wt:2, round:'2nd Round A'},
+  {id:'A-14', t1:'Kent Sta Maria / Kunal Suresh',        t2:'Ron Teoh / Subash Shrestha',              score:'21-16,18-21,22-20', wt:1, round:'2nd Round A'},
+  {id:'A-15', t1:'Ashish Bhide / Pavan Kumar Padmare',   t2:'Terry Li / Yan Xu',                       score:'21-15,21-19',       wt:2, round:'2nd Round A'},
+  {id:'A-16', t1:'Vignesh Ezhilmaran / Nine Chindavon',  t2:'Yanting Chi / Yiwen Xie',                score:'21-19,21-11',       wt:1, round:'2nd Round A'},
+  {id:'A-17', t1:'Viet Nguyen / Hung Nguyen',            t2:'Chai Chang / Jason Ung',                  score:'21-8,21-13',        wt:2, round:'2nd Round A'},
+  {id:'A-18', t1:'Pao Choua Thao / Kuab Vang',           t2:'Mahin / Nhan Nguyen',                     score:'21-18,21-17',       wt:2, round:'2nd Round A'},
+  {id:'B-8',  t1:'Vichai Thao / Ger Vang',              t2:'Andy Tan / Anthony Ho',                   score:'22-20,21-19',       wt:1, round:'Round of 16 B'},
+  {id:'C-10', t1:'Devi Das / Lorj Carillo',              t2:'Viet Nguyen / Hung Nguyen',               score:'18-21,21-17,22-20', wt:2, round:'1st Round C'},
+  {id:'C-12', t1:'Raghuveer Gunnam / Prem Singh Bhutani',t2:'Roman Fenzi / Aman Verma',               score:'21-18,18-21,21-12', wt:2, round:'1st Round C'},
+  {id:'C-14', t1:'Yanting Chi / Yiwen Xie',             t2:'Jeffrey Vang / Tong Thao',                score:'21-17,20-22,21-17', wt:1, round:'1st Round C'},
+  {id:'C-16', t1:'Mathew Walter / Noel Chavez Payume',   t2:'Wenhao Deng / Jin Guo',                   score:'21-11,21-14',       wt:2, round:'1st Round C'},
+  {id:'C-17', t1:'Ron Teoh / Subash Shrestha',           t2:'Xeng Yang / Tom Chang',                   score:'21-10,21-14',       wt:1, round:'Round of 16 C'},
+  {id:'C-18', t1:'Sanjith Celestine / Anunay Gupta',     t2:'Pasee Yang / Lukas Ye',                   score:'21-15,21-12',       wt:1, round:'Round of 16 C'},
+  {id:'C-19', t1:'Mathew Paramben / Drik Sarkar',        t2:'Tao Huang / Oung Kant',                   score:'21-12,21-10',       wt:2, round:'Round of 16 C'},
+  {id:'C-20', t1:'Satya Deep Tekumudi / Srikanth Baki',  t2:'Ashish Bhide / Pavan Kumar Padmare',      score:'21-12,21-11',       wt:2, round:'Round of 16 C'},
+  {id:'C-21', t1:'An Nguyen / Qimin Feng',               t2:'Viet Nguyen / Hung Nguyen',               score:'21-15,21-15',       wt:1, round:'Round of 16 C'},
+  {id:'C-22', t1:'Arun Jayaraman / Bharat Vege',         t2:'Roman Fenzi / Aman Verma',                score:'21-18,29-27',       wt:2, round:'Round of 16 C'},
+  {id:'C-23', t1:'Shimanto Mohajan / Niko Scherer',      t2:'Yanting Chi / Yiwen Xie',                 score:'21-16,21-8',        wt:2, round:'Round of 16 C'},
+  {id:'C-24', t1:'Saleh Mamun / Vignesh Asokan',         t2:'Wenhao Deng / Jin Guo',                   score:'21-13,13-21,21-18', wt:1, round:'Round of 16 C'},
+  {id:'C-25', t1:'Ron Teoh / Subash Shrestha',           t2:'Sanjith Celestine / Anunay Gupta',        score:'21-14,21-16',       wt:1, round:'Quarter Finals C'},
+  {id:'C-26', t1:'Tao Huang / Oung Kant',                t2:'Ashish Bhide / Pavan Kumar Padmare',      score:'21-3,21-18',        wt:2, round:'Quarter Finals C'},
+  {id:'C-27', t1:'Roman Fenzi / Aman Verma',             t2:'An Nguyen / Qimin Feng',                  score:'21-15,21-15',       wt:2, round:'Quarter Finals C'},
+  {id:'C-28', t1:'Saleh Mamun / Vignesh Asokan',         t2:'Yanting Chi / Yiwen Xie',                 score:'21-14,21-12',       wt:1, round:'Quarter Finals C'},
+  {id:'D-2',  t1:'Seif Jandal / Prem Charumilinda',      t2:'Shimanto Mohajan / Niko Scherer',         score:'21-10,21-15',       wt:2, round:'Round of 16 D'},
+  {id:'D-4',  t1:'Pao Choua Thao / Kuab Vang',           t2:'Arun Jayaraman / Bharat Vege',            score:'21-10,21-15',       wt:1, round:'Round of 16 D'},
+  {id:'D-6',  t1:'Mathew Walter / Noel Chavez Payume',   t2:'Jeffrey Vang / Tong Thao',                score:'21-11,21-17',       wt:2, round:'Round of 16 D'},
+  {id:'D-7',  t1:'Karan Jaswani / Anup Thatte',          t2:'Satya Deep Tekumudi / Srikanth Baki',     score:'',                  wt:2, round:'Round of 16 D'},
+  {id:'D-9',  t1:'Mathew Paramben / Drik Sarkar',        t2:'Shimanto Mohajan / Niko Scherer',         score:'21-8,21-18',        wt:1, round:'Quarter Finals D'},
+  {id:'D-10', t1:'Xeng Yang / Tom Chang',                t2:'Pao Choua Thao / Kuab Vang',              score:'21-15,13-21,21-18', wt:2, round:'Quarter Finals D'},
+  {id:'D-11', t1:'Devi Das / Lorj Carillo',              t2:'Jeffrey Vang / Tong Thao',                score:'25-23,21-18',       wt:2, round:'Quarter Finals D'},
+  {id:'D-12', t1:'Raghuveer Gunnam / Prem Singh Bhutani',t2:'Satya Deep Tekumudi / Srikanth Baki',     score:'',                  wt:2, round:'Quarter Finals D'},
+  {id:'A-33', t1:'Rueben Tan / Ares Zhou',               t2:'Kaleb Wirtzfeld / Dylan Vang',            score:'21-10,21-5',        wt:1, round:'Quarter Finals A'},
+  {id:'A-34', t1:'Terry Li / Yan Xu',                    t2:'Kenneth Barta / Zi-En Huang',             score:'21-15,21-17',       wt:2, round:'Quarter Finals A'},
+  {id:'A-35', t1:'Peter Yip / Samarth Shirahatti',       t2:'Chai Chang / Jason Ung',                  score:'21-12,22-20',       wt:2, round:'Quarter Finals A'},
+  {id:'A-36', t1:'Hern Wong / Aaron Low',               t2:'Phu Truong / Adarsh Kodandapani',         score:'21-16,21-17',       wt:1, round:'Quarter Finals A'},
+  {id:'D-13', t1:'Pao Choua Thao / Kuab Vang',           t2:'Mathew Paramben / Drik Sarkar',           score:'21-7,21-17',        wt:1, round:'Semi Finals D'},
+  {id:'D-14', t1:'Jeffrey Vang / Tong Thao',             t2:'Satya Deep Tekumudi / Srikanth Baki',     score:'21-18,21-18',       wt:2, round:'Semi Finals D'},
+  {id:'C-29', t1:'Ron Teoh / Subash Shrestha',           t2:'Ashish Bhide / Pavan Kumar Padmare',      score:'21-14,21-17',       wt:2, round:'Semi Finals C'},
+  {id:'C-30', t1:'An Nguyen / Qimin Feng',               t2:'Saleh Mamun / Vignesh Asokan',            score:'21-16,15-21,21-18', wt:2, round:'Semi Finals C'},
+  {id:'B-13', t1:'Mahin / Nhan Nguyen',                  t2:'Ya Visal Yin / Vissoth Nguonrattanak',    score:'',                  wt:2, round:'Semi Finals B'},
+  {id:'B-14', t1:'Vignesh Ezhilmaran / Nine Chindavon',  t2:'Vichai Thao / Ger Vang',                  score:'21-18,21-18',       wt:1, round:'Semi Finals B'},
+  {id:'A-37', t1:'Rueben Tan / Ares Zhou',               t2:'Kenneth Barta / Zi-En Huang',             score:'21-15,21-15',       wt:1, round:'Semi Finals A'},
+  {id:'A-38', t1:'Hern Wong / Aaron Low',               t2:'Chai Chang / Jason Ung',                  score:'14-21,21-16,21-17', wt:1, round:'Semi Finals A'},
+  {id:'D-15', t1:'Pao Choua Thao / Kuab Vang',           t2:'Satya Deep Tekumudi / Srikanth Baki',     score:'21-12,21-17',       wt:2, round:'Final D'},
+  {id:'C-31', t1:'Saleh Mamun / Vignesh Asokan',         t2:'Ashish Bhide / Pavan Kumar Padmare',      score:'21-17,21-19',       wt:2, round:'Final C'},
+  {id:'B-15', t1:'Vignesh Ezhilmaran / Nine Chindavon',  t2:'Ya Visal Yin / Vissoth Nguonrattanak',    score:'',                  wt:2, round:'Final B'},
+  {id:'A-39', t1:'Rueben Tan / Ares Zhou',               t2:'Hern Wong / Aaron Low',                  score:'21-9,21-9',         wt:1, round:'Final A'},
+];
+
+const MD_CHAMPIONS     = ['Rueben Tan / Ares Zhou','Ya Visal Yin / Vissoth Nguonrattanak','Ashish Bhide / Pavan Kumar Padmare','Satya Deep Tekumudi / Srikanth Baki'];
+const MD_RUNNERS_UP    = ['Hern Wong / Aaron Low','Vignesh Ezhilmaran / Nine Chindavon','Saleh Mamun / Vignesh Asokan','Pao Choua Thao / Kuab Vang'];
+const MD_SEMIS         = ['Kenneth Barta / Zi-En Huang','Chai Chang / Jason Ung','Mahin / Nhan Nguyen','Vichai Thao / Ger Vang','An Nguyen / Qimin Feng','Ron Teoh / Subash Shrestha','Mathew Paramben / Drik Sarkar','Jeffrey Vang / Tong Thao'];
+
+// ═══════════════════════════════════════════════════════════
+//  XD DATA (Mixed Doubles)
+// ═══════════════════════════════════════════════════════════
+const XD_NEW_PLAYER_NAMES = [
+  // Women (new)
+  'Victoria Liu','Hannah Nicole Yoshitan','Xiaoxiao','Yung-Hsin Wang',
+  'Olivia Ye','Kiara Sta Maria','Aubrey Liew','Neha Tiwari',
+  'Heather Holm','Nou Chee Yang','Hallie Hou','Mollie Anderson',
+  'Mallory Heaser','Reenu Thirumal','Hnubae Tsab','Angela Taing',
+  'Jia Wen Khong','Vivian Le','Sandy Vang','Giang Nguyen',
+  'Kanlaya Thao','Syamanthika Govin','Chia Sangwang','Birdy Xiong',
+  'Sofia Sanchez','Lela Vang','Ratsamee Thosaengsiri','Anusha Liyanage',
+  'Zoe Chan','Zoua Xiong','Ashley Her','Audrey Hines',
+  'Ashley Liu','Mai Ker Yang','Soua Lee','Aregbe Bunmi',
+  'August Say','Chenyue Xing',
+  // Men (new to XD only)
+  'Neal Gudmunson','Hanlay Hmwe','Ronnit Nandu','Ben Nguyen','Kasia Klapacz',
+];
+
+const XD_TEAM_MAP = {
+  'Rueben Tan / Victoria Liu':               ['Rueben Tan','Victoria Liu'],
+  'Ya Visal Yin / Hannah Nicole Yoshitan':   ['Ya Visal Yin','Hannah Nicole Yoshitan'],
+  'Yan Xu / Xiaoxiao':                       ['Yan Xu','Xiaoxiao'],
+  'Qimin Feng / Chenyue Xing':              ['Qimin Feng','Chenyue Xing'],
+  'Zi-En Huang / Yung-Hsin Wang':           ['Zi-En Huang','Yung-Hsin Wang'],
+  'Neal Gudmunson / Hanlay Hmwe':            ['Neal Gudmunson','Hanlay Hmwe'],
+  'Hern Wong / Olivia Ye':                   ['Hern Wong','Olivia Ye'],
+  'Kunal Suresh / Kiara Sta Maria':          ['Kunal Suresh','Kiara Sta Maria'],
+  'Theodore Thayib / Aubrey Liew':           ['Theodore Thayib','Aubrey Liew'],
+  'Ronnit Nandu / Neha Tiwari':             ['Ronnit Nandu','Neha Tiwari'],
+  'Karan Jaswani / Heather Holm':            ['Karan Jaswani','Heather Holm'],
+  'Chai Chang / Nou Chee Yang':             ['Chai Chang','Nou Chee Yang'],
+  'Terry Li / Hallie Hou':                   ['Terry Li','Hallie Hou'],
+  'Riley Vang / Mollie Anderson':            ['Riley Vang','Mollie Anderson'],
+  'Mathew Paramben / Mallory Heaser':        ['Mathew Paramben','Mallory Heaser'],
+  'Adarsh Kodandapani / Reenu Thirumal':     ['Adarsh Kodandapani','Reenu Thirumal'],
+  'Kenneth Barta / Hnubae Tsab':             ['Kenneth Barta','Hnubae Tsab'],
+  'Ben Nguyen / Angela Taing':              ['Ben Nguyen','Angela Taing'],
+  'An Nguyen / Jia Wen Khong':              ['An Nguyen','Jia Wen Khong'],
+  'Dick Chng / Vivian Le':                   ['Dick Chng','Vivian Le'],
+  'Jason Ung / Sandy Vang':                  ['Jason Ung','Sandy Vang'],
+  'Drik Sarkar / Kasia Klapacz':             ['Drik Sarkar','Kasia Klapacz'],
+  'Mahin / Giang Nguyen':                    ['Mahin','Giang Nguyen'],
+  'Jeemeng Yang / Kanlaya Thao':             ['Jeemeng Yang','Kanlaya Thao'],
+  'Pavan Kumar Padmare / Syamanthika Govin': ['Pavan Kumar Padmare','Syamanthika Govin'],
+  'Vichai Thao / Chia Sangwang':             ['Vichai Thao','Chia Sangwang'],
+  'Dylan Vang / Birdy Xiong':               ['Dylan Vang','Birdy Xiong'],
+  'Kent Sta Maria / Sofia Sanchez':          ['Kent Sta Maria','Sofia Sanchez'],
+  'Aaron Low / Lela Vang':                   ['Aaron Low','Lela Vang'],
+  'Saleh Mamun / Anusha Liyanage':           ['Saleh Mamun','Anusha Liyanage'],
+  'Phu Truong / Ratsamee Thosaengsiri':      ['Phu Truong','Ratsamee Thosaengsiri'],
+  'Lukas Ye / Zoe Chan':                     ['Lukas Ye','Zoe Chan'],
+  'Nine Chindavong / Zoua Xiong':            ['Nine Chindavong','Zoua Xiong'],
+  'Kaleb Wirtzfeld / Ashley Her':            ['Kaleb Wirtzfeld','Ashley Her'],
+  'Niko Scherer / Audrey Hines':             ['Niko Scherer','Audrey Hines'],
+  'Ron Teoh / Ashley Liu':                   ['Ron Teoh','Ashley Liu'],
+  'Akkhasith Chindavong / Mai Ker Yang':     ['Akkhasith Chindavong','Mai Ker Yang'],
+  'Pasee Yang / Soua Lee':                   ['Pasee Yang','Soua Lee'],
+  'Viet Nguyen / Aregbe Bunmi':             ['Viet Nguyen','Aregbe Bunmi'],
+  'Tom Chang / August Say':                  ['Tom Chang','August Say'],
+};
+
+const XD_MATCHES = [
+  // 1st Round A
+  {id:'XA-1',  t1:'Rueben Tan / Victoria Liu',             t2:'Ya Visal Yin / Hannah Nicole Yoshitan',  score:'21-10,21-12',       wt:1, round:'1st Round A'},
+  {id:'XA-2',  t1:'Yan Xu / Xiaoxiao',                     t2:'Qimin Feng / Chenyue Xing',              score:'21-15,21-18',       wt:1, round:'1st Round A'},
+  {id:'XA-3',  t1:'Zi-En Huang / Yung-Hsin Wang',          t2:'Neal Gudmunson / Hanlay Hmwe',           score:'21-19,21-15',       wt:1, round:'1st Round A'},
+  {id:'XA-4',  t1:'Hern Wong / Olivia Ye',                  t2:'Kunal Suresh / Kiara Sta Maria',         score:'21-10,21-9',        wt:1, round:'1st Round A'},
+  {id:'XA-5',  t1:'Theodore Thayib / Aubrey Liew',          t2:'Ronnit Nandu / Neha Tiwari',             score:'21-13,21-14',       wt:1, round:'1st Round A'},
+  {id:'XA-6',  t1:'Karan Jaswani / Heather Holm',           t2:'Chai Chang / Nou Chee Yang',             score:'21-11,21-10',       wt:2, round:'1st Round A'},
+  {id:'XA-7',  t1:'Terry Li / Hallie Hou',                  t2:'Riley Vang / Mollie Anderson',           score:'21-7,21-3',         wt:1, round:'1st Round A'},
+  {id:'XA-8',  t1:'Mathew Paramben / Mallory Heaser',       t2:'Adarsh Kodandapani / Reenu Thirumal',    score:'21-7,21-4',         wt:2, round:'1st Round A'},
+  // 2nd Round A
+  {id:'XA-9',  t1:'Kenneth Barta / Hnubae Tsab',            t2:'Ben Nguyen / Angela Taing',              score:'21-11,21-13',       wt:1, round:'2nd Round A'},
+  {id:'XA-10', t1:'Rueben Tan / Victoria Liu',              t2:'An Nguyen / Jia Wen Khong',              score:'21-9,21-15',        wt:1, round:'2nd Round A'},
+  {id:'XA-11', t1:'Yan Xu / Xiaoxiao',                      t2:'Dick Chng / Vivian Le',                  score:'21-14,21-12',       wt:1, round:'2nd Round A'},
+  {id:'XA-12', t1:'Jason Ung / Sandy Vang',                 t2:'Drik Sarkar / Kasia Klapacz',            score:'21-4,21-9',         wt:1, round:'2nd Round A'},
+  {id:'XA-13', t1:'Mahin / Giang Nguyen',                   t2:'Zi-En Huang / Yung-Hsin Wang',           score:'',                  wt:2, round:'2nd Round A'},
+  {id:'XA-14', t1:'Jeemeng Yang / Kanlaya Thao',            t2:'Pavan Kumar Padmare / Syamanthika Govin',score:'21-17,17-21,21-16', wt:2, round:'2nd Round A'},
+  {id:'XA-15', t1:'Vichai Thao / Chia Sangwang',            t2:'Hern Wong / Olivia Ye',                  score:'21-9,23-21',        wt:2, round:'2nd Round A'},
+  {id:'XA-16', t1:'Dylan Vang / Birdy Xiong',               t2:'Kent Sta Maria / Sofia Sanchez',         score:'21-10,21-15',       wt:1, round:'2nd Round A'},
+  {id:'XA-17', t1:'Aaron Low / Lela Vang',                  t2:'Theodore Thayib / Aubrey Liew',          score:'23-21,21-11',       wt:1, round:'2nd Round A'},
+  {id:'XA-18', t1:'Saleh Mamun / Anusha Liyanage',          t2:'Phu Truong / Ratsamee Thosaengsiri',     score:'21-10,21-10',       wt:2, round:'2nd Round A'},
+  {id:'XA-19', t1:'Lukas Ye / Zoe Chan',                    t2:'Chai Chang / Nou Chee Yang',             score:'21-11,21-10',       wt:2, round:'2nd Round A'},
+  {id:'XA-20', t1:'Nine Chindavong / Zoua Xiong',           t2:'Tom Chang / August Say',                 score:'21-14,21-16',       wt:1, round:'2nd Round A'},
+  {id:'XA-21', t1:'Kaleb Wirtzfeld / Ashley Her',           t2:'Viet Nguyen / Aregbe Bunmi',             score:'21-14,21-10',       wt:1, round:'2nd Round A'},
+  {id:'XA-22', t1:'Niko Scherer / Audrey Hines',            t2:'Terry Li / Hallie Hou',                  score:'21-7,21-5',         wt:2, round:'2nd Round A'},
+  {id:'XA-23', t1:'Adarsh Kodandapani / Reenu Thirumal',    t2:'Pasee Yang / Soua Lee',                  score:'21-7,21-10',        wt:1, round:'2nd Round A'},
+  {id:'XA-24', t1:'Ron Teoh / Ashley Liu',                  t2:'Akkhasith Chindavong / Mai Ker Yang',    score:'21-11,21-14',       wt:2, round:'2nd Round A'},
+  // Round of 16 A
+  {id:'XA-25', t1:'Kenneth Barta / Hnubae Tsab',            t2:'Rueben Tan / Victoria Liu',              score:'21-16,21-15',       wt:2, round:'Round of 16 A'},
+  {id:'XA-26', t1:'Jason Ung / Sandy Vang',                 t2:'Yan Xu / Xiaoxiao',                      score:'21-15,21-12',       wt:2, round:'Round of 16 A'},
+  {id:'XA-27', t1:'Zi-En Huang / Yung-Hsin Wang',           t2:'Pavan Kumar Padmare / Syamanthika Govin',score:'',                  wt:1, round:'Round of 16 A'},
+  {id:'XA-28', t1:'Dylan Vang / Birdy Xiong',               t2:'Hern Wong / Olivia Ye',                  score:'21-14,24-22',       wt:2, round:'Round of 16 A'},
+  {id:'XA-29', t1:'Phu Truong / Ratsamee Thosaengsiri',     t2:'Aaron Low / Lela Vang',                  score:'21-10,17-21,21-17', wt:1, round:'Round of 16 A'},
+  {id:'XA-30', t1:'Nine Chindavong / Zoua Xiong',           t2:'Chai Chang / Nou Chee Yang',             score:'21-10,21-11',       wt:2, round:'Round of 16 A'},
+  {id:'XA-31', t1:'Kaleb Wirtzfeld / Ashley Her',           t2:'Terry Li / Hallie Hou',                  score:'21-19,21-12',       wt:2, round:'Round of 16 A'},
+  {id:'XA-32', t1:'Akkhasith Chindavong / Mai Ker Yang',    t2:'Adarsh Kodandapani / Reenu Thirumal',    score:'21-11,21-16',       wt:2, round:'Round of 16 A'},
+  // Round of 16 B/C/D
+  {id:'XB-8',  t1:'Nine Chindavong / Zoua Xiong',           t2:'Aaron Low / Lela Vang',                  score:'21-14,21-12',       wt:2, round:'Round of 16 B'},
+  {id:'XC-4',  t1:'Viet Nguyen / Aregbe Bunmi',             t2:'Niko Scherer / Audrey Hines',            score:'21-12,21-7',        wt:1, round:'1st Round C'},
+  {id:'XC-6',  t1:'Saleh Mamun / Anusha Liyanage',          t2:'Pasee Yang / Soua Lee',                  score:'21-18,21-19',       wt:2, round:'1st Round C'},
+  {id:'XC-8',  t1:'Tom Chang / August Say',                 t2:'Mahin / Giang Nguyen',                   score:'21-15,21-10',       wt:2, round:'1st Round C'},
+  {id:'XC-10', t1:'Ben Nguyen / Angela Taing',              t2:'An Nguyen / Jia Wen Khong',              score:'',                  wt:2, round:'1st Round C'},
+  {id:'XC-12', t1:'Kent Sta Maria / Sofia Sanchez',         t2:'Dick Chng / Vivian Le',                  score:'22-20,18-21,21-13', wt:2, round:'1st Round C'},
+  {id:'XC-14', t1:'Ya Visal Yin / Hannah Nicole Yoshitan',  t2:'Jeemeng Yang / Kanlaya Thao',            score:'',                  wt:2, round:'1st Round C'},
+  {id:'XC-16', t1:'Ron Teoh / Ashley Liu',                  t2:'Lukas Ye / Zoe Chan',                    score:'21-14,21-18',       wt:1, round:'1st Round C'},
+  {id:'XC-17', t1:'Drik Sarkar / Kasia Klapacz',            t2:'Kunal Suresh / Kiara Sta Maria',         score:'18-21,21-14,21-11', wt:2, round:'Round of 16 C'},
+  {id:'XC-18', t1:'Viet Nguyen / Aregbe Bunmi',             t2:'Mathew Paramben / Mallory Heaser',       score:'21-17,21-16',       wt:1, round:'Round of 16 C'},
+  {id:'XC-19', t1:'Vichai Thao / Chia Sangwang',            t2:'Pasee Yang / Soua Lee',                  score:'21-19,24-22',       wt:2, round:'Round of 16 C'},
+  {id:'XC-20', t1:'Mahin / Giang Nguyen',                   t2:'Neal Gudmunson / Hanlay Hmwe',           score:'21-13,21-10',       wt:1, round:'Round of 16 C'},
+  {id:'XC-21', t1:'Ronnit Nandu / Neha Tiwari',             t2:'An Nguyen / Jia Wen Khong',              score:'21-15,21-10',       wt:2, round:'Round of 16 C'},
+  {id:'XC-22', t1:'Dick Chng / Vivian Le',                  t2:'Karan Jaswani / Heather Holm',           score:'21-11,21-13',       wt:1, round:'Round of 16 C'},
+  {id:'XC-23', t1:'Qimin Feng / Chenyue Xing',              t2:'Jeemeng Yang / Kanlaya Thao',            score:'',                  wt:2, round:'Round of 16 C'},
+  {id:'XC-24', t1:'Ron Teoh / Ashley Liu',                  t2:'Riley Vang / Mollie Anderson',           score:'21-3,21-4',         wt:1, round:'Round of 16 C'},
+  {id:'XD-2',  t1:'Niko Scherer / Audrey Hines',            t2:'Qimin Feng / Chenyue Xing',              score:'21-10,21-10',       wt:2, round:'Round of 16 D'},
+  {id:'XD-3',  t1:'Ya Visal Yin / Hannah Nicole Yoshitan',  t2:'Ben Nguyen / Angela Taing',              score:'21-15,16-21,21-17', wt:2, round:'Round of 16 D'},
+  {id:'XD-4',  t1:'Lukas Ye / Zoe Chan',                    t2:'Karan Jaswani / Heather Holm',           score:'21-11,23-21',       wt:2, round:'Round of 16 D'},
+  {id:'XD-5',  t1:'Vichai Thao / Chia Sangwang',            t2:'Ronnit Nandu / Neha Tiwari',             score:'21-15,21-15',       wt:1, round:'Round of 16 D'},
+  {id:'XD-6',  t1:'Kent Sta Maria / Sofia Sanchez',         t2:'Mathew Paramben / Mallory Heaser',       score:'21-15,21-14',       wt:1, round:'Round of 16 D'},
+  {id:'XD-7',  t1:'Saleh Mamun / Anusha Liyanage',          t2:'Drik Sarkar / Kasia Klapacz',            score:'21-7,21-13',        wt:1, round:'Round of 16 D'},
+  {id:'XD-8',  t1:'Tom Chang / August Say',                 t2:'Neal Gudmunson / Hanlay Hmwe',           score:'',                  wt:2, round:'Round of 16 D'},
+  // Quarter Finals
+  {id:'XA-33', t1:'Yan Xu / Xiaoxiao',                      t2:'Rueben Tan / Victoria Liu',              score:'21-11,15-21,21-18', wt:2, round:'Quarter Finals A'},
+  {id:'XA-34', t1:'Hern Wong / Olivia Ye',                  t2:'Zi-En Huang / Yung-Hsin Wang',           score:'',                  wt:1, round:'Quarter Finals A'},
+  {id:'XA-35', t1:'Chai Chang / Nou Chee Yang',             t2:'Phu Truong / Ratsamee Thosaengsiri',     score:'21-15,21-17',       wt:1, round:'Quarter Finals A'},
+  {id:'XA-36', t1:'Terry Li / Hallie Hou',                  t2:'Adarsh Kodandapani / Reenu Thirumal',    score:'21-14,19-21,21-11', wt:1, round:'Quarter Finals A'},
+  {id:'XB-9',  t1:'Kenneth Barta / Hnubae Tsab',            t2:'Theodore Thayib / Aubrey Liew',          score:'21-11,21-14',       wt:1, round:'Quarter Finals B'},
+  {id:'XB-10', t1:'Dylan Vang / Birdy Xiong',               t2:'Jason Ung / Sandy Vang',                 score:'21-10,21-5',        wt:2, round:'Quarter Finals B'},
+  {id:'XB-11', t1:'Pavan Kumar Padmare / Syamanthika Govin',t2:'Kaleb Wirtzfeld / Ashley Her',           score:'21-19,19-21,21-16', wt:2, round:'Quarter Finals B'},
+  {id:'XB-12', t1:'Akkhasith Chindavong / Mai Ker Yang',    t2:'Aaron Low / Lela Vang',                  score:'21-13,21-13',       wt:1, round:'Quarter Finals B'},
+  {id:'XC-25', t1:'Viet Nguyen / Aregbe Bunmi',             t2:'Kunal Suresh / Kiara Sta Maria',         score:'21-17,21-12',       wt:1, round:'Quarter Finals C'},
+  {id:'XC-26', t1:'Pasee Yang / Soua Lee',                  t2:'Mahin / Giang Nguyen',                   score:'21-10,21-10',       wt:2, round:'Quarter Finals C'},
+  {id:'XC-27', t1:'Dick Chng / Vivian Le',                  t2:'An Nguyen / Jia Wen Khong',              score:'21-19,21-19',       wt:2, round:'Quarter Finals C'},
+  {id:'XC-28', t1:'Ron Teoh / Ashley Liu',                  t2:'Jeemeng Yang / Kanlaya Thao',            score:'',                  wt:2, round:'Quarter Finals C'},
+  {id:'XD-9',  t1:'Qimin Feng / Chenyue Xing',              t2:'Riley Vang / Mollie Anderson',           score:'21-5,21-10',        wt:1, round:'Quarter Finals D'},
+  {id:'XD-10', t1:'Karan Jaswani / Heather Holm',           t2:'Ben Nguyen / Angela Taing',              score:'21-14,21-16',       wt:1, round:'Quarter Finals D'},
+  {id:'XD-11', t1:'Kent Sta Maria / Sofia Sanchez',         t2:'Vichai Thao / Chia Sangwang',            score:'21-11,22-20',       wt:2, round:'Quarter Finals D'},
+  {id:'XD-12', t1:'Neal Gudmunson / Hanlay Hmwe',           t2:'Saleh Mamun / Anusha Liyanage',          score:'22-20,21-18',       wt:2, round:'Quarter Finals D'},
+  // Semi Finals
+  {id:'XD-13', t1:'Qimin Feng / Chenyue Xing',              t2:'Karan Jaswani / Heather Holm',           score:'21-19,18-21,21-14', wt:1, round:'Semi Finals D'},
+  {id:'XD-14', t1:'Saleh Mamun / Anusha Liyanage',          t2:'Vichai Thao / Chia Sangwang',            score:'17-21,21-16,21-18', wt:1, round:'Semi Finals D'},
+  {id:'XC-29', t1:'Mahin / Giang Nguyen',                   t2:'Viet Nguyen / Aregbe Bunmi',             score:'21-15,21-10',       wt:1, round:'Semi Finals C'},
+  {id:'XC-30', t1:'Jeemeng Yang / Kanlaya Thao',            t2:'An Nguyen / Jia Wen Khong',              score:'',                  wt:1, round:'Semi Finals C'},
+  {id:'XB-13', t1:'Kenneth Barta / Hnubae Tsab',            t2:'Jason Ung / Sandy Vang',                 score:'',                  wt:2, round:'Semi Finals B'},
+  {id:'XB-14', t1:'Kaleb Wirtzfeld / Ashley Her',           t2:'Akkhasith Chindavong / Mai Ker Yang',    score:'21-18,21-19',       wt:2, round:'Semi Finals B'},
+  {id:'XA-37', t1:'Hern Wong / Olivia Ye',                  t2:'Rueben Tan / Victoria Liu',              score:'19-21,21-13,26-24', wt:1, round:'Semi Finals A'},
+  {id:'XA-38', t1:'Terry Li / Hallie Hou',                  t2:'Chai Chang / Nou Chee Yang',             score:'10-21,21-8,21-11',  wt:2, round:'Semi Finals A'},
+  // Finals
+  {id:'XD-15', t1:'Saleh Mamun / Anusha Liyanage',          t2:'Qimin Feng / Chenyue Xing',              score:'21-18,17-21,21-11', wt:1, round:'Final D'},
+  {id:'XC-31', t1:'Mahin / Giang Nguyen',                   t2:'Jeemeng Yang / Kanlaya Thao',            score:'',                  wt:2, round:'Final C'},
+  {id:'XB-15', t1:'Jason Ung / Sandy Vang',                 t2:'Akkhasith Chindavong / Mai Ker Yang',    score:'',                  wt:1, round:'Final B'},
+  {id:'XA-39', t1:'Hern Wong / Olivia Ye',                  t2:'Chai Chang / Nou Chee Yang',             score:'21-7,23-21',        wt:2, round:'Final A'},
+];
+
+const XD_CHAMPIONS  = ['Chai Chang / Nou Chee Yang','Jason Ung / Sandy Vang','Jeemeng Yang / Kanlaya Thao','Saleh Mamun / Anusha Liyanage'];
+const XD_RUNNERS_UP = ['Hern Wong / Olivia Ye','Akkhasith Chindavong / Mai Ker Yang','Mahin / Giang Nguyen','Qimin Feng / Chenyue Xing'];
+const XD_SEMIS      = ['Rueben Tan / Victoria Liu','Terry Li / Hallie Hou','Kenneth Barta / Hnubae Tsab','Kaleb Wirtzfeld / Ashley Her','Viet Nguyen / Aregbe Bunmi','An Nguyen / Jia Wen Khong','Karan Jaswani / Heather Holm','Vichai Thao / Chia Sangwang'];
+
+// ═══════════════════════════════════════════════════════════
+//  WD DATA (Women's Doubles)
+// ═══════════════════════════════════════════════════════════
+const WD_NEW_PLAYER_NAMES = [
+  'Ariana Yang','Evelyn Ge',
+  'Sebrina Xiong',
+  'Temitayo Banjo','Violet Pettman',
+  'Paige Xiong',
+  'Paddy Tay',
+];
+
+const WD_TEAM_MAP = {
+  'Angela Taing / Hannah Nicole Yoshitan':   ['Angela Taing','Hannah Nicole Yoshitan'],
+  'Ariana Yang / Evelyn Ge':                 ['Ariana Yang','Evelyn Ge'],
+  'Heather Holm / Anusha Liyanage':          ['Heather Holm','Anusha Liyanage'],
+  'Sofia Sanchez / Kiara Sta Maria':         ['Sofia Sanchez','Kiara Sta Maria'],
+  'Yung-Hsin Wang / Aubrey Liew':            ['Yung-Hsin Wang','Aubrey Liew'],
+  'Sebrina Xiong / Soua Lee':               ['Sebrina Xiong','Soua Lee'],
+  'Victoria Liu / Zoe Chan':                 ['Victoria Liu','Zoe Chan'],
+  'Ratsamee Thosaengsiri / Lela Vang':       ['Ratsamee Thosaengsiri','Lela Vang'],
+  'Reenu Thirumal / Syamanthika Govin':      ['Reenu Thirumal','Syamanthika Govin'],
+  'Hnubae Tsab / Sandy Vang':               ['Hnubae Tsab','Sandy Vang'],
+  'Kasia Klapacz / Mallory Heaser':          ['Kasia Klapacz','Mallory Heaser'],
+  'Zoua Xiong / Mai Ker Yang':              ['Zoua Xiong','Mai Ker Yang'],
+  'Ashley Her / Birdy Xiong':               ['Ashley Her','Birdy Xiong'],
+  'Temitayo Banjo / Violet Pettman':         ['Temitayo Banjo','Violet Pettman'],
+  'Paige Xiong / Neha Tiwari':              ['Paige Xiong','Neha Tiwari'],
+  'Hallie Hou / Xiaoxiao':                   ['Hallie Hou','Xiaoxiao'],
+  'Kanlaya Thao / August Say':              ['Kanlaya Thao','August Say'],
+  'Jia Wen Khong / Chenyue Xing':           ['Jia Wen Khong','Chenyue Xing'],
+  'Paddy Tay / Nou Chee Yang':              ['Paddy Tay','Nou Chee Yang'],
+  'Vivian Le / Olivia Ye':                   ['Vivian Le','Olivia Ye'],
+};
+
+const WD_MATCHES = [
+  // 1st Round A
+  {id:'WA-1',  t1:'Angela Taing / Hannah Nicole Yoshitan', t2:'Ariana Yang / Evelyn Ge',               score:'21-11,21-18',       wt:1, round:'1st Round A'},
+  {id:'WA-2',  t1:'Heather Holm / Anusha Liyanage',        t2:'Sofia Sanchez / Kiara Sta Maria',        score:'21-7,21-14',        wt:1, round:'1st Round A'},
+  {id:'WA-3',  t1:'Yung-Hsin Wang / Aubrey Liew',          t2:'Sebrina Xiong / Soua Lee',               score:'21-11,21-10',       wt:1, round:'1st Round A'},
+  {id:'WA-4',  t1:'Victoria Liu / Zoe Chan',               t2:'Ratsamee Thosaengsiri / Lela Vang',      score:'21-18,18-21,21-18', wt:2, round:'1st Round A'},
+  // Round of 16 A
+  {id:'WA-5',  t1:'Reenu Thirumal / Syamanthika Govin',    t2:'Angela Taing / Hannah Nicole Yoshitan',  score:'21-5,21-12',        wt:1, round:'Round of 16 A'},
+  {id:'WA-6',  t1:'Hnubae Tsab / Sandy Vang',              t2:'Kasia Klapacz / Mallory Heaser',         score:'21-8,21-12',        wt:1, round:'Round of 16 A'},
+  {id:'WA-7',  t1:'Heather Holm / Anusha Liyanage',        t2:'Zoua Xiong / Mai Ker Yang',              score:'21-17,21-18',       wt:2, round:'Round of 16 A'},
+  {id:'WA-8',  t1:'Ashley Her / Birdy Xiong',              t2:'Temitayo Banjo / Violet Pettman',        score:'21-6,21-2',         wt:1, round:'Round of 16 A'},
+  {id:'WA-9',  t1:'Paige Xiong / Neha Tiwari',             t2:'Hallie Hou / Xiaoxiao',                  score:'21-6,21-9',         wt:2, round:'Round of 16 A'},
+  {id:'WA-10', t1:'Yung-Hsin Wang / Aubrey Liew',          t2:'Vivian Le / Olivia Ye',                  score:'21-18,21-19',       wt:2, round:'Round of 16 A'},
+  {id:'WA-11', t1:'Kanlaya Thao / August Say',             t2:'Jia Wen Khong / Chenyue Xing',          score:'18-21,21-14,21-17', wt:1, round:'Round of 16 A'},
+  {id:'WA-12', t1:'Paddy Tay / Nou Chee Yang',             t2:'Ratsamee Thosaengsiri / Lela Vang',      score:'21-16,21-8',        wt:1, round:'Round of 16 A'},
+  // Quarter Finals A
+  {id:'WA-13', t1:'Hnubae Tsab / Sandy Vang',              t2:'Reenu Thirumal / Syamanthika Govin',     score:'21-15,21-9',        wt:2, round:'Quarter Finals A'},
+  {id:'WA-14', t1:'Ashley Her / Birdy Xiong',              t2:'Zoua Xiong / Mai Ker Yang',              score:'21-18,21-19',       wt:1, round:'Quarter Finals A'},
+  {id:'WA-15', t1:'Hallie Hou / Xiaoxiao',                 t2:'Vivian Le / Olivia Ye',                  score:'21-19,22-20',       wt:2, round:'Quarter Finals A'},
+  {id:'WA-16', t1:'Kanlaya Thao / August Say',             t2:'Paddy Tay / Nou Chee Yang',              score:'21-7,21-8',         wt:2, round:'Quarter Finals A'},
+  // Quarter Finals B
+  {id:'WB-1',  t1:'Angela Taing / Hannah Nicole Yoshitan', t2:'Hallie Hou / Xiaoxiao',                  score:'21-11,21-13',       wt:2, round:'Quarter Finals B'},
+  {id:'WB-2',  t1:'Heather Holm / Anusha Liyanage',        t2:'Hnubae Tsab / Sandy Vang',               score:'22-20,21-14',       wt:2, round:'Quarter Finals B'},
+  {id:'WB-3',  t1:'Yung-Hsin Wang / Aubrey Liew',          t2:'Kanlaya Thao / August Say',              score:'21-17,18-21,21-13', wt:1, round:'Quarter Finals B'},
+  {id:'WB-4',  t1:'Ratsamee Thosaengsiri / Lela Vang',     t2:'Zoua Xiong / Mai Ker Yang',              score:'21-9,21-10',        wt:1, round:'Quarter Finals B'},
+  // Quarter Finals C
+  {id:'WC-9',  t1:'Jia Wen Khong / Chenyue Xing',         t2:'Kasia Klapacz / Mallory Heaser',         score:'21-6,21-13',        wt:1, round:'Quarter Finals C'},
+  {id:'WC-10', t1:'Victoria Liu / Zoe Chan',               t2:'Temitayo Banjo / Violet Pettman',        score:'21-6,21-6',         wt:1, round:'Quarter Finals C'},
+  {id:'WC-11', t1:'Ariana Yang / Evelyn Ge',               t2:'Sebrina Xiong / Soua Lee',               score:'21-9,21-17',        wt:1, round:'Quarter Finals C'},
+  {id:'WC-12', t1:'Paige Xiong / Neha Tiwari',             t2:'Sofia Sanchez / Kiara Sta Maria',        score:'21-15,21-7',        wt:1, round:'Quarter Finals C'},
+  // Semi Finals D
+  {id:'WD-5',  t1:'Sofia Sanchez / Kiara Sta Maria',       t2:'Kasia Klapacz / Mallory Heaser',         score:'21-10,21-13',       wt:2, round:'Semi Finals D'},
+  {id:'WD-6',  t1:'Sebrina Xiong / Soua Lee',              t2:'Temitayo Banjo / Violet Pettman',        score:'21-0,21-0',         wt:1, round:'Semi Finals D'},
+  // Semi Finals C
+  {id:'WC-13', t1:'Victoria Liu / Zoe Chan',               t2:'Jia Wen Khong / Chenyue Xing',          score:'21-17,21-12',       wt:1, round:'Semi Finals C'},
+  {id:'WC-14', t1:'Ariana Yang / Evelyn Ge',               t2:'Paige Xiong / Neha Tiwari',              score:'24-22,15-21,21-15', wt:2, round:'Semi Finals C'},
+  // Semi Finals B
+  {id:'WB-5',  t1:'Hnubae Tsab / Sandy Vang',              t2:'Hallie Hou / Xiaoxiao',                  score:'21-17,21-13',       wt:2, round:'Semi Finals B'},
+  {id:'WB-6',  t1:'Ratsamee Thosaengsiri / Lela Vang',     t2:'Yung-Hsin Wang / Aubrey Liew',           score:'16-21,21-11,21-19', wt:2, round:'Semi Finals B'},
+  // Semi Finals A
+  {id:'WA-17', t1:'Ashley Her / Birdy Xiong',              t2:'Reenu Thirumal / Syamanthika Govin',     score:'21-15,21-10',       wt:2, round:'Semi Finals A'},
+  {id:'WA-18', t1:'Paddy Tay / Nou Chee Yang',             t2:'Vivian Le / Olivia Ye',                  score:'21-16,16-21,21-8',  wt:1, round:'Semi Finals A'},
+  // Finals
+  {id:'WD-7',  t1:'Sebrina Xiong / Soua Lee',              t2:'Kasia Klapacz / Mallory Heaser',         score:'21-6,21-11',        wt:2, round:'Final D'},
+  {id:'WC-15', t1:'Victoria Liu / Zoe Chan',               t2:'Paige Xiong / Neha Tiwari',              score:'21-18,21-13',       wt:1, round:'Final C'},
+  {id:'WB-7',  t1:'Hallie Hou / Xiaoxiao',                 t2:'Yung-Hsin Wang / Aubrey Liew',           score:'21-18,21-15',       wt:1, round:'Final B'},
+  {id:'WA-19', t1:'Paddy Tay / Nou Chee Yang',             t2:'Reenu Thirumal / Syamanthika Govin',     score:'21-19,21-18',       wt:2, round:'Final A'},
+];
+
+const WD_CHAMPIONS  = ['Reenu Thirumal / Syamanthika Govin','Hallie Hou / Xiaoxiao','Victoria Liu / Zoe Chan','Kasia Klapacz / Mallory Heaser'];
+const WD_RUNNERS_UP = ['Paddy Tay / Nou Chee Yang','Yung-Hsin Wang / Aubrey Liew','Paige Xiong / Neha Tiwari','Sebrina Xiong / Soua Lee'];
+const WD_SEMIS      = ['Ashley Her / Birdy Xiong','Vivian Le / Olivia Ye','Hnubae Tsab / Sandy Vang','Ratsamee Thosaengsiri / Lela Vang','Jia Wen Khong / Chenyue Xing','Ariana Yang / Evelyn Ge','Sofia Sanchez / Kiara Sta Maria','Temitayo Banjo / Violet Pettman'];
+
+// ═══════════════════════════════════════════════════════════
+//  WS DATA (Women's Singles)
+// ═══════════════════════════════════════════════════════════
+// All WS players already exist in XD/WD name arrays — no new entries needed
+const WS_NEW_PLAYER_NAMES = [];
+
+// Singles: each "team" is one player. "Syamanthika Govindarajan" = "Syamanthika Govin" (full surname)
+const WS_TEAM_MAP = {
+  'Reenu Thirumal':       ['Reenu Thirumal'],
+  'Temitayo Banjo':       ['Temitayo Banjo'],
+  'Olivia Ye':            ['Olivia Ye'],
+  'Violet Pettman':       ['Violet Pettman'],
+  'Hnubae Tsab':          ['Hnubae Tsab'],
+  'Mollie Anderson':      ['Mollie Anderson'],
+  'Vivian Le':            ['Vivian Le'],
+  'Neha Tiwari':          ['Neha Tiwari'],
+  'Syamanthika Govin':    ['Syamanthika Govin'],
+  'Sebrina Xiong':        ['Sebrina Xiong'],
+  'Kanlaya Thao':         ['Kanlaya Thao'],
+  'Victoria Liu':         ['Victoria Liu'],
+  'Evelyn Ge':            ['Evelyn Ge'],
+  'Chenyue Xing':         ['Chenyue Xing'],
+  'Zoua Xiong':           ['Zoua Xiong'],
+  'Kasia Klapacz':        ['Kasia Klapacz'],
+  'Yung-Hsin Wang':       ['Yung-Hsin Wang'],
+  'Ariana Yang':          ['Ariana Yang'],
+  'Hallie Hou':           ['Hallie Hou'],
+  'Ratsamee Thosaengsiri':['Ratsamee Thosaengsiri'],
+  'Aubrey Liew':          ['Aubrey Liew'],
+  'Nou Chee Yang':        ['Nou Chee Yang'],
+};
+
+const WS_MATCHES = [
+  // 1st Round A
+  {id:'WSA-1',  t1:'Reenu Thirumal',        t2:'Temitayo Banjo',       score:'21-2,21-4',         wt:1, round:'1st Round A'},
+  {id:'WSA-2',  t1:'Olivia Ye',             t2:'Violet Pettman',       score:'21-2,21-1',         wt:1, round:'1st Round A'},
+  {id:'WSA-3',  t1:'Hnubae Tsab',           t2:'Mollie Anderson',      score:'21-9,21-8',         wt:1, round:'1st Round A'},
+  {id:'WSA-4',  t1:'Vivian Le',             t2:'Neha Tiwari',          score:'21-6,24-22',        wt:1, round:'1st Round A'},
+  {id:'WSA-5',  t1:'Syamanthika Govin',     t2:'Sebrina Xiong',        score:'22-20,21-18',       wt:2, round:'1st Round A'},
+  {id:'WSA-6',  t1:'Kanlaya Thao',          t2:'Victoria Liu',         score:'21-12,21-12',       wt:1, round:'1st Round A'},
+  // Round of 16 A
+  {id:'WSA-7',  t1:'Evelyn Ge',             t2:'Reenu Thirumal',       score:'21-3,21-9',         wt:2, round:'Round of 16 A'},
+  {id:'WSA-8',  t1:'Chenyue Xing',          t2:'Zoua Xiong',           score:'21-19,17-21,21-17', wt:2, round:'Round of 16 A'},
+  {id:'WSA-9',  t1:'Olivia Ye',             t2:'Kasia Klapacz',        score:'21-8,21-3',         wt:1, round:'Round of 16 A'},
+  {id:'WSA-10', t1:'Yung-Hsin Wang',        t2:'Hnubae Tsab',          score:'21-10,21-16',       wt:1, round:'Round of 16 A'},
+  {id:'WSA-11', t1:'Ariana Yang',           t2:'Hallie Hou',           score:'21-12,21-8',        wt:2, round:'Round of 16 A'},
+  {id:'WSA-12', t1:'Vivian Le',             t2:'Ratsamee Thosaengsiri',score:'21-12,21-18',       wt:2, round:'Round of 16 A'},
+  {id:'WSA-13', t1:'Sebrina Xiong',         t2:'Aubrey Liew',          score:'21-13,21-18',       wt:2, round:'Round of 16 A'},
+  {id:'WSA-14', t1:'Nou Chee Yang',         t2:'Kanlaya Thao',         score:'21-10,21-8',        wt:1, round:'Round of 16 A'},
+  // Quarter Finals A
+  {id:'WSA-15', t1:'Zoua Xiong',            t2:'Reenu Thirumal',       score:'21-10,21-7',        wt:2, round:'Quarter Finals A'},
+  {id:'WSA-16', t1:'Olivia Ye',             t2:'Yung-Hsin Wang',       score:'21-18,21-19',       wt:2, round:'Quarter Finals A'},
+  {id:'WSA-17', t1:'Hallie Hou',            t2:'Ratsamee Thosaengsiri',score:'21-6,21-9',         wt:1, round:'Quarter Finals A'},
+  {id:'WSA-18', t1:'Aubrey Liew',           t2:'Nou Chee Yang',        score:'21-8,21-2',         wt:2, round:'Quarter Finals A'},
+  // Quarter Finals B
+  {id:'WSB-10', t1:'Zoua Xiong',            t2:'Hnubae Tsab',          score:'21-12,21-9',        wt:2, round:'Quarter Finals B'},
+  {id:'WSB-11', t1:'Ratsamee Thosaengsiri', t2:'Sebrina Xiong',        score:'21-10,21-4',        wt:1, round:'Quarter Finals B'},
+  {id:'WSB-12', t1:'Aubrey Liew',           t2:'Vivian Le',            score:'21-14,21-10',       wt:2, round:'Quarter Finals B'},
+  // Quarter Finals C
+  {id:'WSC-9',  t1:'Chenyue Xing',          t2:'Mollie Anderson',      score:'21-13,21-12',       wt:1, round:'Quarter Finals C'},
+  {id:'WSC-10', t1:'Violet Pettman',        t2:'Kasia Klapacz',        score:'21-3,21-4',         wt:2, round:'Quarter Finals C'},
+  {id:'WSC-11', t1:'Victoria Liu',          t2:'Temitayo Banjo',       score:'21-4,21-2',         wt:1, round:'Quarter Finals C'},
+  {id:'WSC-12', t1:'Ariana Yang',           t2:'Syamanthika Govin',    score:'21-18,21-19',       wt:2, round:'Quarter Finals C'},
+  // Quarter Finals D
+  {id:'WSD-2',  t1:'Mollie Anderson',       t2:'Ariana Yang',          score:'21-19,17-21,21-14', wt:2, round:'Quarter Finals D'},
+  {id:'WSD-4',  t1:'Temitayo Banjo',        t2:'Violet Pettman',       score:'21-16,21-18',       wt:2, round:'Quarter Finals D'},
+  // Round of 16 C
+  {id:'WSC-4',  t1:'Neha Tiwari',           t2:'Kasia Klapacz',        score:'18-21,21-19,23-21', wt:2, round:'Round of 16 C'},
+  {id:'WSC-8',  t1:'Syamanthika Govin',     t2:'Evelyn Ge',            score:'21-19,16-21,21-16', wt:1, round:'Round of 16 C'},
+  // Semi Finals
+  {id:'WSA-19', t1:'Reenu Thirumal',        t2:'Yung-Hsin Wang',       score:'21-17,21-10',       wt:1, round:'Semi Finals A'},
+  {id:'WSA-20', t1:'Hallie Hou',            t2:'Nou Chee Yang',        score:'21-14,21-14',       wt:1, round:'Semi Finals A'},
+  {id:'WSB-13', t1:'Kanlaya Thao',          t2:'Hnubae Tsab',          score:'21-13,21-15',       wt:2, round:'Semi Finals B'},
+  {id:'WSB-14', t1:'Ratsamee Thosaengsiri', t2:'Vivian Le',            score:'21-12,21-12',       wt:1, round:'Semi Finals B'},
+  {id:'WSC-13', t1:'Chenyue Xing',          t2:'Kasia Klapacz',        score:'21-8,21-16',        wt:1, round:'Semi Finals C'},
+  {id:'WSC-14', t1:'Victoria Liu',          t2:'Syamanthika Govin',    score:'21-18,19-21,21-19', wt:1, round:'Semi Finals C'},
+  {id:'WSD-5',  t1:'Evelyn Ge',             t2:'Ariana Yang',          score:'21-14,30-28',       wt:1, round:'Semi Finals D'},
+  {id:'WSD-6',  t1:'Violet Pettman',        t2:'Neha Tiwari',          score:'21-0,21-0',         wt:2, round:'Semi Finals D'},
+  // Finals
+  {id:'WSA-21', t1:'Hallie Hou',            t2:'Reenu Thirumal',       score:'21-10,15-21,21-18', wt:2, round:'Final A'},
+  {id:'WSB-15', t1:'Ratsamee Thosaengsiri', t2:'Hnubae Tsab',          score:'22-20,23-21',       wt:2, round:'Final B'},
+  {id:'WSC-15', t1:'Chenyue Xing',          t2:'Victoria Liu',         score:'21-19,22-20',       wt:2, round:'Final C'},
+  {id:'WSD-7',  t1:'Neha Tiwari',           t2:'Evelyn Ge',            score:'21-14,21-18',       wt:1, round:'Final D'},
+];
+
+const WS_CHAMPIONS  = ['Reenu Thirumal','Hnubae Tsab','Victoria Liu','Neha Tiwari'];
+const WS_RUNNERS_UP = ['Hallie Hou','Ratsamee Thosaengsiri','Chenyue Xing','Evelyn Ge'];
+const WS_SEMIS      = ['Yung-Hsin Wang','Nou Chee Yang','Kanlaya Thao','Vivian Le','Kasia Klapacz','Syamanthika Govin','Ariana Yang','Violet Pettman'];
+
+// ═══════════════════════════════════════════════════════════
+//  MS DATA (Men's Singles)
+// ═══════════════════════════════════════════════════════════
+const MS_NEW_PLAYER_NAMES = [
+  'Brian Dine','Spandhan Saxena','Sam Simataa',
+  'Kia Moua','Kiet Pham Nguyen','Qing Wei Ng','Vinayak Trigunayat',
+];
+
+const MS_TEAM_MAP = {
+  'Jason Ung':             ['Jason Ung'],
+  'Shimanto Mohajan':      ['Shimanto Mohajan'],
+  'Brian Dine':            ['Brian Dine'],
+  'Spandhan Saxena':       ['Spandhan Saxena'],
+  'Phu Truong':            ['Phu Truong'],
+  'Lukas Ye':              ['Lukas Ye'],
+  'Oung Kant':             ['Oung Kant'],
+  'Peter Yip':             ['Peter Yip'],
+  'Mahin':                 ['Mahin'],
+  'Ron Teoh':              ['Ron Teoh'],
+  'Chai Chang':            ['Chai Chang'],
+  'Sam Simataa':           ['Sam Simataa'],
+  'Subash Shrestha':       ['Subash Shrestha'],
+  'Vissoth Nguonrattanak': ['Vissoth Nguonrattanak'],
+  'Tao Huang':             ['Tao Huang'],
+  'Xeng Yang':             ['Xeng Yang'],
+  'Kunal Suresh':          ['Kunal Suresh'],
+  'Kaleb Wirtzfeld':       ['Kaleb Wirtzfeld'],
+  'Mathew Paramben':       ['Mathew Paramben'],
+  'Zi-En Huang':           ['Zi-En Huang'],
+  'Yanting Chi':           ['Yanting Chi'],
+  'Seif Jandal':           ['Seif Jandal'],
+  'Samarth Shirahatti':    ['Samarth Shirahatti'],
+  'Tong Thao':             ['Tong Thao'],
+  'Ya Visal Yin':          ['Ya Visal Yin'],
+  'Yiwen Xie':             ['Yiwen Xie'],
+  'Theodore Thayib':       ['Theodore Thayib'],
+  'Tom Chang':             ['Tom Chang'],
+  'Steve Yang':            ['Steve Yang'],
+  'Vinayak Trigunayat':    ['Vinayak Trigunayat'],
+  'Andres Climent':        ['Andres Climent'],
+  'Aman Verma':            ['Aman Verma'],
+  'Kent Sta Maria':        ['Kent Sta Maria'],
+  'Jeffrey Vang':          ['Jeffrey Vang'],
+  'Dylan Vang':            ['Dylan Vang'],
+  'Drik Sarkar':           ['Drik Sarkar'],
+  'Srikanth Baki':         ['Srikanth Baki'],
+  'Kia Moua':              ['Kia Moua'],
+  'Roman Fenzi':           ['Roman Fenzi'],
+  'Riley Vang':            ['Riley Vang'],
+  'Niko Scherer':          ['Niko Scherer'],
+  'Andy Tan':              ['Andy Tan'],
+  'Kiet Pham Nguyen':      ['Kiet Pham Nguyen'],
+  'Satya Deep Tekumudi':   ['Satya Deep Tekumudi'],
+  'Kenneth Barta':         ['Kenneth Barta'],
+  'Anthony Ho':            ['Anthony Ho'],
+  'Jeemeng Yang':          ['Jeemeng Yang'],
+  'Jin Guo':               ['Jin Guo'],
+  'Qing Wei Ng':           ['Qing Wei Ng'],
+  'Aaron Low':             ['Aaron Low'],
+};
+
+const MS_MATCHES = [
+  // 1st Round A (30-pt format — stored as single set)
+  {id:'MSA-1',  t1:'Jason Ung',             t2:'Shimanto Mohajan',      score:'30-4',              wt:1, round:'1st Round A'},
+  {id:'MSA-2',  t1:'Brian Dine',            t2:'Spandhan Saxena',       score:'30-28',             wt:2, round:'1st Round A'},
+  {id:'MSA-3',  t1:'Phu Truong',            t2:'Lukas Ye',              score:'30-10',             wt:1, round:'1st Round A'},
+  {id:'MSA-4',  t1:'Oung Kant',             t2:'Peter Yip',             score:'30-14',             wt:2, round:'1st Round A'},
+  {id:'MSA-5',  t1:'Mahin',                 t2:'Ron Teoh',              score:'30-24',             wt:1, round:'1st Round A'},
+  {id:'MSA-6',  t1:'Chai Chang',            t2:'Sam Simataa',           score:'30-14',             wt:1, round:'1st Round A'},
+  {id:'MSA-7',  t1:'Subash Shrestha',       t2:'Vissoth Nguonrattanak', score:'30-26',             wt:2, round:'1st Round A'},
+  {id:'MSA-8',  t1:'Tao Huang',             t2:'Xeng Yang',             score:'30-29',             wt:1, round:'1st Round A'},
+  {id:'MSA-9',  t1:'Kunal Suresh',          t2:'Kaleb Wirtzfeld',       score:'30-18',             wt:2, round:'1st Round A'},
+  {id:'MSA-10', t1:'Mathew Paramben',       t2:'Zi-En Huang',           score:'30-23',             wt:2, round:'1st Round A'},
+  {id:'MSA-11', t1:'Yanting Chi',           t2:'Seif Jandal',           score:'30-7',              wt:1, round:'1st Round A'},
+  {id:'MSA-12', t1:'Samarth Shirahatti',    t2:'Tong Thao',             score:'30-14',             wt:1, round:'1st Round A'},
+  {id:'MSA-13', t1:'Ya Visal Yin',          t2:'Yiwen Xie',             score:'30-21',             wt:2, round:'1st Round A'},
+  {id:'MSA-14', t1:'Theodore Thayib',       t2:'Tom Chang',             score:'30-12',             wt:1, round:'1st Round A'},
+  {id:'MSA-15', t1:'Steve Yang',            t2:'Vinayak Trigunayat',    score:'30-0',              wt:1, round:'1st Round A'},
+  {id:'MSA-16', t1:'Andres Climent',        t2:'Aman Verma',            score:'30-13',             wt:1, round:'1st Round A'},
+  {id:'MSA-17', t1:'Kent Sta Maria',        t2:'Jeffrey Vang',          score:'30-28',             wt:1, round:'1st Round A'},
+  {id:'MSA-18', t1:'Dylan Vang',            t2:'Drik Sarkar',           score:'30-14',             wt:1, round:'1st Round A'},
+  // 2nd Round A
+  {id:'MSA-19', t1:'Srikanth Baki',         t2:'Jason Ung',             score:'21-7,21-9',         wt:2, round:'2nd Round A'},
+  {id:'MSA-20', t1:'Spandhan Saxena',       t2:'Kia Moua',              score:'21-12,21-15',       wt:2, round:'2nd Round A'},
+  {id:'MSA-21', t1:'Peter Yip',             t2:'Phu Truong',            score:'21-9,21-18',        wt:2, round:'2nd Round A'},
+  {id:'MSA-22', t1:'Roman Fenzi',           t2:'Mahin',                 score:'21-12,21-10',       wt:2, round:'2nd Round A'},
+  {id:'MSA-23', t1:'Riley Vang',            t2:'Chai Chang',            score:'30-10',             wt:2, round:'2nd Round A'},
+  {id:'MSA-24', t1:'Niko Scherer',          t2:'Vissoth Nguonrattanak', score:'21-15,21-8',        wt:2, round:'2nd Round A'},
+  {id:'MSA-25', t1:'Andy Tan',              t2:'Tao Huang',             score:'21-12,21-10',       wt:1, round:'2nd Round A'},
+  {id:'MSA-26', t1:'Kiet Pham Nguyen',      t2:'Kaleb Wirtzfeld',       score:'21-12,21-8',        wt:2, round:'2nd Round A'},
+  {id:'MSA-27', t1:'Satya Deep Tekumudi',   t2:'Zi-En Huang',           score:'21-10,21-10',       wt:2, round:'2nd Round A'},
+  {id:'MSA-28', t1:'Kenneth Barta',         t2:'Yanting Chi',           score:'21-17,21-12',       wt:1, round:'2nd Round A'},
+  {id:'MSA-29', t1:'Anthony Ho',            t2:'Samarth Shirahatti',    score:'21-18,21-18',       wt:2, round:'2nd Round A'},
+  {id:'MSA-30', t1:'Jeemeng Yang',          t2:'Yiwen Xie',             score:'21-12,21-12',       wt:1, round:'2nd Round A'},
+  {id:'MSA-31', t1:'Jin Guo',               t2:'Theodore Thayib',       score:'21-14,18-21,23-21', wt:1, round:'2nd Round A'},
+  {id:'MSA-32', t1:'Steve Yang',            t2:'Andres Climent',        score:'21-15,21-13',       wt:2, round:'2nd Round A'},
+  {id:'MSA-33', t1:'Kent Sta Maria',        t2:'Qing Wei Ng',           score:'18-21,21-18,21-17', wt:2, round:'2nd Round A'},
+  {id:'MSA-34', t1:'Aaron Low',             t2:'Dylan Vang',            score:'18-21,21-12,21-19', wt:1, round:'2nd Round A'},
+  // Round of 16 A
+  {id:'MSA-35', t1:'Jason Ung',             t2:'Kia Moua',              score:'21-8,21-14',        wt:1, round:'Round of 16 A'},
+  {id:'MSA-36', t1:'Mahin',                 t2:'Phu Truong',            score:'21-19,21-15',       wt:2, round:'Round of 16 A'},
+  {id:'MSA-37', t1:'Chai Chang',            t2:'Vissoth Nguonrattanak', score:'11-21,21-10,21-12', wt:1, round:'Round of 16 A'},
+  {id:'MSA-38', t1:'Kaleb Wirtzfeld',       t2:'Andy Tan',              score:'21-15,21-13',       wt:1, round:'Round of 16 A'},
+  {id:'MSA-39', t1:'Zi-En Huang',           t2:'Kenneth Barta',         score:'21-16,21-16',       wt:1, round:'Round of 16 A'},
+  {id:'MSA-40', t1:'Jeemeng Yang',          t2:'Samarth Shirahatti',    score:'21-18,21-14',       wt:2, round:'Round of 16 A'},
+  {id:'MSA-41', t1:'Andres Climent',        t2:'Jin Guo',               score:'21-13,21-17',       wt:1, round:'Round of 16 A'},
+  {id:'MSA-42', t1:'Aaron Low',             t2:'Qing Wei Ng',           score:'21-17,21-9',        wt:1, round:'Round of 16 A'},
+  // Round of 16 B
+  {id:'MSB-18', t1:'Kia Moua',              t2:'Theodore Thayib',       score:'21-12,21-15',       wt:1, round:'Round of 16 B'},
+  {id:'MSB-19', t1:'Jin Guo',               t2:'Yanting Chi',           score:'21-12,21-13',       wt:1, round:'Round of 16 B'},
+  {id:'MSB-20', t1:'Jeemeng Yang',          t2:'Peter Yip',             score:'21-11,21-18',       wt:1, round:'Round of 16 B'},
+  {id:'MSB-21', t1:'Andy Tan',              t2:'Dylan Vang',            score:'23-21,18-21,21-11', wt:2, round:'Round of 16 B'},
+  {id:'MSB-22', t1:'Kenneth Barta',         t2:'Yiwen Xie',             score:'21-9,21-8',         wt:1, round:'Round of 16 B'},
+  {id:'MSB-23', t1:'Qing Wei Ng',           t2:'Tao Huang',             score:'21-16,21-10',       wt:1, round:'Round of 16 B'},
+  {id:'MSB-24', t1:'Kent Sta Maria',        t2:'Steve Yang',            score:'21-11,21-19',       wt:1, round:'Round of 16 B'},
+  // 1st Round C
+  {id:'MSC-2',  t1:'Ron Teoh',              t2:'Srikanth Baki',         score:'18-21,21-18,21-18', wt:1, round:'1st Round C'},
+  {id:'MSC-4',  t1:'Drik Sarkar',           t2:'Brian Dine',            score:'21-14,21-10',       wt:2, round:'1st Round C'},
+  {id:'MSC-6',  t1:'Aman Verma',            t2:'Anthony Ho',            score:'22-20,22-20',       wt:2, round:'1st Round C'},
+  {id:'MSC-8',  t1:'Oung Kant',             t2:'Subash Shrestha',       score:'21-18,21-12',       wt:2, round:'1st Round C'},
+  {id:'MSC-10', t1:'Ya Visal Yin',          t2:'Satya Deep Tekumudi',   score:'21-10,21-10',       wt:1, round:'1st Round C'},
+  {id:'MSC-12', t1:'Tong Thao',             t2:'Roman Fenzi',           score:'21-15,17-21,21-18', wt:2, round:'1st Round C'},
+  {id:'MSC-14', t1:'Tom Chang',             t2:'Kiet Pham Nguyen',      score:'21-18,16-21,21-18', wt:1, round:'1st Round C'},
+  {id:'MSC-15', t1:'Sam Simataa',           t2:'Niko Scherer',          score:'21-12,21-6',        wt:1, round:'1st Round C'},
+  {id:'MSC-16', t1:'Vinayak Trigunayat',    t2:'Riley Vang',            score:'21-13,20-22,21-18', wt:2, round:'1st Round C'},
+  // Round of 16 C
+  {id:'MSC-20', t1:'Subash Shrestha',       t2:'Mathew Paramben',       score:'23-21,21-13',       wt:1, round:'Round of 16 C'},
+  {id:'MSC-21', t1:'Jeffrey Vang',          t2:'Ya Visal Yin',          score:'22-10,21-18',       wt:2, round:'Round of 16 C'},
+  {id:'MSC-22', t1:'Kunal Suresh',          t2:'Roman Fenzi',           score:'27-25,21-18',       wt:1, round:'Round of 16 C'},
+  {id:'MSC-23', t1:'Xeng Yang',             t2:'Tom Chang',             score:'12-21,21-18,21-14', wt:2, round:'Round of 16 C'},
+  {id:'MSC-24', t1:'Sam Simataa',           t2:'Riley Vang',            score:'21-2,21-5',         wt:1, round:'Round of 16 C'},
+  // Round of 16 D
+  {id:'MSD-2',  t1:'Tong Thao',             t2:'Jeffrey Vang',          score:'17-21,21-14,21-16', wt:2, round:'Round of 16 D'},
+  {id:'MSD-3',  t1:'Satya Deep Tekumudi',   t2:'Vinayak Trigunayat',    score:'21-10,21-10',       wt:1, round:'Round of 16 D'},
+  {id:'MSD-4',  t1:'Oung Kant',             t2:'Lukas Ye',              score:'21-11,21-13',       wt:1, round:'Round of 16 D'},
+  {id:'MSD-5',  t1:'Niko Scherer',          t2:'Seif Jandal',           score:'21-7,21-18',        wt:1, round:'Round of 16 D'},
+  {id:'MSD-6',  t1:'Aman Verma',            t2:'Srikanth Baki',         score:'21-8,21-3',         wt:2, round:'Round of 16 D'},
+  {id:'MSD-7',  t1:'Kiet Pham Nguyen',      t2:'Xeng Yang',             score:'21-15,21-10',       wt:2, round:'Round of 16 D'},
+  // Semi Finals
+  {id:'MSA-47', t1:'Jason Ung',             t2:'Chai Chang',            score:'21-6,21-15',        wt:1, round:'Semi Finals A'},
+  {id:'MSA-48', t1:'Zi-En Huang',           t2:'Aaron Low',             score:'21-15,21-18',       wt:2, round:'Semi Finals A'},
+  {id:'MSB-29', t1:'Kia Moua',              t2:'Jeemeng Yang',          score:'',                  wt:2, round:'Semi Finals B'},
+  {id:'MSB-30', t1:'Qing Wei Ng',           t2:'Kenneth Barta',         score:'21-16,21-12',       wt:1, round:'Semi Finals B'},
+  {id:'MSC-29', t1:'Subash Shrestha',       t2:'Brian Dine',            score:'19-21,21-19,21-19', wt:2, round:'Semi Finals C'},
+  {id:'MSC-30', t1:'Kunal Suresh',          t2:'Sam Simataa',           score:'21-14,21-9',        wt:1, round:'Semi Finals C'},
+  {id:'MSD-14', t1:'Xeng Yang',             t2:'Srikanth Baki',         score:'21-15,7-21,21-11',  wt:2, round:'Semi Finals D'},
+  // Finals
+  {id:'MSA-49', t1:'Jason Ung',             t2:'Aaron Low',             score:'21-15,21-16',       wt:2, round:'Final A'},
+  {id:'MSB-31', t1:'Jeemeng Yang',          t2:'Qing Wei Ng',           score:'26-24,21-13',       wt:2, round:'Final B'},
+  {id:'MSC-31', t1:'Kunal Suresh',          t2:'Brian Dine',            score:'21-13,21-18',       wt:1, round:'Final C'},
+  {id:'MSD-15', t1:'Srikanth Baki',         t2:'Jeffrey Vang',          score:'21-8,21-17',        wt:1, round:'Final D'},
+];
+
+const MS_CHAMPIONS  = ['Aaron Low','Qing Wei Ng','Kunal Suresh','Srikanth Baki'];
+const MS_RUNNERS_UP = ['Jason Ung','Jeemeng Yang','Brian Dine','Jeffrey Vang'];
+const MS_SEMIS      = ['Chai Chang','Zi-En Huang','Kia Moua','Kenneth Barta','Subash Shrestha','Sam Simataa','Xeng Yang'];
+
+// ═══════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════
+function slug(name) {
+  return 'mn26-' + name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'');
+}
+
+// Score is winner-first format (21-10 means winner got 21, loser got 10)
+// We store as s1=team1_score, s2=team2_score
+function parseScore(s, team1Won) {
+  const sets = [{s1:null,s2:null},{s1:null,s2:null},{s1:null,s2:null}];
+  if (!s) return sets;
+  s.split(',').forEach((part, i) => {
+    if (i >= 3) return;
+    const [a,b] = part.trim().split('-').map(Number);
+    if (!isNaN(a) && !isNaN(b)) {
+      sets[i] = team1Won ? {s1:a, s2:b} : {s1:b, s2:a};
+    }
+  });
+  return sets;
+}
+
+function setsWonFrom(sets) {
+  let w1=0, w2=0;
+  sets.forEach(s => {
+    if (s.s1 !== null && s.s2 !== null) { if (s.s1 > s.s2) w1++; else w2++; }
+  });
+  return {w1, w2};
+}
+
+function computeRatings(st) {
+  const m = st.matches || 0;
+  if (!m) return {overall:5, winRate:5, clutch:5, dominance:5, tournament:5};
+  const total = (st.setsWon||0) + (st.setsLost||0);
+  const winRate    = (st.wins / m) * 10;
+  const clutch     = st.set3Apps > 0 ? (st.set3Wins / st.set3Apps) * 10 : 5;
+  const dominance  = total > 0 ? (st.setsWon / total) * 10 : 5;
+  const t          = st.tournamentsPlayed || 1;
+  const perfPts    = (st.championCount||0)*3 + (st.finalistCount||0)*2 + (st.semifinalistCount||0);
+  const tournament = Math.min(10, (perfPts / t) * 3.5);
+  const overall    = winRate*0.35 + clutch*0.20 + dominance*0.30 + tournament*0.15;
+  const r = v => Math.round(v*10)/10;
+  return {overall:r(overall), winRate:r(winRate), clutch:r(clutch), dominance:r(dominance), tournament:r(tournament)};
+}
+
+function emptyStats() {
+  return {matches:0, wins:0, setsWon:0, setsLost:0, set3Apps:0, set3Wins:0,
+          tournamentsPlayed:0, championCount:0, finalistCount:0, semifinalistCount:0};
+}
+
+// Build per-event stats from a match list + team map + placement arrays
+function buildEventStats(matches, teamMap, champions, runnersUp, semis) {
+  const stats = {}; // name → stats
+  function init(name) { if (!stats[name]) stats[name] = emptyStats(); }
+
+  matches.forEach(m => {
+    const sets = parseScore(m.score, m.wt === 1);
+    const {w1,w2} = setsWonFrom(sets);
+    const is3 = (w1+w2) === 3;
+    const t1won = m.wt === 1;
+    const t1p = teamMap[m.t1] || [];
+    const t2p = teamMap[m.t2] || [];
+    t1p.forEach(name => {
+      init(name);
+      stats[name].matches++;  stats[name].setsWon += w1;  stats[name].setsLost += w2;
+      if (t1won) stats[name].wins++;
+      if (is3) { stats[name].set3Apps++; if(t1won) stats[name].set3Wins++; }
+    });
+    t2p.forEach(name => {
+      init(name);
+      stats[name].matches++;  stats[name].setsWon += w2;  stats[name].setsLost += w1;
+      if (!t1won) stats[name].wins++;
+      if (is3) { stats[name].set3Apps++; if(!t1won) stats[name].set3Wins++; }
+    });
+  });
+
+  // Any player who appeared in at least one match played 1 tournament
+  Object.keys(stats).forEach(name => { stats[name].tournamentsPlayed = 1; });
+
+  champions.forEach(team  => { (teamMap[team]||[]).forEach(n => { if(stats[n]) stats[n].championCount++;   }); });
+  runnersUp.forEach(team  => { (teamMap[team]||[]).forEach(n => { if(stats[n]) stats[n].finalistCount++;   }); });
+  semis.forEach(team      => { (teamMap[team]||[]).forEach(n => { if(stats[n]) stats[n].semifinalistCount++; }); });
+
+  return stats;
+}
+
+// Merge two stats objects (for computing overall cross-event stats)
+function mergeStats(a, b) {
+  const keys = ['matches','wins','setsWon','setsLost','set3Apps','set3Wins',
+                 'tournamentsPlayed','championCount','finalistCount','semifinalistCount'];
+  const out = emptyStats();
+  keys.forEach(k => { out[k] = (a[k]||0) + (b[k]||0); });
+  return out;
+}
+
+// Build the tournament Firestore doc
+function buildTournamentDoc(playerIdMap) {
+  // ── MD event ──
+  const mdTeams = Object.keys(MD_TEAM_MAP);
+  const mdPlayers = mdTeams.map((tName, i) => ({
+    id: slug(tName),
+    name: tName,
+    seed: i + 1,
+    playerUID: null,
+    playerUIDs: [playerIdMap[MD_TEAM_MAP[tName][0]]||null, playerIdMap[MD_TEAM_MAP[tName][1]]||null],
+  }));
+  const mdPid = {}; mdPlayers.forEach(p => { mdPid[p.name] = p.id; });
+  const mdMatches = MD_MATCHES.map(m => ({
+    id: m.id,
+    p1: mdPid[m.t1], p2: mdPid[m.t2],
+    win: m.wt === 1 ? mdPid[m.t1] : mdPid[m.t2],
+    court: null, scheduledTime: null,
+    sets: parseScore(m.score, m.wt === 1),
+    round: m.round,
+  }));
+
+  // ── XD event ──
+  const xdTeams = Object.keys(XD_TEAM_MAP);
+  const xdPlayers = xdTeams.map((tName, i) => ({
+    id: slug(tName),
+    name: tName,
+    seed: i + 1,
+    playerUID: null,
+    playerUIDs: [playerIdMap[XD_TEAM_MAP[tName][0]]||null, playerIdMap[XD_TEAM_MAP[tName][1]]||null],
+  }));
+  const xdPid = {}; xdPlayers.forEach(p => { xdPid[p.name] = p.id; });
+  const xdMatches = XD_MATCHES.map(m => ({
+    id: m.id,
+    p1: xdPid[m.t1], p2: xdPid[m.t2],
+    win: m.wt === 1 ? xdPid[m.t1] : xdPid[m.t2],
+    court: null, scheduledTime: null,
+    sets: parseScore(m.score, m.wt === 1),
+    round: m.round,
+  }));
+
+  // ── WD event ──
+  const wdTeams = Object.keys(WD_TEAM_MAP);
+  const wdPlayers = wdTeams.map((tName, i) => ({
+    id: slug(tName),
+    name: tName,
+    seed: i + 1,
+    playerUID: null,
+    playerUIDs: [playerIdMap[WD_TEAM_MAP[tName][0]]||null, playerIdMap[WD_TEAM_MAP[tName][1]]||null],
+  }));
+  const wdPid = {}; wdPlayers.forEach(p => { wdPid[p.name] = p.id; });
+  const wdMatches = WD_MATCHES.map(m => ({
+    id: m.id,
+    p1: wdPid[m.t1], p2: wdPid[m.t2],
+    win: m.wt === 1 ? wdPid[m.t1] : wdPid[m.t2],
+    court: null, scheduledTime: null,
+    sets: parseScore(m.score, m.wt === 1),
+    round: m.round,
+  }));
+
+  // ── WS event (singles — playerUIDs has one entry) ──
+  const wsTeams = Object.keys(WS_TEAM_MAP);
+  const wsPlayers = wsTeams.map((tName, i) => ({
+    id: slug(tName),
+    name: tName,
+    seed: i + 1,
+    playerUID: playerIdMap[tName] || null,
+    playerUIDs: [playerIdMap[tName] || null],
+  }));
+  const wsPid = {}; wsPlayers.forEach(p => { wsPid[p.name] = p.id; });
+  const wsMatches = WS_MATCHES.map(m => ({
+    id: m.id,
+    p1: wsPid[m.t1], p2: wsPid[m.t2],
+    win: m.wt === 1 ? wsPid[m.t1] : wsPid[m.t2],
+    court: null, scheduledTime: null,
+    sets: parseScore(m.score, m.wt === 1),
+    round: m.round,
+  }));
+
+  // ── MS event (singles) ──
+  const msTeams = Object.keys(MS_TEAM_MAP);
+  const msPlayers = msTeams.map((tName, i) => ({
+    id: slug(tName),
+    name: tName,
+    seed: i + 1,
+    playerUID: playerIdMap[tName] || null,
+    playerUIDs: [playerIdMap[tName] || null],
+  }));
+  const msPid = {}; msPlayers.forEach(p => { msPid[p.name] = p.id; });
+  const msMatches = MS_MATCHES.map(m => ({
+    id: m.id,
+    p1: msPid[m.t1], p2: msPid[m.t2],
+    win: m.wt === 1 ? msPid[m.t1] : msPid[m.t2],
+    court: null, scheduledTime: null,
+    sets: parseScore(m.score, m.wt === 1),
+    round: m.round,
+  }));
+
+  const newRef = db.collection('webTournaments').doc();
+  return {
+    ref: newRef,
+    doc: {
+      id: newRef.id,
+      name: '2026 MN Hmong Tournament',
+      sport: 'Badminton',
+      location: 'Minneapolis, MN',
+      date: '2026-04-12',
+      startTime: '09:00',
+      format: 'SE',
+      numCourts: 4,
+      maxPlayers: 0,
+      notes: '',
+      prizes: { first: '', second: '', third: '' },
+      status: 'completed',
+      events: ['mens_doubles','womens_doubles','mixed_doubles','womens_singles','mens_singles'],
+      eventData: {
+        mens_doubles: {
+          players: mdPlayers,
+          bracket: { format: 'SE', matches: mdMatches },
+          status: 'completed',
+          champion: slug('Rueben Tan / Ares Zhou'),
+          registrations: [], waitlist: [],
+        },
+        womens_doubles: {
+          players: wdPlayers,
+          bracket: { format: 'SE', matches: wdMatches },
+          status: 'completed',
+          champion: slug('Reenu Thirumal / Syamanthika Govin'),
+          registrations: [], waitlist: [],
+        },
+        mixed_doubles: {
+          players: xdPlayers,
+          bracket: { format: 'SE', matches: xdMatches },
+          status: 'completed',
+          champion: slug('Chai Chang / Nou Chee Yang'),
+          registrations: [], waitlist: [],
+        },
+        womens_singles: {
+          players: wsPlayers,
+          bracket: { format: 'SE', matches: wsMatches },
+          status: 'completed',
+          champion: slug('Reenu Thirumal'),
+          registrations: [], waitlist: [],
+        },
+        mens_singles: {
+          players: msPlayers,
+          bracket: { format: 'SE', matches: msMatches },
+          status: 'completed',
+          champion: slug('Aaron Low'),
+          registrations: [], waitlist: [],
+        },
+      },
+      created: Date.now(),
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SEED
+// ═══════════════════════════════════════════════════════════
+async function runSeed() {
+  document.getElementById('btnSeed').disabled = true;
+  const user = await new Promise(resolve => {
+    const unsub = auth.onAuthStateChanged(u => { unsub(); resolve(u); });
+  });
+  if (!user) {
+    log('✗ Not signed in.', 'err');
+    document.getElementById('btnSeed').disabled = false;
+    return;
+  }
+  log(`Signed in as: ${user.displayName || user.email}`, 'ok');
+
+  // Compute per-event stats
+  const mdStats = buildEventStats(MD_MATCHES, MD_TEAM_MAP, MD_CHAMPIONS, MD_RUNNERS_UP, MD_SEMIS);
+  const xdStats = buildEventStats(XD_MATCHES, XD_TEAM_MAP, XD_CHAMPIONS, XD_RUNNERS_UP, XD_SEMIS);
+  const wdStats = buildEventStats(WD_MATCHES, WD_TEAM_MAP, WD_CHAMPIONS, WD_RUNNERS_UP, WD_SEMIS);
+  const wsStats = buildEventStats(WS_MATCHES, WS_TEAM_MAP, WS_CHAMPIONS, WS_RUNNERS_UP, WS_SEMIS);
+  const msStats = buildEventStats(MS_MATCHES, MS_TEAM_MAP, MS_CHAMPIONS, MS_RUNNERS_UP, MS_SEMIS);
+
+  // All unique player names across all events
+  const allNames = [...new Set([...MD_PLAYER_NAMES, ...XD_NEW_PLAYER_NAMES, ...WD_NEW_PLAYER_NAMES, ...WS_NEW_PLAYER_NAMES, ...MS_NEW_PLAYER_NAMES])];
+
+  // ── Stats summary ──
+  const evCounts = {md:0, xd:0, wd:0, ws:0, ms:0};
+  allNames.forEach(n => {
+    if ((mdStats[n]||{}).matches > 0) evCounts.md++;
+    if ((xdStats[n]||{}).matches > 0) evCounts.xd++;
+    if ((wdStats[n]||{}).matches > 0) evCounts.wd++;
+    if ((wsStats[n]||{}).matches > 0) evCounts.ws++;
+    if ((msStats[n]||{}).matches > 0) evCounts.ms++;
+  });
+  log(`Stats computed — md:${evCounts.md} xd:${evCounts.xd} wd:${evCounts.wd} ws:${evCounts.ws} ms:${evCounts.ms} (total names: ${allNames.length})`, 'ok');
+
+  // ── Step 1: Create/link player profiles ──
+  log('\n── Step 1: Creating player profiles ──', 'hdr');
+  const playerIdMap = {};
+
+  for (const name of allNames) {
+    // Check for existing profile by displayName
+    let existingId = null;
+    try {
+      const q = await db.collection('webPlayers').where('displayName', '==', name).limit(1).get();
+      if (!q.empty) existingId = q.docs[0].id;
+    } catch(e) { log(`  ⚠ lookup ${name}: ${e.message}`, 'err'); }
+
+    const id = existingId || slug(name);
+    playerIdMap[name] = id;
+
+    const st_md  = mdStats[name]  || emptyStats();
+    const st_xd  = xdStats[name]  || emptyStats();
+    const st_wd  = wdStats[name]  || emptyStats();
+    const st_ws  = wsStats[name]  || emptyStats();
+    const st_ms  = msStats[name]  || emptyStats();
+    const st_all = mergeStats(mergeStats(mergeStats(mergeStats(st_md, st_xd), st_wd), st_ws), st_ms);
+    const hasMd  = st_md.matches > 0;
+    const hasXd  = st_xd.matches > 0;
+    const hasWd  = st_wd.matches > 0;
+    const hasWs  = st_ws.matches > 0;
+    const hasMs  = st_ms.matches > 0;
+
+    const profileData = {
+      displayName: name,
+      photoURL: null,
+      linkedUID: null,
+      stats: st_all,
+      ratings: computeRatings(st_all),
+      statsByEvent: {},
+      ratingsByEvent: {},
+      h2h: {},
+    };
+    if (hasMd) { profileData.statsByEvent.md = st_md; profileData.ratingsByEvent.md = computeRatings(st_md); }
+    if (hasXd) { profileData.statsByEvent.xd = st_xd; profileData.ratingsByEvent.xd = computeRatings(st_xd); }
+    if (hasWd) { profileData.statsByEvent.wd = st_wd; profileData.ratingsByEvent.wd = computeRatings(st_wd); }
+    if (hasWs) { profileData.statsByEvent.ws = st_ws; profileData.ratingsByEvent.ws = computeRatings(st_ws); }
+    if (hasMs) { profileData.statsByEvent.ms = st_ms; profileData.ratingsByEvent.ms = computeRatings(st_ms); }
+
+    try {
+      if (existingId) {
+        // Merge into existing — update stats/ratings, preserve linkedUID/photoURL
+        await db.collection('webPlayers').doc(id).update({
+          stats: profileData.stats,
+          ratings: profileData.ratings,
+          statsByEvent: profileData.statsByEvent,
+          ratingsByEvent: profileData.ratingsByEvent,
+        });
+        log(`  ↩ updated  ${name.padEnd(34)} md:${hasMd?st_md.matches+'M':'-'} wd:${hasWd?st_wd.matches+'M':'-'} xd:${hasXd?st_xd.matches+'M':'-'} ws:${hasWs?st_ws.matches+'M':'-'} ms:${hasMs?st_ms.matches+'M':'-'} overall:${profileData.ratings.overall}`, 'ok');
+      } else {
+        profileData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection('webPlayers').doc(id).set(profileData);
+        log(`  ✓ created  ${name.padEnd(34)} md:${hasMd?st_md.matches+'M':'-'} wd:${hasWd?st_wd.matches+'M':'-'} xd:${hasXd?st_xd.matches+'M':'-'} ws:${hasWs?st_ws.matches+'M':'-'} ms:${hasMs?st_ms.matches+'M':'-'} overall:${profileData.ratings.overall}`, 'ok');
+      }
+    } catch(e) {
+      log(`  ✗ ${name}: ${e.message}`, 'err');
+    }
+  }
+
+  // ── Step 2: Create/update tournament ──
+  log('\n── Step 2: Creating tournament ──', 'hdr');
+  try {
+    // Check if tournament with same name already exists
+    const existing = await db.collection('webTournaments')
+      .where('name', '==', '2026 MN Hmong Tournament').limit(1).get();
+    let ref;
+    if (!existing.empty) {
+      ref = db.collection('webTournaments').doc(existing.docs[0].id);
+      const { doc } = buildTournamentDoc(playerIdMap);
+      await ref.update({ events: doc.events, eventData: doc.eventData, status: doc.status });
+      log(`  ↩ Tournament updated: ${ref.id}`, 'ok');
+    } else {
+      const built = buildTournamentDoc(playerIdMap);
+      ref = built.ref;
+      await ref.set(built.doc);
+      log(`  ✓ Tournament created: ${ref.id}`, 'ok');
+    }
+    log(`  → https://athletebridge-63176.web.app/tournament/?id=${ref.id}`, 'ok');
+  } catch(e) {
+    log(`  ✗ Tournament: ${e.message}`, 'err');
+  }
+
+  log('\n✓ Seed complete!', 'ok');
+  document.getElementById('btnSeed').disabled = false;
+}
+</script>
+</body>
+</html>
