@@ -98,6 +98,19 @@ struct CoachHomeView: View {
                     }
 
                     NavigationLink {
+                        ExploreMapView()
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                    } label: {
+                        HStack {
+                            Image(systemName: "map.fill")
+                                .foregroundColor(Color("LogoGreen"))
+                            Text("Explore Map")
+                                .font(.body)
+                        }
+                    }
+
+                    NavigationLink {
                         PlayersToPlayWithView()
                             .environmentObject(firestore)
                             .environmentObject(auth)

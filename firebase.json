@@ -5,46 +5,35 @@
   "firestore": {
     "rules": "AthleteBridge/firestore.rules"
   },
-  "hosting": {
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/api/signup",
-        "function": "signupApi"
-      },
-      {
-        "source": "/api/prices",
-        "function": "getPCPrices"
-      },
-      {
-        "source": "/api/ebay-image",
-        "function": "getEbayImage"
-      },
-      {
-        "source": "/api/search-jp",
-        "function": "searchJapanesePC"
-      },
-      {
-        "source": "/api/jp-sets",
-        "function": "getJapaneseSets"
-      },
-      {
-        "source": "/api/search-scp",
-        "function": "searchSCP"
-      },
-      {
-        "source": "/api/search-promo",
-        "function": "searchPCPromos"
-      },
-      {
-        "source": "/api/psa-cert",
-        "function": "getPSACert"
-      }
-    ]
-  }
+  "hosting": [
+    {
+      "site": "athletebridge-63176",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "public/moneymogging101/**"
+      ],
+      "rewrites": [
+        { "source": "/api/signup",       "function": "signupApi" },
+        { "source": "/api/prices",       "function": "getPCPrices" },
+        { "source": "/api/ebay-image",   "function": "getEbayImage" },
+        { "source": "/api/search-jp",    "function": "searchJapanesePC" },
+        { "source": "/api/jp-sets",      "function": "getJapaneseSets" },
+        { "source": "/api/search-scp",   "function": "searchSCP" },
+        { "source": "/api/search-promo", "function": "searchPCPromos" },
+        { "source": "/api/psa-cert",     "function": "getPSACert" }
+      ]
+    },
+    {
+      "site": "moneymogging101",
+      "public": "public/moneymogging101",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        { "source": "/api/stock-history",    "function": "getStockHistory" },
+        { "source": "/api/dividend-history", "function": "getDividendHistory" }
+      ]
+    }
+  ]
 }

@@ -7,6 +7,7 @@ struct ClientConfirmedBookingsView: View {
 
     @State private var bookingToCancel: FirestoreManager.BookingItem? = nil
     @State private var showCancelAlert: Bool = false
+    @State private var cancelPolicyHours: Int = 0
     @State private var selectedBookingForDetail: FirestoreManager.BookingItem? = nil
 
     @State private var bookingToReschedule: FirestoreManager.BookingItem? = nil
@@ -70,6 +71,13 @@ struct ClientConfirmedBookingsView: View {
 
                                     Button {
                                         bookingToCancel = b
+                                        cancelPolicyHours = 0
+                                        // Look up the coach's cancellation policy before showing the alert text
+                                        if !b.coachID.isEmpty {
+                                            firestore.fetchCoachCancellationWindow(coachId: b.coachID) { hours in
+                                                DispatchQueue.main.async { cancelPolicyHours = hours }
+                                            }
+                                        }
                                         showCancelAlert = true
                                     } label: {
                                         Text("Cancel Booking")
@@ -107,7 +115,13 @@ struct ClientConfirmedBookingsView: View {
                 }
             }
         } message: {
-            Text("Are you sure you want to cancel this booking? The coach will be notified.")
+            if let booking = bookingToCancel, isInsideCancellationWindow(booking) {
+                Text(booking.requiresPaymentUpfront == true
+                     ? "This coach has a \(cancelPolicyHours)-hour cancellation policy. Cancelling now means your deposit will not be refunded."
+                     : "Heads up: this coach has a \(cancelPolicyHours)-hour cancellation policy and you're inside that window. The coach will be notified.")
+            } else {
+                Text("Are you sure you want to cancel this booking? The coach will be notified.")
+            }
         }
         .sheet(item: $bookingToReschedule) { booking in
             ClientRescheduleView(booking: booking) {
@@ -131,7 +145,17 @@ struct ClientConfirmedBookingsView: View {
         }
     }
 
+    /// True when cancelling this booking now falls inside the coach's cancellation window.
+    private func isInsideCancellationWindow(_ booking: FirestoreManager.BookingItem) -> Bool {
+        guard cancelPolicyHours > 0, let start = booking.startAt else { return false }
+        return start.timeIntervalSinceNow < Double(cancelPolicyHours) * 3600
+    }
+
     private func cancelBooking(_ booking: FirestoreManager.BookingItem) {
+        // Late cancellation with an upfront deposit: record the forfeit on the booking
+        if isInsideCancellationWindow(booking), booking.requiresPaymentUpfront == true {
+            firestore.markDepositForfeited(bookingId: booking.id, coachId: booking.coachID, clientId: booking.clientID)
+        }
         let isGroup = booking.isGroupBooking ?? false || booking.allCoachIDs.count > 1
 
         // Use appropriate update function based on booking type

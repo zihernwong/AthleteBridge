@@ -53,8 +53,10 @@ struct Coach: Identifiable, Hashable {
     let phoneVerified: Bool
     // Places to play this coach is associated with (array of PlaceToPlay document IDs)
     let linkedPlaceIds: [String]
+    // Client cancellations within this many hours of a session forfeit the deposit (0 = no policy)
+    let cancellationWindowHours: Int
 
-    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free, phoneVerified: Bool = false, linkedPlaceIds: [String] = []) {
+    init(id: String = UUID().uuidString, name: String, specialties: [String], experienceYears: Int, availability: [String], bio: String? = nil, hourlyRate: Double? = nil, photoURLString: String? = nil, meetingPreference: String? = nil, zipCode: String? = nil, city: String? = nil, payments: [String: String]? = nil, rateRange: [Double]? = nil, tournamentSoftwareLink: String? = nil, subscriptionTier: CoachTier = .free, phoneVerified: Bool = false, linkedPlaceIds: [String] = [], cancellationWindowHours: Int = 0) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespaces)
         self.specialties = specialties.map { $0.trimmingCharacters(in: .whitespaces) }
@@ -71,6 +73,7 @@ struct Coach: Identifiable, Hashable {
         self.subscriptionTier = subscriptionTier
         self.phoneVerified = phoneVerified
         self.linkedPlaceIds = linkedPlaceIds
+        self.cancellationWindowHours = max(0, cancellationWindowHours)
         // Normalize rate range: ensure min <= max, clamp negatives to 0
         if let range = rateRange, range.count >= 2 {
             let lower = max(0, range[0])
@@ -421,6 +424,25 @@ struct StringerOrder: Identifiable, Hashable {
     let createdAt: Date
     let status: String // "placed", "accepted", "stringing", "completed", "declined"
     let buyerName: String
+    // Timestamp per status stage, written on every status change (shared with Android)
+    var statusHistory: [String: Date] = [:]
+
+    /// Ordered pipeline stages for the progress timeline.
+    static let timelineStages = ["placed", "accepted", "stringing", "ready_for_pickup", "picked_up"]
+
+    func stageTimestamp(_ stage: String) -> Date? {
+        if stage == "placed" { return statusHistory[stage] ?? createdAt }
+        return statusHistory[stage]
+    }
+
+    func isStageReached(_ stage: String) -> Bool {
+        let current = status.lowercased()
+        guard let stageIdx = Self.timelineStages.firstIndex(of: stage) else { return false }
+        if let currentIdx = Self.timelineStages.firstIndex(of: current) {
+            return stageIdx <= currentIdx
+        }
+        return current == "completed"
+    }
 }
 
 // MARK: - Signup Events
@@ -446,6 +468,18 @@ struct SignupEvent: Identifiable, Hashable {
     let signupCount: Int
     let createdBy: String
     let signups: [SignupEventSignup]
+    // People waiting for a spot, promoted first-in-first-out when someone drops out
+    var waitlist: [SignupEventSignup] = []
+
+    func isWaitlisted(userId: String) -> Bool {
+        waitlist.contains { $0.userId == userId }
+    }
+    /// 1-based position in the waitlist queue, or nil if not waitlisted.
+    func waitlistPosition(userId: String) -> Int? {
+        let sorted = waitlist.sorted { $0.signedUpAt < $1.signedUpAt }
+        guard let idx = sorted.firstIndex(where: { $0.userId == userId }) else { return nil }
+        return idx + 1
+    }
     var spotsRemaining: Int { max(0, maxSignups - signupCount) }
     var isFull: Bool { signupCount >= maxSignups }
     var shareURL: URL? { URL(string: "https://athletebridge-63176.web.app/signup/?event=\(id)") }

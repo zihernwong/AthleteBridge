@@ -1,6 +1,8 @@
 import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseStorage
+import PhotosUI
 
 struct ChatView: View {
     let chatId: String
@@ -9,6 +11,8 @@ struct ChatView: View {
     @State private var messages: [Message] = []
     @State private var listener: ListenerRegistration? = nil
     @State private var sending: Bool = false
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var isUploadingImage: Bool = false
     // locally track which message IDs we've already marked as read to avoid repeated writes
     @State private var locallyMarkedRead: Set<String> = []
     @State private var otherParticipantUID: String? = nil
@@ -210,6 +214,26 @@ struct ChatView: View {
 
             // Composer
             HStack(spacing: 8) {
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    if isUploadingImage {
+                        ProgressView().frame(width: 28)
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.title3)
+                            .foregroundColor(Color("LogoBlue"))
+                    }
+                }
+                .disabled(isUploadingImage)
+                .onChange(of: selectedPhotoItem) { _, item in
+                    guard let item = item else { return }
+                    Task {
+                        if let data = try? await item.loadTransferable(type: Data.self) {
+                            await MainActor.run { sendImage(data) }
+                        }
+                        await MainActor.run { selectedPhotoItem = nil }
+                    }
+                }
+
                 TextField("Write a message...", text: $messageText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(sending)
@@ -355,7 +379,7 @@ struct ChatView: View {
                     for (k,v) in rb { tmp[k] = v.dateValue() }
                     readByMap = tmp
                 }
-                mapped.append(Message(id: id, senderId: sender, text: text, createdAt: createdAt, readBy: readByMap))
+                mapped.append(Message(id: id, senderId: sender, text: text, createdAt: createdAt, readBy: readByMap, imageURL: data["imageURL"] as? String))
             }
             // Ensure we have display names/photos for all senders to avoid showing raw UIDs.
             let senderIds = Array(Set(mapped.map { $0.senderId }).filter { !$0.isEmpty })
@@ -457,6 +481,61 @@ struct ChatView: View {
         ]) { _ in }
     }
 
+    /// Upload a picked photo to Storage and send it as an image message.
+    private func sendImage(_ data: Data) {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        isUploadingImage = true
+
+        // Downscale to keep uploads fast; fall back to original data if decoding fails
+        let uploadData: Data = {
+            guard let ui = UIImage(data: data) else { return data }
+            let resized = ui.resizeMaintainingAspectRatio(targetSize: CGSize(width: 1280, height: 1280))
+            return resized.jpegData(compressionQuality: 0.75) ?? data
+        }()
+
+        let ref = Storage.storage().reference().child("chat_images/\(chatId)/\(UUID().uuidString).jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        ref.putData(uploadData, metadata: metadata) { _, err in
+            if let err = err {
+                DispatchQueue.main.async {
+                    self.isUploadingImage = false
+                    firestore.showToast("Failed to upload photo: \(err.localizedDescription)")
+                }
+                return
+            }
+            ref.downloadURL { url, _ in
+                guard let url = url else {
+                    DispatchQueue.main.async { self.isUploadingImage = false }
+                    return
+                }
+                let newDoc = messagesColl.document()
+                let userTypeUpper = (firestore.currentUserType ?? "").uppercased()
+                let userColl = (userTypeUpper == "COACH") ? Firestore.firestore().collection("coaches") : Firestore.firestore().collection("clients")
+                let payload: [String: Any] = [
+                    "senderRef": userColl.document(uid),
+                    "senderId": uid,
+                    "text": "",
+                    "imageURL": url.absoluteString,
+                    "createdAt": FieldValue.serverTimestamp()
+                ]
+                let batch = Firestore.firestore().batch()
+                batch.setData(payload, forDocument: newDoc)
+                batch.updateData(["lastMessageText": "📷 Photo", "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatDoc)
+                batch.commit { err in
+                    DispatchQueue.main.async {
+                        self.isUploadingImage = false
+                        if let err = err {
+                            firestore.showToast("Failed to send photo: \(err.localizedDescription)")
+                        } else {
+                            self.updateMyPresence()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func sendMessage() {
         let trimmed = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let uid = Auth.auth().currentUser?.uid else { return }
@@ -498,12 +577,43 @@ struct ChatView: View {
 }
 
 // MARK: - Models & Cells
+
+/// Image message bubble with progressive loading.
+fileprivate struct ChatImageBubble: View {
+    let url: URL
+
+    var body: some View {
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .empty:
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 200, height: 200)
+                    .overlay(ProgressView())
+            case .success(let img):
+                img.resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.6, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            case .failure(_):
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 200, height: 120)
+                    .overlay(Image(systemName: "photo").foregroundColor(.secondary))
+            @unknown default:
+                EmptyView()
+            }
+        }
+    }
+}
+
 fileprivate struct Message: Identifiable, Equatable {
     let id: String
     let senderId: String
     let text: String
     let createdAt: Date?
     let readBy: [String: Date]?
+    var imageURL: String? = nil
 }
 
 fileprivate struct MessageRow: View {
@@ -541,12 +651,16 @@ fileprivate struct MessageRow: View {
 
                 // Outgoing message: right aligned bubble
                 VStack(alignment: .trailing, spacing: 6) {
-                    Text(message.text)
-                        .foregroundColor(.white)
-                        .padding(12)
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                        .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .trailing)
+                    if let imageURL = message.imageURL, let url = URL(string: imageURL) {
+                        ChatImageBubble(url: url)
+                    } else {
+                        Text(message.text)
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .trailing)
+                    }
 
                     if let date = message.createdAt {
                         Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))
@@ -604,12 +718,16 @@ fileprivate struct MessageRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    Text(message.text)
-                        .foregroundColor(.primary)
-                        .padding(12)
-                        .background(Color(UIColor.secondarySystemBackground))
-                        .cornerRadius(12)
-                        .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .leading)
+                    if let imageURL = message.imageURL, let url = URL(string: imageURL) {
+                        ChatImageBubble(url: url)
+                    } else {
+                        Text(message.text)
+                            .foregroundColor(.primary)
+                            .padding(12)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(12)
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.72, alignment: .leading)
+                    }
 
                     if let date = message.createdAt {
                         Text(DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .short))

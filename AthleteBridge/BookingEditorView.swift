@@ -31,6 +31,8 @@ struct BookingEditorView: View {
     // selectedLocationId references a document id in clients/{uid}/locations (firestore.locations)
     @State private var selectedLocationId: String = ""
     @State private var notes: String = ""
+    @State private var repeatWeekly: Bool = false
+    @State private var repeatWeeks: Int = 4
 
     @State private var isSaving = false
     @State private var alertMessage: String = ""
@@ -333,6 +335,21 @@ struct BookingEditorView: View {
                         TextEditor(text: $notes).frame(minHeight: 80)
                     } header: {
                         Text("Details")
+                    }
+
+                    // Weekly repeat — book the same slot for several weeks in a row
+                    if !isGroupBooking {
+                        Section {
+                            Toggle("Repeat weekly", isOn: $repeatWeekly)
+                            if repeatWeekly {
+                                Stepper("Weeks: \(repeatWeeks)", value: $repeatWeeks, in: 2...12)
+                                Text("This will send \(repeatWeeks) booking requests, one per week starting from the selected date.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } header: {
+                            Text("Recurring")
+                        }
                     }
 
                     Section {
@@ -857,23 +874,52 @@ struct BookingEditorView: View {
             let coachUid = coachIds[0]
             let clientNameExtra = firestore.currentClient?.name ?? ""
             let coachNameExtra = selectedCoach?.name ?? ""
-            let extra: [String: Any] = {
+            var extra: [String: Any] = {
                 var m: [String: Any] = [:]
                 if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }
                 if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
                 return m
             }()
-            firestore.saveBookingAndMirror(
-                coachId: coachUid,
-                clientId: clientUid,
-                startAt: startAt,
-                endAt: endAt,
-                status: "requested",
-                location: locationName,
-                notes: notes,
-                extra: extra,
-                completion: saveCompletion
-            )
+
+            let weeks = repeatWeekly ? min(max(repeatWeeks, 1), 12) : 1
+            if weeks > 1 {
+                // Tag the series so both apps can associate the weekly bookings
+                extra["recurrenceGroupId"] = UUID().uuidString
+                let saveGroup = DispatchGroup()
+                var firstError: Error? = nil
+                for week in 0..<weeks {
+                    let offset = TimeInterval(week * 7 * 24 * 3600)
+                    saveGroup.enter()
+                    firestore.saveBookingAndMirror(
+                        coachId: coachUid,
+                        clientId: clientUid,
+                        startAt: startAt.addingTimeInterval(offset),
+                        endAt: endAt.addingTimeInterval(offset),
+                        status: "requested",
+                        location: locationName,
+                        notes: notes,
+                        extra: extra
+                    ) { err in
+                        if let err = err, firstError == nil { firstError = err }
+                        saveGroup.leave()
+                    }
+                }
+                saveGroup.notify(queue: .main) {
+                    saveCompletion(firstError)
+                }
+            } else {
+                firestore.saveBookingAndMirror(
+                    coachId: coachUid,
+                    clientId: clientUid,
+                    startAt: startAt,
+                    endAt: endAt,
+                    status: "requested",
+                    location: locationName,
+                    notes: notes,
+                    extra: extra,
+                    completion: saveCompletion
+                )
+            }
         }
     }
 }

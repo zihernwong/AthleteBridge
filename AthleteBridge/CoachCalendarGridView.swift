@@ -217,7 +217,10 @@ import FirebaseAuth
                 if let reviews = coachReviews[coach.id], !reviews.isEmpty {
                     let avg = averageRating(from: reviews)
                     VStack {
-                        Text(String(format: "%.1f", avg)).font(.headline)
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill").font(.caption).foregroundColor(.yellow)
+                            Text(String(format: "%.1f", avg)).font(.headline)
+                        }
                         Text("(\(reviews.count))").font(.caption).foregroundColor(.secondary)
                     }
                 } else {

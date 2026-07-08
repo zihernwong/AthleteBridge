@@ -36,3 +36,9 @@ AthleteBridge/functions/.env
 # Ignore Firebase functions and node modules
 AthleteBridge/functions/
 **/node_modules/
+
+# Firebase hosting cache
+.firebase/
+
+# Xcode user state
+*.xcuserstate

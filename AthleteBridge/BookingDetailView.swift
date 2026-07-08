@@ -19,6 +19,8 @@ struct BookingDetailView: View {
     // Post-session notes state (coach-only)
     @State private var sessionNotesDraft: String = ""
     @State private var isSavingNotes: Bool = false
+    @State private var sessionRecapDraft: String = ""
+    @State private var isSavingRecap: Bool = false
 
     private var currentUserRole: String? {
         firestore.currentUserType?.uppercased()
@@ -144,6 +146,9 @@ struct BookingDetailView: View {
                     // Notes Section
                     notesSection
 
+                    // Shared session recap (coach edits, client reads)
+                    sessionRecapSection
+
                     // Rejection Reason (if applicable)
                     if let reason = booking.rejectionReason, !reason.isEmpty {
                         rejectionSection(reason)
@@ -160,7 +165,10 @@ struct BookingDetailView: View {
             }
             .navigationTitle("Booking Details")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { sessionNotesDraft = booking.coachNote ?? "" }
+            .onAppear {
+                sessionNotesDraft = booking.coachNote ?? ""
+                sessionRecapDraft = booking.sessionRecap ?? ""
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
@@ -461,6 +469,77 @@ struct BookingDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+        }
+    }
+
+    // MARK: - Session Recap (client-visible)
+
+    @ViewBuilder
+    private var sessionRecapSection: some View {
+        let recap = booking.sessionRecap ?? ""
+        if isCoachRole || !recap.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Session Recap")
+                    .font(.headline)
+
+                if isCoachRole {
+                    Text("Visible to the client — what you worked on and what to practice.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    TextEditor(text: $sessionRecapDraft)
+                        .frame(minHeight: 80, maxHeight: 160)
+                        .padding(6)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                        .font(.body)
+
+                    if sessionRecapDraft != recap {
+                        Button(action: saveSessionRecap) {
+                            HStack {
+                                if isSavingRecap {
+                                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    Text("Share Recap with Client")
+                                }
+                            }
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color("LogoGreen"))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .disabled(isSavingRecap)
+                    }
+                } else {
+                    Text(recap)
+                        .font(.body)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+        }
+    }
+
+    private func saveSessionRecap() {
+        guard let coachId = auth.user?.uid else { return }
+        isSavingRecap = true
+        firestore.saveSessionRecap(
+            bookingId: booking.id,
+            coachId: booking.coachID.isEmpty ? coachId : booking.coachID,
+            clientId: booking.clientID,
+            recap: sessionRecapDraft
+        ) { err in
+            DispatchQueue.main.async {
+                self.isSavingRecap = false
+                if let err = err {
+                    self.errorMessage = err.localizedDescription
+                } else {
+                    self.firestore.showToast("Session recap shared with client")
+                }
+            }
         }
     }
 

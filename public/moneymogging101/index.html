@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoneyMogging101 — Simulator, Dividends & Education</title>
+  <meta name="description" content="Simulate stock investments, track dividends, and learn econ basics in Gen Z." />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green:     #00e676;
+      --green-dim: rgba(0,230,118,.12);
+      --green-bdr: rgba(0,230,118,.28);
+      --red:       #ff5252;
+      --yellow:    #ffd740;
+      --blue:      #448aff;
+      --bg:        #0a0a0a;
+      --bg2:       #111;
+      --bg3:       #181818;
+      --border:    #222;
+      --text:      #f0f0f0;
+      --muted:     #666;
+      --radius:    14px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── NAV ── */
+    nav {
+      display: flex; align-items: center; gap: 0;
+      padding: 0 28px; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: rgba(10,10,10,.95);
+      backdrop-filter: blur(16px); z-index: 200; height: 56px;
+    }
+    .logo { font-size: 1.05rem; font-weight: 900; letter-spacing: -.02em; margin-right: 28px; white-space: nowrap; }
+    .logo span { color: var(--green); }
+    .tabs { display: flex; gap: 4px; }
+    .tab-btn {
+      background: none; border: none; color: var(--muted);
+      padding: 8px 16px; font-size: 0.88rem; font-weight: 700;
+      cursor: pointer; border-radius: 8px; transition: color .15s, background .15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--bg3); }
+    .tab-btn.active { color: var(--green); background: var(--green-dim); }
+
+    /* ── SHARED ── */
+    .section-wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ══════════════════════════════════
+       SIMULATOR TAB
+    ══════════════════════════════════ */
+    .hero { text-align: center; padding: 56px 20px 40px; }
+    .hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); font-weight: 900; letter-spacing: -.03em; line-height: 1.08; margin-bottom: 14px; }
+    .hero h1 .g { color: var(--green); }
+    .hero p { color: var(--muted); font-size: 1rem; max-width: 500px; margin: 0 auto 28px; line-height: 1.6; }
+    .presets { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px; }
+    .preset-btn {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 999px;
+      color: var(--text); padding: 7px 16px; font-size: 0.8rem; font-weight: 700;
+      cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+    }
+    .preset-btn:hover { border-color: var(--green); background: var(--green-dim); color: var(--green); }
+
+    .form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 28px; margin-bottom: 16px; }
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .field label { display: block; font-size: 0.68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+    .field input, .field select {
+      width: 100%; background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); padding: 10px 13px;
+      font-size: 0.93rem; font-weight: 600; outline: none; transition: border-color .15s;
+    }
+    .field input:focus, .field select:focus { border-color: var(--green); }
+    .field input::placeholder { color: var(--muted); font-weight: 400; }
+    .field input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.45); }
+
+    .toggle-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); margin-bottom: 16px; }
+    .toggle-label { font-size: 0.88rem; font-weight: 700; flex: 1; }
+    .toggle-sub { font-size: 0.75rem; color: var(--muted); display: block; margin-top: 2px; }
+    .switch { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .2s; }
+    .slider::before { content: ''; position: absolute; width: 17px; height: 17px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform .2s; }
+    .switch input:checked + .slider { background: var(--green); }
+    .switch input:checked + .slider::before { transform: translateX(19px); }
+    #recurring-fields { display: none; }
+    #recurring-fields.visible { display: grid; }
+
+    .sim-btn {
+      width: 100%; background: var(--green); color: #000; border: none;
+      border-radius: 12px; padding: 15px; font-size: 1rem; font-weight: 900;
+      cursor: pointer; transition: background .15s, transform .1s;
+    }
+    .sim-btn:hover { background: #00c853; transform: scale(1.01); }
+    .sim-btn:disabled { background: #1a3d28; color: #2a7a4a; cursor: not-allowed; transform: none; }
+
+    #results { display: none; margin-bottom: 60px; }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+    .stat-card .s-label { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+    .stat-card .s-val { font-size: 1.5rem; font-weight: 900; letter-spacing: -.02em; }
+    .stat-card .s-sub { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+    .positive { color: var(--green); } .negative { color: var(--red); }
+
+    .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; }
+    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+    .chart-title { font-size: 0.95rem; font-weight: 800; }
+    .chart-legend { display: flex; gap: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .chart-wrap { position: relative; height: 300px; }
+
+    .loading-state, .error-state { text-align: center; padding: 44px 20px; font-size: 0.9rem; color: var(--muted); }
+    .spinner { width: 26px; height: 26px; border: 2.5px solid rgba(0,230,118,.2); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: var(--red); font-weight: 700; margin-bottom: 8px; }
+
+    /* ══════════════════════════════════
+       EDUCATION TAB
+    ══════════════════════════════════ */
+    .edu-hero { text-align: center; padding: 52px 20px 36px; }
+    .edu-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
+    .edu-hero h1 .g { color: var(--green); }
+    .edu-hero p { color: var(--muted); max-width: 480px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
+
+    .edu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; padding: 0 20px 24px; max-width: 860px; margin: 0 auto; }
+    .edu-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
+    .edu-card-top { padding: 22px 22px 0; }
+    .edu-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .edu-term { font-size: 0.68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+    .edu-title { font-size: 1.25rem; font-weight: 900; letter-spacing: -.02em; margin-bottom: 6px; }
+    .edu-tagline { font-size: 0.82rem; color: var(--green); font-weight: 700; margin-bottom: 14px; }
+    .edu-body { font-size: 0.88rem; color: #bbb; line-height: 1.68; margin-bottom: 16px; }
+    .edu-body strong { color: var(--text); font-weight: 700; }
+
+    .impact-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 12px; font-size: 0.74rem; font-weight: 700; }
+    .pill-bull { background: rgba(0,230,118,.1); color: var(--green); border: 1px solid var(--green-bdr); }
+    .pill-bear { background: rgba(255,82,82,.1); color: var(--red); border: 1px solid rgba(255,82,82,.25); }
+    .pill-neutral { background: rgba(255,215,64,.1); color: var(--yellow); border: 1px solid rgba(255,215,64,.25); }
+
+    .edu-chart-wrap { padding: 0 16px 16px; height: 170px; position: relative; }
+
+    /* ── CONNECTIONS SECTION ── */
+    .connections { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
+    .connections h2 { font-size: 1.5rem; font-weight: 900; letter-spacing: -.025em; margin-bottom: 6px; }
+    .connections .sub { font-size: 0.88rem; color: var(--muted); margin-bottom: 28px; }
+    .flow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .flow-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    }
+    .flow-steps { display: flex; flex-direction: column; gap: 0; }
+    .flow-step { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+    .flow-step + .flow-step { border-top: 1px solid var(--border); }
+    .flow-num { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
+    .flow-num.g { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); }
+    .flow-num.r { background: rgba(255,82,82,.1); color: var(--red); border: 1px solid rgba(255,82,82,.25); }
+    .flow-text { font-size: 0.83rem; line-height: 1.5; color: #ccc; }
+    .flow-text strong { color: var(--text); }
+    .flow-label { font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+
+    footer { border-top: 1px solid var(--border); padding: 26px 20px; text-align: center; font-size: 0.78rem; color: var(--muted); }
+    footer a { color: var(--green); text-decoration: none; }
+
+    /* ══════════════════════════════════
+       DIVIDENDS TAB
+    ══════════════════════════════════ */
+    .div-hero { text-align: center; padding: 52px 20px 36px; }
+    .div-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
+    .div-hero h1 .g { color: var(--green); }
+    .div-hero p { color: var(--muted); max-width: 500px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
+
+    .div-form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 28px; margin-bottom: 16px; }
+
+    .drip-toggle-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--border); margin: 4px 0 18px; }
+    .drip-label { font-size: 0.88rem; font-weight: 700; flex: 1; }
+    .drip-sub { font-size: 0.75rem; color: var(--muted); display: block; margin-top: 2px; }
+
+    #div-results { display: none; margin-bottom: 60px; }
+
+    .div-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-bottom: 20px; }
+
+    .div-chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
+    .div-chart-wrap { position: relative; height: 300px; }
+
+    /* Payment history table */
+    .payment-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
+    .payment-card h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 16px; }
+    .pay-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+    .pay-table th { text-align: left; font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 10px 10px; border-bottom: 1px solid var(--border); }
+    .pay-table td { padding: 10px; border-bottom: 1px solid #181818; color: #ccc; }
+    .pay-table td:first-child { color: var(--muted); }
+    .pay-table td.pos { color: var(--green); font-weight: 700; }
+    .pay-table tr:last-child td { border-bottom: none; }
+    .pay-table .drip-badge { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); border-radius: 999px; padding: 2px 8px; font-size: 0.68rem; font-weight: 800; margin-left: 6px; }
+    .pay-table .proj-badge { background: rgba(68,138,255,.12); color: var(--blue); border: 1px solid rgba(68,138,255,.3); border-radius: 999px; padding: 2px 8px; font-size: 0.68rem; font-weight: 800; margin-left: 6px; }
+
+    /* Annual summary */
+    .annual-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
+    .annual-card h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 16px; }
+    .annual-wrap { position: relative; height: 180px; }
+
+    /* ══════════════════════════════════
+       PORTFOLIO TAB
+    ══════════════════════════════════ */
+    .port-hero { text-align: center; padding: 52px 20px 36px; }
+    .port-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
+    .port-hero h1 .g { color: var(--green); }
+    .port-hero p { color: var(--muted); max-width: 500px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
+    .port-empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .port-empty .port-empty-icon { font-size: 2.5rem; margin-bottom: 14px; }
+    .port-empty .port-empty-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .port-btn-sm { border-radius: 8px; padding: 4px 9px; font-size: 0.75rem; font-weight: 700; cursor: pointer; border: 1px solid; }
+
+    @media (max-width: 500px) {
+      nav { padding: 0 16px; }
+      .logo { margin-right: 12px; font-size: 0.95rem; }
+      .tab-btn { padding: 7px 12px; font-size: 0.82rem; }
+      .form-card { padding: 18px 14px; }
+      .edu-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="logo">money<span>mogging</span>101</div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('simulator', this)">📈 Simulator</button>
+    <button class="tab-btn" onclick="switchTab('dividends', this)">💰 Dividends</button>
+    <button class="tab-btn" onclick="switchTab('education', this)">📚 Education</button>
+    <button class="tab-btn" onclick="switchTab('portfolio', this)">💼 Portfolio</button>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════
+     SIMULATOR TAB
+════════════════════════════════════════ -->
+<div id="page-simulator" class="page active">
+
+  <div class="hero">
+    <h1>What if you had<br>just <span class="g">invested</span>?</h1>
+    <p>Drop in any stock, pick a date, and see exactly how much you would have made. No cap.</p>
+    <div class="presets">
+      <button class="preset-btn" onclick="loadPreset('SPY','2015-01-01',10000,true,500,'monthly')">📈 S&P 500 since 2015</button>
+      <button class="preset-btn" onclick="loadPreset('AAPL','2020-03-23',5000,false,0,'monthly')">🍎 Apple — COVID low</button>
+      <button class="preset-btn" onclick="loadPreset('NVDA','2023-01-01',5000,true,200,'monthly')">🚀 NVIDIA since 2023</button>
+      <button class="preset-btn" onclick="loadPreset('BTC-USD','2020-01-01',1000,true,100,'monthly')">₿ Bitcoin since 2020</button>
+      <button class="preset-btn" onclick="loadPreset('TSLA','2019-01-01',5000,false,0,'monthly')">⚡ Tesla since 2019</button>
+    </div>
+  </div>
+
+  <div class="section-wrap">
+    <div class="form-card">
+      <div class="form-row">
+        <div class="field">
+          <label>Ticker Symbol</label>
+          <input id="ticker" type="text" placeholder="AAPL, SPY, TSLA…" maxlength="12" />
+        </div>
+        <div class="field">
+          <label>Start Date</label>
+          <input id="start-date" type="date" />
+        </div>
+        <div class="field">
+          <label>End Date</label>
+          <input id="end-date" type="date" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Initial Investment ($)</label>
+          <input id="initial-amount" type="number" placeholder="e.g. 1000" min="1" step="1" />
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-label">
+          Recurring Investment
+          <span class="toggle-sub">Dollar-cost average on a schedule (DCA)</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="recurring-toggle" onchange="toggleRecurring(this.checked)" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="form-row" id="recurring-fields">
+        <div class="field">
+          <label>Amount per Period ($)</label>
+          <input id="recurring-amount" type="number" placeholder="e.g. 100" min="1" step="1" />
+        </div>
+        <div class="field">
+          <label>Frequency</label>
+          <select id="frequency">
+            <option value="weekly">Weekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+      </div>
+      <button class="sim-btn" id="sim-btn" onclick="runSimulation()">Simulate →</button>
+    </div>
+
+    <div id="results">
+      <div class="stats-row" id="stats-row"></div>
+      <div class="chart-card" id="sim-chart-card">
+        <div class="chart-header">
+          <div class="chart-title" id="chart-title">Portfolio Value Over Time</div>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Portfolio</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#333;border:1.5px dashed #555"></div>Invested</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="sim-chart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     DIVIDENDS TAB
+════════════════════════════════════════ -->
+<div id="page-dividends" class="page">
+
+  <div class="div-hero">
+    <h1>Stack bags while you <span class="g">sleep 💸</span></h1>
+    <p>Enter any dividend-paying stock and see your real payout history — then watch DRIP turn it into a compounding money machine.</p>
+  </div>
+
+  <div class="section-wrap">
+    <!-- PRESETS -->
+    <div class="presets" style="margin-bottom:28px">
+      <button class="preset-btn" onclick="loadDivPreset('SCHD',100,'2015-01-01')">📊 SCHD — 100 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('KO',50,'2010-01-01')">🥤 Coca-Cola — 50 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('AAPL',100,'2015-01-01')">🍎 Apple — 100 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('VYM',75,'2015-01-01')">📈 VYM ETF — 75 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('JNJ',30,'2010-01-01')">💊 J&J — 30 shares</button>
+    </div>
+
+    <div class="div-form-card">
+      <div class="form-row">
+        <div class="field">
+          <label>Ticker Symbol</label>
+          <input id="div-ticker" type="text" placeholder="AAPL, SCHD, KO…" maxlength="12" />
+        </div>
+        <div class="field">
+          <label>Shares Owned</label>
+          <input id="div-shares" type="number" placeholder="e.g. 100" min="1" step="1" />
+        </div>
+        <div class="field">
+          <label>Start Date</label>
+          <input id="div-start" type="date" />
+        </div>
+        <div class="field">
+          <label>End Date</label>
+          <input id="div-end" type="date" />
+        </div>
+      </div>
+
+      <div class="drip-toggle-row">
+        <div class="drip-label">
+          Reinvest Dividends (DRIP)
+          <span class="drip-sub">Automatically buy more shares with each payout — watch compounding go crazy</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="drip-toggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <button class="sim-btn" id="div-btn" onclick="runDividendSim()">Simulate Dividends →</button>
+    </div>
+
+    <div id="div-results">
+      <div class="div-stats-row" id="div-stats"></div>
+
+      <div class="div-chart-card">
+        <div class="chart-header">
+          <div class="chart-title" id="div-chart-title">Dividend Income Over Time</div>
+          <div class="chart-legend" id="div-chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>With DRIP</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#448aff;border:1.5px dashed #448aff"></div>Without DRIP</div>
+          </div>
+        </div>
+        <div class="div-chart-wrap"><canvas id="div-chart"></canvas></div>
+      </div>
+
+      <div class="annual-card">
+        <h3>Annual Dividend Income 📅</h3>
+        <div class="annual-wrap"><canvas id="annual-chart"></canvas></div>
+      </div>
+
+      <div class="payment-card">
+        <h3 id="pay-table-title">Recent Dividend Payments</h3>
+        <div style="overflow-x:auto">
+          <table class="pay-table" id="pay-table">
+            <thead><tr>
+              <th>Date</th><th>$ / Share</th><th>Your Payout</th><th>Shares After</th><th>Cumulative</th>
+            </tr></thead>
+            <tbody id="pay-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- end dividends page -->
+
+<!-- ══════════════════════════════════════
+     EDUCATION TAB
+════════════════════════════════════════ -->
+<div id="page-education" class="page">
+
+  <div class="edu-hero">
+    <h1>Educate yo'self <span class="g">fr 📚</span></h1>
+    <p>The economic terms that lowkey control everything — your portfolio, your rent, your whole bag. Explained no cap.</p>
+  </div>
+
+  <div class="edu-grid">
+
+    <!-- GDP -->
+    <div class="edu-card">
+      <div class="edu-card-top">
+        <div class="edu-card-icon">📊</div>
+        <div class="edu-term">Term 01</div>
+        <div class="edu-title">GDP</div>
+        <div class="edu-tagline">The economy's report card, no cap</div>
+        <div class="edu-body">
+          <strong>Gross Domestic Product</strong> is the total value of everything a country produces in a year — goods, services, all of it. Think of it as the economy's GPA. <strong>When GDP grows</strong>, businesses are printing, people have jobs, and the market usually follows. <strong>When GDP goes negative two quarters in a row</strong>, that's a recession era and portfolios get cooked. The 2020 COVID crash dropped GDP by nearly <strong>3%</strong> — the worst since the Great Depression.
+        </div>
+        <div class="impact-pills">
+          <span class="pill pill-bull">📈 GDP rising → bull market energy</span>
+          <span class="pill pill-bear">📉 GDP negative → recession szn</span>
+        </div>
+      </div>
+      <div class="edu-chart-wrap"><canvas id="chart-gdp"></canvas></div>
+    </div>
+
+    <!-- INFLATION -->
+    <div class="edu-card">
+      <div class="edu-card-top">
+        <div class="edu-card-icon">🔥</div>
+        <div class="edu-term">Term 02</div>
+        <div class="edu-title">Inflation</div>
+        <div class="edu-tagline">Why your $20 hits different than it used to</div>
+        <div class="edu-body">
+          Inflation is prices going up over time across the whole economy. A little bit (<strong>~2%</strong>) is actually healthy and what the Fed targets. But when inflation goes <strong>8%+</strong> like in 2022? Everything gets expensive — groceries, rent, gas — and the Fed has to step in with rate hikes that tank growth stocks. <strong>Moderate inflation</strong> is fine for equities. <strong>Runaway inflation</strong> is the villain arc.
+        </div>
+        <div class="impact-pills">
+          <span class="pill pill-bull">📈 ~2% inflation → market slays</span>
+          <span class="pill pill-neutral">😐 3–5% → market gets nervous</span>
+          <span class="pill pill-bear">📉 8%+ → bear market szn</span>
+        </div>
+      </div>
+      <div class="edu-chart-wrap"><canvas id="chart-inflation"></canvas></div>
+    </div>
+
+    <!-- CPI -->
+    <div class="edu-card">
+      <div class="edu-card-top">
+        <div class="edu-card-icon">🧾</div>
+        <div class="edu-term">Term 03</div>
+        <div class="edu-title">CPI</div>
+        <div class="edu-tagline">The receipts on how expensive life is getting</div>
+        <div class="edu-body">
+          <strong>Consumer Price Index</strong> tracks the price of a fixed basket of everyday items — groceries, rent, gas, clothes. It's literally how the government measures inflation. Every month when CPI data drops, <strong>the whole market reacts</strong> in real time. CPI coming in <strong>hotter than expected</strong> = red day. CPI cooling down = green day. Wall Street watches this number like it's a Kendrick album drop.
+        </div>
+        <div class="impact-pills">
+          <span class="pill pill-bull">📈 CPI cooling → rally incoming</span>
+          <span class="pill pill-bear">📉 CPI hot → market dips on the news</span>
+        </div>
+      </div>
+      <div class="edu-chart-wrap"><canvas id="chart-cpi"></canvas></div>
+    </div>
+
+    <!-- INTEREST RATES -->
+    <div class="edu-card">
+      <div class="edu-card-top">
+        <div class="edu-card-icon">🏦</div>
+        <div class="edu-term">Term 04</div>
+        <div class="edu-title">Interest Rates</div>
+        <div class="edu-tagline">The Fed's main character energy that moves everything</div>
+        <div class="edu-body">
+          The <strong>Federal Reserve</strong> sets the benchmark interest rate to control inflation. When rates go up, <strong>borrowing gets expensive</strong> — mortgages, car loans, business credit all cost more. Tech and growth stocks especially hate high rates because their future profits get discounted hard. The Fed went from <strong>0.25% → 5.5%</strong> in under 2 years (2022–2023) — one of the fastest hike cycles ever, and the market felt it fr.
+        </div>
+        <div class="impact-pills">
+          <span class="pill pill-bull">📈 Rate cuts → market goes brr</span>
+          <span class="pill pill-bear">📉 Rate hikes → growth stocks cooked</span>
+        </div>
+      </div>
+      <div class="edu-chart-wrap"><canvas id="chart-rates"></canvas></div>
+    </div>
+
+  </div>
+
+  <!-- CONNECTIONS -->
+  <div class="connections">
+    <h2>How it all connects 🔗</h2>
+    <p class="sub">These four terms aren't separate — they're one big chain reaction. Here's how it plays out.</p>
+    <div class="flow-grid">
+
+      <div class="flow-card">
+        <div class="flow-label">🟢 Bull Scenario</div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-num g">1</div>
+            <div class="flow-text"><strong>GDP grows strong</strong> — economy is healthy, companies printing money</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num g">2</div>
+            <div class="flow-text"><strong>Inflation stays near 2%</strong> — prices rising but not crazy</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num g">3</div>
+            <div class="flow-text"><strong>Fed holds or cuts rates</strong> — borrowing stays cheap, business invests</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num g">4</div>
+            <div class="flow-text"><strong>CPI stays chill</strong> — consumers keep spending, confidence high</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num g">✓</div>
+            <div class="flow-text" style="color:var(--green);font-weight:700">Result: Stocks go up. Portfolio secured. 💰</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-card">
+        <div class="flow-label">🔴 Bear Scenario</div>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-num r">1</div>
+            <div class="flow-text"><strong>Inflation spikes</strong> — supply chain issues, too much money printed</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num r">2</div>
+            <div class="flow-text"><strong>CPI data comes in hot</strong> — everyday prices going up fast</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num r">3</div>
+            <div class="flow-text"><strong>Fed hikes interest rates</strong> aggressively to cool inflation down</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num r">4</div>
+            <div class="flow-text"><strong>GDP starts slowing</strong> — businesses borrow less, hiring freezes</div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num r">✗</div>
+            <div class="flow-text" style="color:var(--red);font-weight:700">Result: Stocks drop. Market in its villain era. 📉</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end education page -->
+
+<!-- ══════════════════════════════════════
+     PORTFOLIO TAB
+════════════════════════════════════════ -->
+<div id="page-portfolio" class="page">
+
+  <div class="port-hero">
+    <h1>Track your bag <span class="g">💼</span></h1>
+    <p>Add your holdings, see real-time gains and losses, and jump straight into dividend projections for any position.</p>
+  </div>
+
+  <div class="section-wrap">
+    <div class="form-card">
+      <div class="form-row">
+        <div class="field">
+          <label>Ticker Symbol</label>
+          <input id="port-ticker" type="text" placeholder="AAPL, SCHD, KO…" maxlength="12" />
+        </div>
+        <div class="field">
+          <label>Shares</label>
+          <input id="port-shares" type="number" placeholder="e.g. 100" min="0.001" step="any" />
+        </div>
+        <div class="field">
+          <label>Avg Cost Per Share ($)</label>
+          <input id="port-cost" type="number" placeholder="e.g. 150.00" min="0" step="any" />
+        </div>
+      </div>
+      <button class="sim-btn" id="port-add-btn" onclick="addPosition()">+ Add to Portfolio</button>
+    </div>
+
+    <div id="port-summary" style="display:none; margin-bottom:16px">
+      <div class="stats-row" id="port-stats"></div>
+    </div>
+
+    <div id="port-holdings-wrap" style="display:none; margin-bottom:60px">
+      <div class="payment-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <h3 id="port-holdings-title">Your Holdings</h3>
+          <button class="preset-btn" id="port-refresh-btn" onclick="refreshPortfolio()">🔄 Refresh Prices</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="pay-table" id="port-table">
+            <thead><tr>
+              <th>Ticker</th><th>Shares</th><th>Avg Cost</th><th>Current</th><th>Day Chg</th><th>Value</th><th>P&amp;L</th><th></th>
+            </tr></thead>
+            <tbody id="port-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="port-empty" class="port-empty">
+      <div class="port-empty-icon">💼</div>
+      <div class="port-empty-title">No holdings yet</div>
+      <div>Add your first stock above to start tracking your portfolio</div>
+    </div>
+  </div>
+</div><!-- end portfolio page -->
+
+<footer>
+  <p>© 2026 MoneyMogging101 · Data via Yahoo Finance & US BLS · <a href="#">Past returns ≠ future results</a></p>
+</footer>
+
+<script>
+// ═══════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════
+let eduChartsInit = false;
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (name === 'education' && !eduChartsInit) {
+    eduChartsInit = true;
+    requestAnimationFrame(initEduCharts);
+  }
+  if (name === 'portfolio') renderPortfolioUI();
+}
+
+// ═══════════════════════════════════════
+//  SIMULATOR
+// ═══════════════════════════════════════
+const today = new Date();
+const fiveYearsAgo = new Date(today); fiveYearsAgo.setFullYear(today.getFullYear() - 5);
+document.getElementById('end-date').value   = today.toISOString().slice(0,10);
+document.getElementById('start-date').value = fiveYearsAgo.toISOString().slice(0,10);
+document.getElementById('end-date').max     = today.toISOString().slice(0,10);
+
+let simChart = null;
+
+function toggleRecurring(on) {
+  document.getElementById('recurring-fields').className = 'form-row' + (on ? ' visible' : '');
+}
+
+function loadPreset(ticker, startDate, initial, recurring, recurAmt, freq) {
+  document.getElementById('ticker').value             = ticker;
+  document.getElementById('start-date').value         = startDate;
+  document.getElementById('end-date').value           = today.toISOString().slice(0,10);
+  document.getElementById('initial-amount').value     = initial;
+  document.getElementById('recurring-toggle').checked = recurring;
+  toggleRecurring(recurring);
+  if (recurring) {
+    document.getElementById('recurring-amount').value = recurAmt;
+    document.getElementById('frequency').value        = freq;
+  }
+  runSimulation();
+}
+
+function advanceDate(date, freq) {
+  const d = new Date(date);
+  if (freq === 'weekly')  d.setDate(d.getDate() + 7);
+  if (freq === 'monthly') d.setMonth(d.getMonth() + 1);
+  if (freq === 'yearly')  d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+
+function simulate(timestamps, closes, startTs, endTs, initialAmount, recurring, recurAmt, freq) {
+  let si = timestamps.findIndex(ts => ts >= startTs);
+  if (si === -1) return null;
+  const startPrice = closes[si]; if (!startPrice) return null;
+  let shares = initialAmount / startPrice, totalInvested = initialAmount;
+  let nextRecur = advanceDate(new Date(timestamps[si] * 1000), freq);
+  const labels = [], portfolio = [], invested = [];
+  for (let i = si; i < timestamps.length; i++) {
+    const ts = timestamps[i]; if (ts > endTs) break;
+    const price = closes[i]; if (!price) continue;
+    const date = new Date(ts * 1000);
+    if (recurring && recurAmt > 0) {
+      while (date >= nextRecur) {
+        shares += recurAmt / price; totalInvested += recurAmt;
+        nextRecur = advanceDate(nextRecur, freq);
+      }
+    }
+    labels.push(date);
+    portfolio.push(+(shares * price).toFixed(2));
+    invested.push(+totalInvested.toFixed(2));
+  }
+  const finalValue = portfolio[portfolio.length - 1] || 0;
+  const profit = finalValue - totalInvested;
+  return { labels, portfolio, invested, totalInvested, finalValue, profit, pct: totalInvested > 0 ? (profit/totalInvested)*100 : 0 };
+}
+
+const fmt = n => new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
+
+function renderSimStats(sim, ticker, name, currency) {
+  const pos = sim.profit >= 0;
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card"><div class="s-label">Total Invested</div><div class="s-val">${fmt(sim.totalInvested)}</div><div class="s-sub">${currency}</div></div>
+    <div class="stat-card"><div class="s-label">Current Value</div><div class="s-val ${pos?'positive':'negative'}">${fmt(sim.finalValue)}</div><div class="s-sub">${ticker} · ${name}</div></div>
+    <div class="stat-card"><div class="s-label">Total Profit</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':''}${fmt(sim.profit)}</div><div class="s-sub">Unrealised gain/loss</div></div>
+    <div class="stat-card"><div class="s-label">Return</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':''}${sim.pct.toFixed(1)}%</div><div class="s-sub">Total return</div></div>`;
+}
+
+function renderSimChart(sim, ticker) {
+  if (simChart) { simChart.destroy(); simChart = null; }
+  const ctx = document.getElementById('sim-chart').getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,300);
+  grad.addColorStop(0,'rgba(0,230,118,.2)'); grad.addColorStop(1,'rgba(0,230,118,0)');
+  document.getElementById('chart-title').textContent = ticker + ' — Portfolio Value Over Time';
+  simChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: sim.labels,
+      datasets: [
+        { label:'Portfolio', data:sim.portfolio, borderColor:'#00e676', borderWidth:2.5, backgroundColor:grad, fill:true, tension:0.3, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#00e676' },
+        { label:'Invested',  data:sim.invested,  borderColor:'#444',    borderWidth:2,   borderDash:[6,4], backgroundColor:'transparent', fill:false, tension:0, pointRadius:0, pointHoverRadius:4 },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1,
+          titleColor:'#aaa', bodyColor:'#fff', padding:12,
+          callbacks:{
+            title: items => new Date(items[0].parsed.x).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
+            label: item => ` ${item.dataset.label}: ${fmt(item.parsed.y)}`,
+          },
+        },
+      },
+      scales:{
+        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, grid:{color:'#161616'}, ticks:{color:'#444',maxTicksLimit:8,font:{size:11}} },
+        y:{ grid:{color:'#161616'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+      },
+    },
+  });
+}
+
+function restoreSimChartCard() {
+  document.getElementById('sim-chart-card').innerHTML = `
+    <div class="chart-header">
+      <div class="chart-title" id="chart-title">Portfolio Value Over Time</div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Portfolio</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#333;border:1.5px dashed #555"></div>Invested</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="sim-chart"></canvas></div>`;
+}
+
+async function runSimulation() {
+  const ticker    = document.getElementById('ticker').value.trim().toUpperCase();
+  const startDate = document.getElementById('start-date').value;
+  const endDate   = document.getElementById('end-date').value;
+  const initAmt   = parseFloat(document.getElementById('initial-amount').value)||0;
+  const recurring = document.getElementById('recurring-toggle').checked;
+  const recurAmt  = parseFloat(document.getElementById('recurring-amount').value)||0;
+  const freq      = document.getElementById('frequency').value;
+  if (!ticker)    { alert('Enter a ticker symbol.'); return; }
+  if (!startDate) { alert('Pick a start date.'); return; }
+  if (initAmt<=0) { alert('Enter an initial investment amount.'); return; }
+  if (new Date(startDate)>=new Date(endDate)) { alert('Start date must be before end date.'); return; }
+  const btn = document.getElementById('sim-btn');
+  btn.disabled = true; btn.textContent = 'Fetching data…';
+  const resultsEl = document.getElementById('results');
+  resultsEl.style.display = 'block';
+  document.getElementById('stats-row').innerHTML = '';
+  document.getElementById('sim-chart-card').innerHTML = `<div class="loading-state"><div class="spinner"></div>Loading ${ticker} history…</div>`;
+  if (simChart) { simChart.destroy(); simChart = null; }
+  resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
+  try {
+    const p1 = Math.floor(new Date(startDate).getTime()/1000);
+    const p2 = Math.floor(new Date(endDate+'T23:59:59').getTime()/1000);
+    const res = await fetch(`/api/stock-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load data');
+    restoreSimChartCard();
+    const sim = simulate(data.timestamps, data.closes, p1, p2, initAmt, recurring, recurAmt, freq);
+    if (!sim||!sim.labels.length) throw new Error('No price data in that date range');
+    renderSimStats(sim, data.ticker, data.name, data.currency);
+    renderSimChart(sim, data.ticker);
+  } catch(e) {
+    restoreSimChartCard();
+    document.getElementById('sim-chart-card').innerHTML = `<div class="error-state"><div class="error-msg">⚠️ ${e.message}</div><div>Check the ticker symbol and try again.</div></div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Simulate →';
+  }
+}
+
+document.getElementById('ticker').addEventListener('keydown', e => { if (e.key==='Enter') runSimulation(); });
+
+// ═══════════════════════════════════════
+//  DIVIDENDS
+// ═══════════════════════════════════════
+document.getElementById('div-start').value = '2015-01-01';
+const divDefaultEnd = new Date(today); divDefaultEnd.setFullYear(today.getFullYear() + 2);
+document.getElementById('div-end').value = divDefaultEnd.toISOString().slice(0,10);
+
+let divChart = null, annualChart = null;
+
+function loadDivPreset(ticker, shares, startDate) {
+  document.getElementById('div-ticker').value = ticker;
+  document.getElementById('div-shares').value = shares;
+  document.getElementById('div-start').value  = startDate;
+  document.getElementById('drip-toggle').checked = true;
+  runDividendSim();
+}
+
+function simulateDividends(dividends, initialShares, latestPrice, drip) {
+  let shares = initialShares, cumCash = 0, projectedCash = 0;
+  const dripPoints = [], noDripPoints = [], payments = [];
+  const annualMap = {};
+
+  for (const div of dividends) {
+    const priceNow = div.price || latestPrice || 1;
+    const payout   = shares * div.amount;
+    const noPayout = initialShares * div.amount;
+
+    if (drip) shares += payout / priceNow;
+    cumCash += noPayout;
+    if (div.projected) projectedCash += drip ? payout : noPayout;
+
+    const dateObj = new Date(div.date * 1000);
+    const year    = dateObj.getFullYear();
+    annualMap[year] = (annualMap[year] || 0) + (drip ? shares * div.amount : noPayout);
+
+    dripPoints.push({ x: dateObj, y: +(shares * (latestPrice || priceNow)).toFixed(2) });
+    noDripPoints.push({ x: dateObj, y: +(initialShares * (latestPrice || priceNow) + cumCash).toFixed(2) });
+
+    payments.push({
+      date:        dateObj,
+      perShare:    div.amount,
+      payout:      +payout.toFixed(2),
+      sharesAfter: +shares.toFixed(4),
+      cumCash:     +cumCash.toFixed(2),
+      projected:   !!div.projected,
+    });
+  }
+
+  // Trailing yield uses only historical payments
+  const histDivs = dividends.filter(d => !d.projected);
+  const lastFour = histDivs.slice(-4).reduce((s, d) => s + d.amount, 0);
+  const yield_   = latestPrice ? (lastFour / latestPrice) * 100 : 0;
+
+  const finalDripVal   = shares * (latestPrice || 1);
+  const finalNoDripVal = initialShares * (latestPrice || 1) + cumCash;
+  const origVal        = initialShares * ((histDivs[0] || dividends[0])?.price || latestPrice || 1);
+  const histCash       = cumCash - projectedCash;
+
+  const annualLabels = Object.keys(annualMap).sort();
+  const annualValues = annualLabels.map(y => +annualMap[y].toFixed(2));
+
+  return { dripPoints, noDripPoints, payments, shares, cumCash, histCash, projectedCash, yield_, finalDripVal, finalNoDripVal, origVal, annualLabels, annualValues };
+}
+
+function renderDivStats(sim, ticker, name, currency, initialShares, drip) {
+  const dripGain = sim.finalDripVal - sim.origVal;
+  const pos = dripGain >= 0;
+  const hasProjection = sim.projectedCash > 0;
+  const projCard = hasProjection ? `
+    <div class="stat-card">
+      <div class="s-label">Projected Income 🔮</div>
+      <div class="s-val" style="color:var(--blue)">${fmt(sim.projectedCash)}</div>
+      <div class="s-sub">Estimated future dividends</div>
+    </div>` : '';
+  document.getElementById('div-stats').innerHTML = `
+    <div class="stat-card">
+      <div class="s-label">${hasProjection ? 'Historical Dividends' : 'Total Dividends Paid'}</div>
+      <div class="s-val positive">${fmt(sim.histCash)}</div>
+      <div class="s-sub">Cash if no reinvestment</div>
+    </div>
+    ${projCard}
+    <div class="stat-card">
+      <div class="s-label">${drip ? 'DRIP Portfolio Value' : 'Portfolio Value'}</div>
+      <div class="s-val ${pos?'positive':'negative'}">${fmt(drip ? sim.finalDripVal : sim.finalNoDripVal)}</div>
+      <div class="s-sub">${drip ? fmt(sim.shares.toFixed(4))+' shares' : initialShares+' shares'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-label">${drip ? 'DRIP Gain vs No-DRIP' : 'Total Value'}</div>
+      <div class="s-val ${pos?'positive':'negative'}">${drip ? (dripGain>=0?'+':'')+fmt(sim.finalDripVal - sim.finalNoDripVal) : fmt(sim.finalNoDripVal)}</div>
+      <div class="s-sub">${drip ? 'Extra from compounding' : 'Portfolio + dividends'}</div>
+    </div>
+    <div class="stat-card">
+      <div class="s-label">Trailing Yield</div>
+      <div class="s-val" style="color:var(--yellow)">${sim.yield_.toFixed(2)}%</div>
+      <div class="s-sub">Last 4 payments annualised</div>
+    </div>`;
+}
+
+function renderDivChart(sim, ticker, drip) {
+  if (divChart) { divChart.destroy(); divChart = null; }
+  const ctx = document.getElementById('div-chart').getContext('2d');
+  const gradG = ctx.createLinearGradient(0,0,0,300);
+  gradG.addColorStop(0,'rgba(0,230,118,.18)'); gradG.addColorStop(1,'rgba(0,230,118,0)');
+  const nowMs = Date.now();
+  const hasProjection = sim.dripPoints.some(p => p.x.getTime() > nowMs);
+  document.getElementById('div-chart-title').textContent =
+    `${ticker} — Portfolio Value Over Time${hasProjection ? ' · dashed = projected' : ''}`;
+  divChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        { label:'With DRIP',    data: sim.dripPoints,   borderColor:'#00e676', borderWidth:2.5, backgroundColor:gradG, fill:true,  tension:0.3, pointRadius:0, pointHoverRadius:5,
+          segment:{ borderColor: c => c.p1.parsed.x > nowMs ? 'rgba(0,230,118,0.4)' : undefined, borderDash: c => c.p1.parsed.x > nowMs ? [5,4] : undefined } },
+        { label:'Without DRIP', data: sim.noDripPoints, borderColor:'#448aff', borderWidth:2,   backgroundColor:'transparent', fill:false, tension:0.3, pointRadius:0, pointHoverRadius:4,
+          segment:{ borderColor: c => c.p1.parsed.x > nowMs ? 'rgba(68,138,255,0.35)' : undefined, borderDash: c => c.p1.parsed.x > nowMs ? [5,4] : [6,4] } },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1,
+          titleColor:'#aaa', bodyColor:'#fff', padding:12,
+          callbacks:{
+            title: i => new Date(i[0].parsed.x).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
+            label: i => ` ${i.dataset.label}: ${fmt(i.parsed.y)}`,
+          },
+        },
+      },
+      scales:{
+        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, grid:{color:'#161616'}, ticks:{color:'#444',maxTicksLimit:8,font:{size:11}} },
+        y:{ grid:{color:'#161616'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+      },
+    },
+  });
+}
+
+function renderAnnualChart(sim) {
+  if (annualChart) { annualChart.destroy(); annualChart = null; }
+  const ctx = document.getElementById('annual-chart').getContext('2d');
+  annualChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sim.annualLabels,
+      datasets:[{
+        label:'Annual Dividend Income', data: sim.annualValues,
+        backgroundColor:'rgba(0,230,118,.6)', borderColor:'#00e676', borderWidth:1, borderRadius:5,
+      }],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1, titleColor:'#aaa', bodyColor:'#fff', padding:10,
+          callbacks:{ label: i => ` Annual income: ${fmt(i.parsed.y)}` } },
+      },
+      scales:{
+        x:{ grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:11}} },
+        y:{ grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+      },
+    },
+  });
+}
+
+function renderPayTable(sim, drip) {
+  const rows = sim.payments.slice().reverse().slice(0, 20); // last 20, newest first
+  document.getElementById('pay-table-title').textContent =
+    `Last ${rows.length} Dividend Payments${drip ? ' (DRIP active)' : ''}`;
+  document.getElementById('pay-tbody').innerHTML = rows.map(p => `
+    <tr>
+      <td>${p.date.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</td>
+      <td>$${p.perShare.toFixed(4)}</td>
+      <td class="pos">+${fmt(p.payout)}${p.projected ? '<span class="proj-badge">PROJECTED</span>' : (drip ? '<span class="drip-badge">REINVESTED</span>' : '')}</td>
+      <td>${p.sharesAfter.toFixed(drip?4:0)}</td>
+      <td>${fmt(p.cumCash)}</td>
+    </tr>`).join('');
+}
+
+function projectFutureDividends(dividends, endTs, latestPrice) {
+  if (dividends.length < 2) return [];
+  const recent = dividends.slice(-8);
+  let totalSecs = 0;
+  for (let i = 1; i < recent.length; i++) totalSecs += recent[i].date - recent[i-1].date;
+  const avgInterval = Math.round(totalSecs / (recent.length - 1));
+  const avgAmount   = dividends.slice(-4).reduce((s, d) => s + d.amount, 0) / Math.min(dividends.length, 4);
+  const nowTs       = Math.floor(Date.now() / 1000);
+  const projected   = [];
+  let nextTs = dividends[dividends.length - 1].date + avgInterval;
+  while (nextTs <= endTs) {
+    if (nextTs > nowTs)
+      projected.push({ date: nextTs, amount: +avgAmount.toFixed(4), price: latestPrice, projected: true });
+    nextTs += avgInterval;
+  }
+  return projected;
+}
+
+async function runDividendSim() {
+  const ticker = document.getElementById('div-ticker').value.trim().toUpperCase();
+  const shares = parseFloat(document.getElementById('div-shares').value) || 0;
+  const start  = document.getElementById('div-start').value;
+  const end    = document.getElementById('div-end').value;
+  const drip   = document.getElementById('drip-toggle').checked;
+
+  if (!ticker)   { alert('Enter a ticker.'); return; }
+  if (shares<=0) { alert('Enter number of shares.'); return; }
+  if (!start)    { alert('Pick a start date.'); return; }
+  if (!end)      { alert('Pick an end date.'); return; }
+  if (new Date(start) >= new Date(end)) { alert('Start date must be before end date.'); return; }
+
+  const btn = document.getElementById('div-btn');
+  btn.disabled = true; btn.textContent = 'Fetching dividends…';
+
+  const resultsEl = document.getElementById('div-results');
+  resultsEl.style.display = 'block';
+  document.getElementById('div-stats').innerHTML = '';
+  const divChartWrap = document.querySelector('.div-chart-card .div-chart-wrap');
+  divChartWrap.innerHTML =
+    '<div class="loading-state"><div class="spinner"></div>Loading dividend history…</div>';
+  if (divChart)   { divChart.destroy();   divChart   = null; }
+  if (annualChart){ annualChart.destroy(); annualChart = null; }
+  resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
+
+  try {
+    const p1      = Math.floor(new Date(start).getTime() / 1000);
+    const nowTs   = Math.floor(Date.now() / 1000);
+    const endTs   = Math.floor(new Date(end + 'T23:59:59').getTime() / 1000);
+    // Round to end-of-today so all users share the same CDN cache key each day
+    const todayEnd = Math.floor(new Date(new Date().toISOString().slice(0,10) + 'T23:59:59').getTime() / 1000);
+    const p2      = Math.min(todayEnd, endTs);
+    const res = await fetch(`/api/dividend-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load data');
+    if (!data.dividends?.length) throw new Error(`No dividend history found for ${ticker} — try a dividend-paying stock like SCHD, KO, or AAPL`);
+
+    const allDividends = endTs > nowTs
+      ? [...data.dividends, ...projectFutureDividends(data.dividends, endTs, data.latestPrice)]
+      : data.dividends;
+
+    // Restore canvas elements (may have been replaced by loading state)
+    divChartWrap.innerHTML = '<canvas id="div-chart"></canvas>';
+
+    const sim = simulateDividends(allDividends, shares, data.latestPrice, drip);
+    renderDivStats(sim, data.ticker, data.name, data.currency, shares, drip);
+    renderDivChart(sim, data.ticker, drip);
+    renderAnnualChart(sim);
+    renderPayTable(sim, drip);
+  } catch(e) {
+    document.getElementById('div-stats').innerHTML = `<div class="error-state" style="grid-column:1/-1"><div class="error-msg">⚠️ ${e.message}</div></div>`;
+    divChartWrap.innerHTML = '';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Simulate Dividends →';
+  }
+}
+
+document.getElementById('div-ticker').addEventListener('keydown', e => { if (e.key==='Enter') runDividendSim(); });
+document.getElementById('port-ticker').addEventListener('keydown', e => { if (e.key==='Enter') addPosition(); });
+
+// ═══════════════════════════════════════
+//  PORTFOLIO
+// ═══════════════════════════════════════
+let portfolio = JSON.parse(localStorage.getItem('mm101_portfolio') || '[]');
+const priceCache = {};
+
+function savePortfolio() { localStorage.setItem('mm101_portfolio', JSON.stringify(portfolio)); }
+function genId() { return Math.random().toString(36).slice(2, 9); }
+
+function addPosition() {
+  const ticker  = document.getElementById('port-ticker').value.trim().toUpperCase();
+  const shares  = parseFloat(document.getElementById('port-shares').value);
+  const avgCost = parseFloat(document.getElementById('port-cost').value);
+  if (!ticker)       { alert('Enter a ticker symbol.'); return; }
+  if (!(shares > 0)) { alert('Enter a valid number of shares.'); return; }
+  if (!(avgCost >= 0)) { alert('Enter a valid avg cost.'); return; }
+  portfolio.push({ id: genId(), ticker, shares, avgCost });
+  savePortfolio();
+  document.getElementById('port-ticker').value = '';
+  document.getElementById('port-shares').value = '';
+  document.getElementById('port-cost').value   = '';
+  renderPortfolioUI();
+  refreshPortfolio();
+}
+
+function removePosition(id) {
+  portfolio = portfolio.filter(p => p.id !== id);
+  savePortfolio();
+  renderPortfolioUI();
+}
+
+function renderPortfolioUI() {
+  const emptyEl   = document.getElementById('port-empty');
+  const summaryEl = document.getElementById('port-summary');
+  const holdEl    = document.getElementById('port-holdings-wrap');
+  if (!portfolio.length) {
+    emptyEl.style.display   = 'block';
+    summaryEl.style.display = 'none';
+    holdEl.style.display    = 'none';
+    return;
+  }
+  emptyEl.style.display   = 'none';
+  summaryEl.style.display = 'block';
+  holdEl.style.display    = 'block';
+  renderPortfolioTable();
+  renderPortfolioStats();
+}
+
+function renderPortfolioTable() {
+  document.getElementById('port-holdings-title').textContent = `Your Holdings (${portfolio.length})`;
+  document.getElementById('port-tbody').innerHTML = portfolio.map(pos => {
+    const cached   = priceCache[pos.ticker];
+    const price    = cached?.price;
+    const name     = cached?.name || '';
+    const invested = pos.shares * pos.avgCost;
+    const value    = price != null ? pos.shares * price : null;
+    const pl       = value != null ? value - invested : null;
+    const plPct    = pl != null && invested > 0 ? (pl / invested) * 100 : null;
+    const dash     = `<span style="color:var(--muted)">—</span>`;
+    const priceStr = price != null ? '$' + price.toFixed(2) : dash;
+    const chgStr   = cached?.change != null
+      ? `<span class="${cached.change >= 0 ? 'positive' : 'negative'}">${cached.change >= 0 ? '+' : ''}${cached.change.toFixed(2)}%</span>`
+      : dash;
+    const valueStr = value != null ? fmt(value) : dash;
+    const plStr    = pl != null
+      ? `<span class="${pl >= 0 ? 'positive' : 'negative'}">${pl >= 0 ? '+' : ''}${fmt(pl)}<br><span style="font-size:0.75rem">${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%</span></span>`
+      : dash;
+    return `<tr>
+      <td><strong style="color:var(--text)">${pos.ticker}</strong>${name ? `<br><span style="font-size:0.75rem;color:var(--muted)">${name}</span>` : ''}</td>
+      <td>${pos.shares}</td>
+      <td>$${pos.avgCost.toFixed(2)}</td>
+      <td>${priceStr}</td>
+      <td>${chgStr}</td>
+      <td>${valueStr}</td>
+      <td>${plStr}</td>
+      <td style="white-space:nowrap">
+        <button class="port-btn-sm" style="background:var(--green-dim);color:var(--green);border-color:var(--green-bdr);margin-right:4px" onclick="analyzeDividends('${pos.ticker}',${pos.shares})">💰 Divs</button>
+        <button class="port-btn-sm" style="background:rgba(255,82,82,.1);color:var(--red);border-color:rgba(255,82,82,.25)" onclick="removePosition('${pos.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPortfolioStats() {
+  let totalInvested = 0, totalValue = 0, valuedCount = 0;
+  portfolio.forEach(pos => {
+    totalInvested += pos.shares * pos.avgCost;
+    const cached = priceCache[pos.ticker];
+    if (cached?.price != null) { totalValue += pos.shares * cached.price; valuedCount++; }
+  });
+  const pl      = totalValue - totalInvested;
+  const plPct   = totalInvested > 0 ? (pl / totalInvested) * 100 : 0;
+  const isPos   = pl >= 0;
+  const partial = valuedCount > 0 && valuedCount < portfolio.length;
+  document.getElementById('port-stats').innerHTML = `
+    <div class="stat-card"><div class="s-label">Total Invested</div><div class="s-val">${fmt(totalInvested)}</div><div class="s-sub">${portfolio.length} position${portfolio.length !== 1 ? 's' : ''}</div></div>
+    ${valuedCount > 0 ? `
+    <div class="stat-card"><div class="s-label">Current Value${partial ? ' (partial)' : ''}</div><div class="s-val ${isPos ? 'positive' : 'negative'}">${fmt(totalValue)}</div><div class="s-sub">${valuedCount} of ${portfolio.length} priced</div></div>
+    <div class="stat-card"><div class="s-label">Unrealised P&amp;L</div><div class="s-val ${isPos ? 'positive' : 'negative'}">${isPos ? '+' : ''}${fmt(pl)}</div><div class="s-sub">${isPos ? '+' : ''}${plPct.toFixed(1)}% total return</div></div>
+    ` : ''}`;
+}
+
+async function refreshPortfolio() {
+  const btn = document.getElementById('port-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+  const tickers = [...new Set(portfolio.map(p => p.ticker))];
+  const p2 = Math.floor(Date.now() / 1000);
+  const p1 = p2 - 10 * 86400;
+  await Promise.all(tickers.map(async ticker => {
+    try {
+      const res  = await fetch(`/api/stock-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
+      const data = await res.json();
+      if (res.ok && data.closes?.length) {
+        const price  = data.closes[data.closes.length - 1];
+        const prev   = data.closes.length > 1 ? data.closes[data.closes.length - 2] : price;
+        const change = prev ? ((price - prev) / prev) * 100 : 0;
+        priceCache[ticker] = { price, name: data.name || ticker, change };
+      }
+    } catch {}
+  }));
+  renderPortfolioTable();
+  renderPortfolioStats();
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh Prices'; }
+}
+
+function analyzeDividends(ticker, shares) {
+  document.getElementById('div-ticker').value = ticker;
+  document.getElementById('div-shares').value = shares;
+  const divTabBtn = document.querySelector('.tab-btn[onclick*="dividends"]');
+  switchTab('dividends', divTabBtn);
+}
+
+// ═══════════════════════════════════════
+//  EDUCATION CHARTS
+// ═══════════════════════════════════════
+const YEARS = ['2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024'];
+
+const EDU_DATA = {
+  gdp:       [2.7,  1.6,  2.3,  2.1,  2.5,  3.1,  1.7,  2.3,  3.0,  2.3, -2.8,  5.9,  2.1,  2.5,  2.8],
+  inflation: [1.6,  3.2,  2.1,  1.5,  1.6,  0.1,  1.3,  2.1,  2.4,  1.8,  1.2,  4.7,  8.0,  4.1,  3.2],
+  cpi:       [218,  225,  230,  233,  237,  237,  240,  245,  251,  256, 258,  271,  292,  304,  315],
+  rates:     [0.25,0.25,0.25,0.25,0.25,0.50,0.75,1.50,2.50,1.75,0.25,0.25,4.50,5.50,4.50],
+};
+
+const EDU_CHART_DEFAULTS = {
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend:{display:false}, tooltip:{ backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1, titleColor:'#aaa', bodyColor:'#fff', padding:10 } },
+  scales: {
+    x: { grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:10}} },
+    y: { grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:10}} },
+  },
+};
+
+function initEduCharts() {
+
+  // GDP — bar chart, green/red by sign
+  new Chart(document.getElementById('chart-gdp').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: YEARS,
+      datasets:[{
+        label: 'GDP Growth %',
+        data: EDU_DATA.gdp,
+        backgroundColor: EDU_DATA.gdp.map(v => v>=0 ? 'rgba(0,230,118,.7)' : 'rgba(255,82,82,.7)'),
+        borderColor:     EDU_DATA.gdp.map(v => v>=0 ? '#00e676' : '#ff5252'),
+        borderWidth: 1, borderRadius: 4,
+      }],
+    },
+    options: {
+      ...EDU_CHART_DEFAULTS,
+      plugins: {
+        ...EDU_CHART_DEFAULTS.plugins,
+        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` ${i.parsed.y > 0 ? '+':''}${i.parsed.y}% GDP growth` } },
+      },
+      scales: {
+        ...EDU_CHART_DEFAULTS.scales,
+        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v => v+'%' } },
+      },
+    },
+  });
+
+  // INFLATION — line with 2% target reference
+  new Chart(document.getElementById('chart-inflation').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: YEARS,
+      datasets:[
+        {
+          label:'Inflation Rate', data: EDU_DATA.inflation,
+          borderColor:'#ff5252', borderWidth:2.5,
+          backgroundColor: ctx => {
+            const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
+            g.addColorStop(0,'rgba(255,82,82,.2)'); g.addColorStop(1,'rgba(255,82,82,0)');
+            return g;
+          },
+          fill:true, tension:0.35, pointRadius:3, pointBackgroundColor:'#ff5252',
+        },
+        {
+          label:'Fed Target (2%)', data: YEARS.map(()=>2),
+          borderColor:'#444', borderWidth:1.5, borderDash:[5,4],
+          backgroundColor:'transparent', fill:false, pointRadius:0,
+        },
+      ],
+    },
+    options: {
+      ...EDU_CHART_DEFAULTS,
+      plugins: {
+        ...EDU_CHART_DEFAULTS.plugins,
+        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` ${i.dataset.label}: ${i.parsed.y}%` } },
+      },
+      scales: {
+        ...EDU_CHART_DEFAULTS.scales,
+        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v=>v+'%' } },
+      },
+    },
+  });
+
+  // CPI — line chart
+  new Chart(document.getElementById('chart-cpi').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: YEARS,
+      datasets:[{
+        label:'CPI Index', data: EDU_DATA.cpi,
+        borderColor:'#ffd740', borderWidth:2.5,
+        backgroundColor: ctx => {
+          const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
+          g.addColorStop(0,'rgba(255,215,64,.18)'); g.addColorStop(1,'rgba(255,215,64,0)');
+          return g;
+        },
+        fill:true, tension:0.3, pointRadius:3, pointBackgroundColor:'#ffd740',
+      }],
+    },
+    options: {
+      ...EDU_CHART_DEFAULTS,
+      plugins: {
+        ...EDU_CHART_DEFAULTS.plugins,
+        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` CPI Index: ${i.parsed.y}` } },
+      },
+    },
+  });
+
+  // INTEREST RATES — line chart
+  new Chart(document.getElementById('chart-rates').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: YEARS,
+      datasets:[{
+        label:'Fed Funds Rate', data: EDU_DATA.rates,
+        borderColor:'#448aff', borderWidth:2.5,
+        backgroundColor: ctx => {
+          const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
+          g.addColorStop(0,'rgba(68,138,255,.2)'); g.addColorStop(1,'rgba(68,138,255,0)');
+          return g;
+        },
+        fill:true, tension:0.2, pointRadius:3, pointBackgroundColor:'#448aff',
+      }],
+    },
+    options: {
+      ...EDU_CHART_DEFAULTS,
+      plugins: {
+        ...EDU_CHART_DEFAULTS.plugins,
+        tooltip:{ ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` Fed Rate: ${i.parsed.y}%` } },
+      },
+      scales: {
+        ...EDU_CHART_DEFAULTS.scales,
+        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v=>v+'%' } },
+      },
+    },
+  });
+}
+</script>
+</body>
+</html>

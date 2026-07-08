@@ -303,6 +303,18 @@ struct ClientFormView: View {
                         }
 
                         NavigationLink {
+                            ExploreMapView()
+                                .environmentObject(firestore)
+                                .environmentObject(auth)
+                        } label: {
+                            HStack {
+                                Image(systemName: "map.fill")
+                                    .foregroundColor(Color("LogoGreen"))
+                                Text("Explore Map")
+                            }
+                        }
+
+                        NavigationLink {
                             PlayersToPlayWithView()
                                 .environmentObject(firestore)
                                 .environmentObject(auth)

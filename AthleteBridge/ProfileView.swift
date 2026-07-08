@@ -60,6 +60,7 @@ struct ProfileView: View {
     @State private var clientCity: String = ""
     @State private var coachZipCode: String = ""
     @State private var coachCity: String = ""
+    @State private var coachCancellationHoursText: String = ""
 
     // Photo + UI state
     @State private var selectedImage: UIImage? = nil
@@ -574,6 +575,16 @@ struct ProfileView: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
             }
 
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Cancellation Policy (hours)").font(.subheadline).foregroundColor(.secondary)
+                TextField("e.g. 24 — 0 disables the policy", text: $coachCancellationHoursText)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                Text("Clients cancelling within this many hours of a session forfeit their deposit")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
             // New Rate Range inputs
             VStack(alignment: .leading, spacing: 6) {
                 Text("Rate Range (USD)").font(.subheadline).foregroundColor(.secondary)
@@ -861,6 +872,7 @@ struct ProfileView: View {
             if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
             coachZipCode = coach.zipCode ?? ""
             coachCity = coach.city ?? ""
+            coachCancellationHoursText = coach.cancellationWindowHours > 0 ? String(coach.cancellationWindowHours) : ""
             if let rr = coach.rateRange, rr.count == 2 {
                 coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
                 coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
@@ -905,6 +917,7 @@ struct ProfileView: View {
                 if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
                 coachZipCode = coach.zipCode ?? ""
                 coachCity = coach.city ?? ""
+                coachCancellationHoursText = coach.cancellationWindowHours > 0 ? String(coach.cancellationWindowHours) : ""
                 if let rr = coach.rateRange, rr.count == 2 {
                     coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
                     coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
@@ -996,7 +1009,8 @@ struct ProfileView: View {
                                        city: coachCity.isEmpty ? nil : coachCity,
                                        rateRange: rateRangeToSave,
                                        tournamentSoftwareLink: coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : coachTournamentSoftwareLink.trimmingCharacters(in: .whitespacesAndNewlines),
-                                       linkedPlaceIds: Array(selectedPlaceIds)) { err in
+                                       linkedPlaceIds: Array(selectedPlaceIds),
+                                       cancellationWindowHours: max(0, Int(coachCancellationHoursText) ?? 0)) { err in
                     DispatchQueue.main.async {
                         isSaving = false
                         if let err = err {

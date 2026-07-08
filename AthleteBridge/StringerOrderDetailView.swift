@@ -54,6 +54,36 @@ struct StringerOrderDetailView: View {
                 }
             }
 
+            // Progress timeline (hidden for declined orders)
+            if ord.status.lowercased() != "declined" {
+                Section(header: Text("Order Progress")) {
+                    let stageLabels: [String: String] = [
+                        "placed": "Order Placed",
+                        "accepted": "Accepted by Stringer",
+                        "stringing": "Stringing in Progress",
+                        "ready_for_pickup": "Ready for Pickup",
+                        "picked_up": "Picked Up"
+                    ]
+                    ForEach(StringerOrder.timelineStages, id: \.self) { stage in
+                        let reached = ord.isStageReached(stage)
+                        HStack(spacing: 10) {
+                            Image(systemName: reached ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(reached ? Color("LogoGreen") : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(stageLabels[stage] ?? stage)
+                                    .fontWeight(reached ? .semibold : .regular)
+                                    .foregroundColor(reached ? .primary : .secondary)
+                                if reached, let ts = ord.stageTimestamp(stage) {
+                                    Text(DateFormatter.localizedString(from: ts, dateStyle: .medium, timeStyle: .short))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Order Details
             Section(header: Text("Order Details")) {
                 detailRow(icon: "sportscourt", label: "Racket", value: ord.racketName)

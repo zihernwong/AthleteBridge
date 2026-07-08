@@ -22,6 +22,10 @@ struct SignupEventDetailView: View {
         guard let uid = currentUid else { return false }
         return liveEvent.signups.contains { $0.userId == uid }
     }
+    private var isOnWaitlist: Bool {
+        guard let uid = currentUid else { return false }
+        return liveEvent.isWaitlisted(userId: uid)
+    }
 
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -126,6 +130,61 @@ struct SignupEventDetailView: View {
                         Text("You're signed up!")
                             .fontWeight(.semibold)
                             .foregroundColor(Color("LogoGreen"))
+                    }
+                }
+            }
+
+            // Waitlist: join when the event is full, or show queue position
+            if !isAlreadySignedUp && ev.isFull {
+                Section {
+                    if isOnWaitlist {
+                        HStack {
+                            Image(systemName: "hourglass")
+                                .foregroundColor(.orange)
+                            Text("You're #\(ev.waitlistPosition(userId: currentUid ?? "") ?? 0) on the waitlist — we'll notify you when a spot opens up.")
+                                .font(.subheadline)
+                        }
+                        Button(role: .destructive) {
+                            firestore.leaveEventWaitlist(eventId: ev.id)
+                        } label: {
+                            Text("Leave Waitlist")
+                                .frame(maxWidth: .infinity)
+                        }
+                    } else {
+                        if !ev.waitlist.isEmpty {
+                            Text("\(ev.waitlist.count) \(ev.waitlist.count == 1 ? "person is" : "people are") on the waitlist.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Button {
+                            firestore.joinEventWaitlist(eventId: ev.id)
+                        } label: {
+                            Text("Event Full — Join Waitlist")
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                } header: {
+                    Text("Waitlist")
+                }
+            }
+
+            // Creator sees the queue
+            if isCreator && !ev.waitlist.isEmpty {
+                Section(header: Text("Waitlist (\(ev.waitlist.count))")) {
+                    ForEach(Array(ev.waitlist.sorted { $0.signedUpAt < $1.signedUpAt }.enumerated()), id: \.element.id) { index, entry in
+                        HStack {
+                            Text("#\(index + 1)")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading) {
+                                Text(entry.name)
+                                Text(entry.email)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
                 }
             }
