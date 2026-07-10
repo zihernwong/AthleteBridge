@@ -12,10 +12,11 @@ struct MyClubsView: View {
 
     private var currentUid: String { auth.user?.uid ?? "" }
 
-    /// Clubs the user is a member of or is the contact/leader for.
+    /// Clubs the user is a member of or is an admin for. A user can belong to
+    /// any number of clubs.
     private var myClubs: [PlaceToPlay] {
         firestore.placesToPlay.filter { place in
-            place.members.contains { $0.id == currentUid } || place.contactUid == currentUid
+            place.members.contains { $0.id == currentUid } || place.isAdmin(currentUid)
         }
     }
 
@@ -107,11 +108,11 @@ struct MyClubsView: View {
                         .foregroundColor(Color("LogoGreen"))
                 }
 
-                if place.contactUid == currentUid {
+                if place.isAdmin(currentUid) {
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
                             .foregroundColor(Color("LogoBlue"))
-                        Text("Leader")
+                        Text("Admin")
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(Color("LogoBlue"))

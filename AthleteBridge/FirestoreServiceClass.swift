@@ -361,6 +361,63 @@ class FirestoreManager: ObservableObject {
     @Published var bookings: [BookingItem] = []
     @Published var bookingsDebug: String = ""
 
+    // MARK: - Agreed Rates (simplified booking flow)
+    // Once a coach and client have settled on a price, it is stored in
+    // agreedRates/{coachId}_{clientId} so future requests can carry the rate
+    // and be confirmed by the coach in one tap. A pair can hold several
+    // labeled rates (e.g. "1-on-1" and "Joint session").
+    struct AgreedRate: Identifiable, Equatable {
+        let label: String
+        let rateUSD: Double
+        var id: String { label }
+    }
+
+    private func agreedRatesDocRef(coachId: String, clientId: String) -> DocumentReference {
+        db.collection("agreedRates").document("\(coachId)_\(clientId)")
+    }
+
+    func fetchAgreedRates(coachId: String, clientId: String, completion: @escaping ([AgreedRate]) -> Void) {
+        guard !coachId.isEmpty, !clientId.isEmpty else { completion([]); return }
+        agreedRatesDocRef(coachId: coachId, clientId: clientId).getDocument { snap, err in
+            if let err = err {
+                print("[FirestoreManager] fetchAgreedRates error: \(err)")
+                completion([])
+                return
+            }
+            let raw = snap?.data()?["Rates"] as? [[String: Any]] ?? []
+            let rates: [AgreedRate] = raw.compactMap { entry in
+                guard let label = entry["label"] as? String,
+                      let rate = (entry["rateUSD"] as? Double) ?? ((entry["rateUSD"] as? Int).map { Double($0) }),
+                      rate > 0 else { return nil }
+                return AgreedRate(label: label, rateUSD: rate)
+            }
+            completion(rates)
+        }
+    }
+
+    /// Upsert a labeled rate for a coach/client pair (replaces an existing rate with the same label).
+    func saveAgreedRate(coachId: String, clientId: String, label: String, rateUSD: Double, completion: ((Error?) -> Void)? = nil) {
+        guard !coachId.isEmpty, !clientId.isEmpty, rateUSD > 0 else { completion?(nil); return }
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalLabel = trimmedLabel.isEmpty ? "1-on-1" : trimmedLabel
+        let docRef = agreedRatesDocRef(coachId: coachId, clientId: clientId)
+        docRef.getDocument { snap, _ in
+            var rates = snap?.data()?["Rates"] as? [[String: Any]] ?? []
+            rates.removeAll { ($0["label"] as? String)?.lowercased() == finalLabel.lowercased() }
+            rates.append(["label": finalLabel, "rateUSD": rateUSD])
+            let payload: [String: Any] = [
+                "CoachID": coachId,
+                "ClientID": clientId,
+                "Rates": rates,
+                "updatedAt": FieldValue.serverTimestamp()
+            ]
+            docRef.setData(payload, merge: true) { err in
+                if let err = err { print("[FirestoreManager] saveAgreedRate error: \(err)") }
+                completion?(err)
+            }
+        }
+    }
+
     // MARK: - Reviews
     struct ReviewItem: Identifiable {
         let id: String
@@ -415,6 +472,31 @@ class FirestoreManager: ObservableObject {
         let participants: [String]
         let lastMessageText: String?
         let lastMessageAt: Date?
+        /// Per-user hide state: uid -> when they hid the chat. A chat stays
+        /// hidden for a user until a message newer than their hide time arrives.
+        var hiddenBy: [String: Date] = [:]
+
+        func isHidden(for uid: String) -> Bool {
+            guard !uid.isEmpty, let hiddenAt = hiddenBy[uid] else { return false }
+            guard let last = lastMessageAt else { return true }
+            return last <= hiddenAt
+        }
+    }
+
+    /// Hide or unhide a chat for the current user only. Hiding writes a
+    /// timestamp so the chat automatically reappears when a new message arrives.
+    func setChatHidden(chatId: String, hidden: Bool, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let payload: [String: Any] = [
+            "hiddenBy.\(uid)": hidden ? Timestamp(date: Date()) : FieldValue.delete()
+        ]
+        db.collection("chats").document(chatId).updateData(payload) { err in
+            if let err = err { print("setChatHidden error: \(err)") }
+            completion?(err)
+        }
     }
 
     @Published var chats: [ChatItem] = []
@@ -590,10 +672,16 @@ class FirestoreManager: ObservableObject {
                 if !ids.isEmpty { self.loadPreviewsForChats(chatIds: ids) }
             }
 
-            // Resolve participant names
+            // Resolve participant names and photos up-front for the whole list,
+            // instead of lazily per-row (which made avatars appear seconds late)
             let allOtherUids = coachOtherUids.union(clientOtherUids).union(legacyOtherUids)
             if !allOtherUids.isEmpty {
-                self.ensureParticipantNames(Array(allOtherUids))
+                DispatchQueue.main.async {
+                    self.ensureParticipantNames(Array(allOtherUids))
+                    for uid in allOtherUids {
+                        self.fetchAndCacheUserPhotoURL(uid: uid)
+                    }
+                }
             }
         }
 
@@ -618,9 +706,15 @@ class FirestoreManager: ObservableObject {
                 } else if let strArr = data["participants"] as? [String] {
                     participantsArr = strArr
                 }
+                // Seed participant name/photo caches from the chat's denormalized maps
+                self.seedParticipantInfo(fromChatData: data)
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
-                coachChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                var hiddenBy: [String: Date] = [:]
+                if let rawHidden = data["hiddenBy"] as? [String: Timestamp] {
+                    for (k, v) in rawHidden { hiddenBy[k] = v.dateValue() }
+                }
+                coachChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt, hiddenBy: hiddenBy))
                 for p in participantsArr where p != uid { coachOtherUids.insert(p) }
             }
             mergeAndPublish()
@@ -647,9 +741,15 @@ class FirestoreManager: ObservableObject {
                 } else if let strArr = data["participants"] as? [String] {
                     participantsArr = strArr
                 }
+                // Seed participant name/photo caches from the chat's denormalized maps
+                self.seedParticipantInfo(fromChatData: data)
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
-                clientChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                var hiddenBy: [String: Date] = [:]
+                if let rawHidden = data["hiddenBy"] as? [String: Timestamp] {
+                    for (k, v) in rawHidden { hiddenBy[k] = v.dateValue() }
+                }
+                clientChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt, hiddenBy: hiddenBy))
                 for p in participantsArr where p != uid { clientOtherUids.insert(p) }
             }
             mergeAndPublish()
@@ -676,9 +776,15 @@ class FirestoreManager: ObservableObject {
                 } else if let strArr = data["participants"] as? [String] {
                     participantsArr = strArr
                 }
+                // Seed participant name/photo caches from the chat's denormalized maps
+                self.seedParticipantInfo(fromChatData: data)
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
-                legacyChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                var hiddenBy: [String: Date] = [:]
+                if let rawHidden = data["hiddenBy"] as? [String: Timestamp] {
+                    for (k, v) in rawHidden { hiddenBy[k] = v.dateValue() }
+                }
+                legacyChats.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt, hiddenBy: hiddenBy))
                 for p in participantsArr where p != uid { legacyOtherUids.insert(p) }
             }
             mergeAndPublish()
@@ -804,9 +910,15 @@ class FirestoreManager: ObservableObject {
                 } else if let strArr = data["participants"] as? [String] {
                     participantsArr = strArr
                 }
+                // Seed participant name/photo caches from the chat's denormalized maps
+                self.seedParticipantInfo(fromChatData: data)
                 let lastText = data["lastMessageText"] as? String
                 let lastAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
-                mapped.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt))
+                var hiddenBy: [String: Date] = [:]
+                if let rawHidden = data["hiddenBy"] as? [String: Timestamp] {
+                    for (k, v) in rawHidden { hiddenBy[k] = v.dateValue() }
+                }
+                mapped.append(ChatItem(id: id, participants: participantsArr, lastMessageText: lastText, lastMessageAt: lastAt, hiddenBy: hiddenBy))
 
                 // collect other participant uids (exclude current user)
                 if let currentUid = Auth.auth().currentUser?.uid {
@@ -884,8 +996,100 @@ class FirestoreManager: ObservableObject {
 
     /// Ensure the provided participant UIDs have display names cached in `participantNames`.
     /// Uses dictionary lookups from in-memory caches first, then batch-fetches remaining UIDs.
+    // MARK: - Participant display info helpers
+
+    /// Resolve a display name from a profile document, handling every field
+    /// convention in use: `name`/`Name` (client docs) and `FirstName`/`LastName`
+    /// (coach docs and clients created by older flows / the Android app).
+    static func profileDisplayName(from data: [String: Any]) -> String {
+        if let n = (data["name"] as? String) ?? (data["Name"] as? String) {
+            let trimmed = n.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        let first = ((data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+        let last = ((data["LastName"] as? String) ?? (data["lastName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+        return [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// Resolve a raw photo path/URL string from a profile document.
+    static func profilePhotoString(from data: [String: Any]) -> String? {
+        let p = (data["photoURL"] as? String) ?? (data["PhotoURL"] as? String) ?? (data["photoUrl"] as? String)
+        if let p = p, !p.isEmpty { return p }
+        return nil
+    }
+
+    /// Fetch a user's display name and raw photo string, checking coaches then
+    /// clients. Falls through to the clients doc when the coaches doc exists but
+    /// carries no usable name (stub docs).
+    func fetchUserDisplayInfo(uid: String, completion: @escaping (String?, String?) -> Void) {
+        guard !uid.isEmpty else { completion(nil, nil); return }
+        db.collection("coaches").document(uid).getDocument { snap, _ in
+            if let data = snap?.data(), snap?.exists == true {
+                let name = Self.profileDisplayName(from: data)
+                if !name.isEmpty {
+                    completion(name, Self.profilePhotoString(from: data))
+                    return
+                }
+            }
+            self.db.collection("clients").document(uid).getDocument { csnap, _ in
+                guard let cdata = csnap?.data(), csnap?.exists == true else {
+                    completion(nil, nil)
+                    return
+                }
+                let name = Self.profileDisplayName(from: cdata)
+                completion(name.isEmpty ? nil : name, Self.profilePhotoString(from: cdata))
+            }
+        }
+    }
+
+    /// Seed the in-memory participant caches from a chat document's denormalized
+    /// `participantNames` / `participantPhotoURLs` maps, so names and avatars
+    /// render even before (or without) a live profile lookup.
+    func seedParticipantInfo(fromChatData data: [String: Any]) {
+        if let nameMap = data["participantNames"] as? [String: String] {
+            for (pid, nm) in nameMap where !nm.isEmpty {
+                let cached = participantNames[pid]
+                if cached == nil || cached == pid {
+                    DispatchQueue.main.async { self.participantNames[pid] = nm }
+                }
+            }
+        }
+        if let photoMap = data["participantPhotoURLs"] as? [String: String] {
+            for (pid, ps) in photoMap where !ps.isEmpty {
+                if coachPhotoURLs[pid] ?? nil == nil, clientPhotoURLs[pid] ?? nil == nil {
+                    resolvePhotoURL(ps) { url in
+                        DispatchQueue.main.async {
+                            if self.coachPhotoURLs[pid] ?? nil == nil, self.clientPhotoURLs[pid] ?? nil == nil {
+                                self.clientPhotoURLs[pid] = url
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Write the given user's current display name and photo onto the chat doc's
+    /// denormalized maps. Called when a user opens a chat so the other side
+    /// always has fresh info to display (self-healing for legacy chats).
+    func updateChatParticipantInfo(chatId: String, uid: String) {
+        guard !chatId.isEmpty, !uid.isEmpty else { return }
+        fetchUserDisplayInfo(uid: uid) { name, photo in
+            var payload: [String: Any] = [:]
+            if let n = name, !n.isEmpty { payload["participantNames.\(uid)"] = n }
+            if let p = photo, !p.isEmpty { payload["participantPhotoURLs.\(uid)"] = p }
+            guard !payload.isEmpty else { return }
+            self.db.collection("chats").document(chatId).updateData(payload) { err in
+                if let err = err { print("updateChatParticipantInfo: \(err.localizedDescription)") }
+            }
+        }
+    }
+
     func ensureParticipantNames(_ uids: [String]) {
-        let missing = uids.filter { self.participantNames[$0] == nil }
+        // Treat a cached value equal to the UID itself as unresolved — an early
+        // failed lookup must not permanently block resolution (previously these
+        // only recovered via the 5-second polling timer in MessagesView).
+        let missing = uids.filter { self.participantNames[$0] == nil || self.participantNames[$0] == $0 }
         guard !missing.isEmpty else { return }
 
         // Build dictionary for O(1) coach lookups instead of linear search per UID
@@ -931,14 +1135,15 @@ class FirestoreManager: ObservableObject {
                     for doc in docs {
                         let id = doc.documentID
                         let data = doc.data()
-                        let first = data["FirstName"] as? String ?? ""
-                        let last = data["LastName"] as? String ?? ""
-                        let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-                        DispatchQueue.main.async { self.participantNames[id] = name.isEmpty ? id : name }
+                        let name = Self.profileDisplayName(from: data)
+                        // Only treat the coach doc as authoritative when it carries a
+                        // usable name; otherwise fall through to the clients lookup
+                        // (stub coach docs would otherwise mask a real client profile).
+                        guard !name.isEmpty else { continue }
+                        DispatchQueue.main.async { self.participantNames[id] = name }
 
                         // cache photo URL for coach if present
-                        let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
-                        if let ps = photoStr, !ps.isEmpty {
+                        if let ps = Self.profilePhotoString(from: data) {
                             self.resolvePhotoURL(ps) { url in
                                 DispatchQueue.main.async { self.coachPhotoURLs[id] = url }
                             }
@@ -967,12 +1172,11 @@ class FirestoreManager: ObservableObject {
                         for cdoc in cdocs {
                             let id = cdoc.documentID
                             let cdata = cdoc.data()
-                            let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? id
-                            DispatchQueue.main.async { self.participantNames[id] = name }
+                            let name = Self.profileDisplayName(from: cdata)
+                            DispatchQueue.main.async { self.participantNames[id] = name.isEmpty ? id : name }
 
                             // cache client photo URL if present
-                            let photoStr = (cdata["photoURL"] as? String) ?? (cdata["PhotoURL"] as? String) ?? (cdata["photoUrl"] as? String)
-                            if let ps = photoStr, !ps.isEmpty {
+                            if let ps = Self.profilePhotoString(from: cdata) {
                                 self.resolvePhotoURL(ps) { url in
                                     DispatchQueue.main.async { self.clientPhotoURLs[id] = url }
                                 }
@@ -1068,7 +1272,7 @@ class FirestoreManager: ObservableObject {
                                 for cdoc in cdocs {
                                     let id = cdoc.documentID
                                     let cdata = cdoc.data()
-                                    let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? ""
+                                    let name = Self.profileDisplayName(from: cdata)
                                     if !name.isEmpty {
                                         DispatchQueue.main.async { self.participantNames[id] = name }
                                         foundClientIds.insert(id)
@@ -1138,7 +1342,7 @@ class FirestoreManager: ObservableObject {
                             for cdoc in cdocs {
                                 let id = cdoc.documentID
                                 let cdata = cdoc.data()
-                                let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? ""
+                                let name = Self.profileDisplayName(from: cdata)
                                 if !name.isEmpty {
                                     DispatchQueue.main.async { self.participantNames[id] = name }
                                     foundClients.insert(id)
@@ -1173,8 +1377,13 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Return the best-known photo URL for a participant (coach first, then client).
+    /// The caches are [String: URL?] — an entry explicitly cached as nil ("no
+    /// photo found") must NOT mask a real URL in the other cache, so flatten
+    /// both levels explicitly instead of chaining `??`.
     func participantPhotoURL(_ uid: String) -> URL? {
-        return coachPhotoURLs[uid] ?? clientPhotoURLs[uid] ?? nil
+        if let entry = coachPhotoURLs[uid], let url = entry { return url }
+        if let entry = clientPhotoURLs[uid], let url = entry { return url }
+        return nil
     }
 
     /// Fetch and cache the photo URL for an arbitrary user UID.
@@ -1188,10 +1397,9 @@ class FirestoreManager: ObservableObject {
         let coachRef = db.collection("coaches").document(uid)
         coachRef.getDocument { [weak self] snap, _ in
             guard let self = self else { return }
-            if let data = snap?.data() {
-                let photoStr = (data["PhotoURL"] as? String)
-                    ?? (data["photoURL"] as? String)
-                    ?? (data["photoUrl"] as? String)
+            // Only stop at the coach doc when it actually carries a photo —
+            // a stub coach doc must not mask a client profile's photo.
+            if let data = snap?.data(), let photoStr = Self.profilePhotoString(from: data) {
                 self.resolvePhotoURL(photoStr) { url in
                     DispatchQueue.main.async { self.coachPhotoURLs[uid] = url }
                 }
@@ -1200,10 +1408,7 @@ class FirestoreManager: ObservableObject {
             // Fall back to clients collection
             self.db.collection("clients").document(uid).getDocument { snap, _ in
                 let data = snap?.data() ?? [:]
-                let photoStr = (data["photoURL"] as? String)
-                    ?? (data["PhotoURL"] as? String)
-                    ?? (data["photoUrl"] as? String)
-                self.resolvePhotoURL(photoStr) { url in
+                self.resolvePhotoURL(Self.profilePhotoString(from: data)) { url in
                     DispatchQueue.main.async { self.clientPhotoURLs[uid] = url }
                 }
             }
@@ -1860,10 +2065,18 @@ class FirestoreManager: ObservableObject {
 
     // MARK: - Places to Play
 
+    private var placesToPlayListener: ListenerRegistration? = nil
+
+    /// Attach a live snapshot listener so club data (pending join requests,
+    /// members, admins) updates automatically — no manual refresh needed for
+    /// approve/reject buttons to appear when a join request comes in.
     func fetchPlacesToPlay() {
-        self.db.collection("placesToPlay").order(by: "createdAt", descending: true).getDocuments { snap, err in
+        // Already listening — the snapshot listener keeps data fresh.
+        if placesToPlayListener != nil { return }
+        placesToPlayListener = self.db.collection("placesToPlay").order(by: "createdAt", descending: true).addSnapshotListener { [weak self] snap, err in
+            guard let self = self else { return }
             if let err = err {
-                print("fetchPlacesToPlay error: \(err)")
+                print("fetchPlacesToPlay listener error: \(err)")
                 return
             }
             let docs = snap?.documents ?? []
@@ -1903,6 +2116,25 @@ class FirestoreManager: ObservableObject {
                 }
                 pendingMembers.sort { $0.joinedAt < $1.joinedAt }
 
+                // Club admins: new multi-admin map, with legacy contactUid fallback
+                let contactUid = data["contactUid"] as? String
+                let contactName = data["contactName"] as? String
+                var admins: [ClubMember] = []
+                if let raw = data["admins"] as? [String: Any] {
+                    for (uid, value) in raw {
+                        if let info = value as? [String: Any] {
+                            let aName = info["name"] as? String ?? ""
+                            let addedAt: Date
+                            if let ts = info["addedAt"] as? Timestamp { addedAt = ts.dateValue() } else { addedAt = Date() }
+                            admins.append(ClubMember(id: uid, name: aName, joinedAt: addedAt))
+                        }
+                    }
+                }
+                if admins.isEmpty, let cUid = contactUid, !cUid.isEmpty {
+                    admins = [ClubMember(id: cUid, name: contactName ?? "Club Admin", joinedAt: Date())]
+                }
+                admins.sort { $0.joinedAt < $1.joinedAt }
+
                 return PlaceToPlay(
                     id: d.documentID,
                     name: name,
@@ -1910,8 +2142,9 @@ class FirestoreManager: ObservableObject {
                     playingTimes: timesMap,
                     pricePerSession: data["pricePerSession"] as? String ?? "",
                     createdBy: data["createdBy"] as? String ?? "",
-                    contactUid: data["contactUid"] as? String,
-                    contactName: data["contactName"] as? String,
+                    contactUid: contactUid,
+                    contactName: contactName,
+                    admins: admins,
                     members: members,
                     pendingMembers: pendingMembers
                 )
@@ -1958,45 +2191,71 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Add the current user as a club admin. A club can have multiple admins:
+    /// each admin is stored in the `admins` map; the legacy `contactUid`/
+    /// `contactName` fields are still maintained (first admin) for compatibility.
     func assignPlaceContact(placeId: String, completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
         }
-        let contactName: String = {
+        let adminName: String = {
             if let name = self.currentClient?.name, !name.isEmpty { return name }
             if let coach = self.currentCoach, !coach.name.isEmpty { return coach.name }
-            return "Contact"
+            return "Club Admin"
         }()
-        self.db.collection("placesToPlay").document(placeId).updateData([
-            "contactUid": uid,
-            "contactName": contactName,
+        var payload: [String: Any] = [
+            "admins.\(uid)": [
+                "name": adminName,
+                "addedAt": Timestamp(date: Date())
+            ],
             "members.\(uid)": [
-                "name": contactName,
+                "name": adminName,
                 "joinedAt": Timestamp(date: Date())
             ]
-        ]) { [weak self] err in
+        ]
+        // Keep the legacy single-contact fields pointing at the first admin
+        let place = self.placesToPlay.first(where: { $0.id == placeId })
+        if place?.contactUid == nil || place?.contactUid?.isEmpty == true {
+            payload["contactUid"] = uid
+            payload["contactName"] = adminName
+        }
+        self.db.collection("placesToPlay").document(placeId).updateData(payload) { err in
             if let err = err {
                 print("assignPlaceContact error: \(err)")
                 completion(err)
                 return
             }
-            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
             completion(nil)
         }
     }
 
+    /// Remove the current user from the club's admins. If they were the legacy
+    /// contact, promote another remaining admin into the legacy fields.
     func removePlaceContact(placeId: String, completion: @escaping (Error?) -> Void) {
-        self.db.collection("placesToPlay").document(placeId).updateData([
-            "contactUid": FieldValue.delete(),
-            "contactName": FieldValue.delete()
-        ]) { [weak self] err in
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        var payload: [String: Any] = [
+            "admins.\(uid)": FieldValue.delete()
+        ]
+        let place = self.placesToPlay.first(where: { $0.id == placeId })
+        if place?.contactUid == uid {
+            if let next = place?.admins.first(where: { $0.id != uid }) {
+                payload["contactUid"] = next.id
+                payload["contactName"] = next.name
+            } else {
+                payload["contactUid"] = FieldValue.delete()
+                payload["contactName"] = FieldValue.delete()
+            }
+        }
+        self.db.collection("placesToPlay").document(placeId).updateData(payload) { err in
             if let err = err {
                 print("removePlaceContact error: \(err)")
                 completion(err)
                 return
             }
-            DispatchQueue.main.async { self?.fetchPlacesToPlay() }
             completion(nil)
         }
     }
@@ -2025,19 +2284,20 @@ class FirestoreManager: ObservableObject {
                 completion?(err)
                 return
             }
-            // Notify the point of contact
-            if let place = self?.placesToPlay.first(where: { $0.id == placeId }),
-               let contactUid = place.contactUid, !contactUid.isEmpty {
-                let notifRef = Firestore.firestore().collection("pendingNotifications").document(contactUid).collection("notifications").document()
-                notifRef.setData([
-                    "title": "New Club Join Request",
-                    "body": "\(userName) wants to join \(place.name)",
-                    "type": "club_join_request",
-                    "placeId": placeId,
-                    "senderId": uid,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "delivered": false
-                ]) { _ in }
+            // Notify every club admin
+            if let place = self?.placesToPlay.first(where: { $0.id == placeId }) {
+                for adminId in place.adminIds where !adminId.isEmpty && adminId != uid {
+                    let notifRef = Firestore.firestore().collection("pendingNotifications").document(adminId).collection("notifications").document()
+                    notifRef.setData([
+                        "title": "New Club Join Request",
+                        "body": "\(userName) wants to join \(place.name)",
+                        "type": "club_join_request",
+                        "placeId": placeId,
+                        "senderId": uid,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ]) { _ in }
+                }
             }
             DispatchQueue.main.async { self?.fetchPlacesToPlay() }
             completion?(nil)
@@ -2127,7 +2387,9 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func sendClubAnnouncement(placeId: String, title: String, body: String, completion: ((Error?) -> Void)? = nil) {
+    /// Send an announcement to all club members. The notification title is
+    /// always the club's name so recipients immediately know which club sent it.
+    func sendClubAnnouncement(placeId: String, body: String, completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -2141,6 +2403,9 @@ class FirestoreManager: ObservableObject {
             completion?(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "No members to notify"]))
             return
         }
+
+        // The club name IS the announcement title
+        let title = place.name
 
         // Determine sender name for the stored announcement
         let senderName = self.currentCoach?.name ?? self.currentClient?.name ?? "Unknown"
@@ -2187,12 +2452,20 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    private var clubAnnouncementListeners: [String: ListenerRegistration] = [:]
+
+    /// Attach a live snapshot listener for a club's announcements so new
+    /// announcements appear automatically (e.g. while a member is viewing the
+    /// announcements screen when the push notification arrives) — no manual
+    /// refresh needed.
     func fetchClubAnnouncements(placeId: String) {
-        self.db.collection("placesToPlay").document(placeId).collection("announcements")
+        // Already listening — the snapshot listener keeps data fresh.
+        if clubAnnouncementListeners[placeId] != nil { return }
+        clubAnnouncementListeners[placeId] = self.db.collection("placesToPlay").document(placeId).collection("announcements")
             .order(by: "createdAt", descending: true)
-            .getDocuments { [weak self] snap, err in
+            .addSnapshotListener { [weak self] snap, err in
                 if let err = err {
-                    print("fetchClubAnnouncements error: \(err)")
+                    print("fetchClubAnnouncements listener error: \(err)")
                     return
                 }
                 let docs = snap?.documents ?? []
@@ -5515,9 +5788,29 @@ class FirestoreManager: ObservableObject {
                     participantRefs = refs
                 }
 
+                // Denormalize each participant's display name and photo onto the
+                // chat doc so the other side can always render them (the coach's
+                // list previously showed a raw UID / blank avatar when the live
+                // profile lookup failed).
+                var participantNamesMap: [String: String] = [:]
+                var participantPhotosMap: [String: String] = [:]
+                let infoGroup = DispatchGroup()
+                for id in uids {
+                    infoGroup.enter()
+                    self.fetchUserDisplayInfo(uid: id) { name, photo in
+                        if let n = name, !n.isEmpty { participantNamesMap[id] = n }
+                        if let p = photo, !p.isEmpty { participantPhotosMap[id] = p }
+                        infoGroup.leave()
+                    }
+                }
+
+                infoGroup.notify(queue: .main) {
+
                 // Only write participantRefs now; do not write the legacy participants string array.
                 let data: [String: Any] = [
                     "participantRefs": participantRefs,
+                    "participantNames": participantNamesMap,
+                    "participantPhotoURLs": participantPhotosMap,
                     "createdAt": FieldValue.serverTimestamp(),
                     "lastMessageText": NSNull(),
                     "lastMessageAt": FieldValue.serverTimestamp()
@@ -5556,6 +5849,7 @@ class FirestoreManager: ObservableObject {
                         }
                      }
                  }
+                } // end infoGroup.notify
              }
          }
      }

@@ -67,30 +67,32 @@ struct PlacesToPlayView: View {
                                 }
                             }
 
-                            // Contact info with message icon
-                            if let contactUid = place.contactUid, !contactUid.isEmpty {
+                            // Club admin info with message icons
+                            if !place.admins.isEmpty {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Divider()
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "person.circle.fill")
-                                            .font(.title2)
-                                            .foregroundColor(Color("LogoGreen"))
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Contact")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                            Text(place.contactName ?? "Contact")
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                        }
-                                        Spacer()
-                                        if contactUid != currentUid {
-                                            Button(action: { openChat(withUid: contactUid) }) {
-                                                Image(systemName: "message.fill")
-                                                    .font(.title3)
-                                                    .foregroundColor(Color("LogoBlue"))
+                                    ForEach(place.admins) { admin in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "person.circle.fill")
+                                                .font(.title2)
+                                                .foregroundColor(Color("LogoGreen"))
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Club Admin")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                                Text(admin.name.isEmpty ? "Club Admin" : admin.name)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
                                             }
-                                            .buttonStyle(BorderlessButtonStyle())
+                                            Spacer()
+                                            if admin.id != currentUid {
+                                                Button(action: { openChat(withUid: admin.id) }) {
+                                                    Image(systemName: "message.fill")
+                                                        .font(.title3)
+                                                        .foregroundColor(Color("LogoBlue"))
+                                                }
+                                                .buttonStyle(BorderlessButtonStyle())
+                                            }
                                         }
                                     }
                                 }

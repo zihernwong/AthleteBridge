@@ -10,6 +10,9 @@ struct MessagesView: View {
     @State private var isCreatingChat: Bool = false
     @State private var lastKnownChatIds: [String] = []
     @State private var refreshTask: Task<Void, Never>? = nil
+    @State private var showHiddenChats = false
+
+    private var currentUid: String { auth.user?.uid ?? "" }
 
     var body: some View {
         NavigationStack(path: $navPath) {
@@ -59,10 +62,37 @@ struct MessagesView: View {
         }
     }
 
+    /// Chats the current user has NOT hidden.
+    private var visibleChats: [FirestoreManager.ChatItem] {
+        chatsWithMessages.filter { !$0.isHidden(for: currentUid) }
+    }
+
+    /// Chats the current user has hidden (auto-unhide when a new message arrives).
+    private var hiddenChats: [FirestoreManager.ChatItem] {
+        chatsWithMessages.filter { $0.isHidden(for: currentUid) }
+    }
+
+    private var displayedChats: [FirestoreManager.ChatItem] {
+        showHiddenChats ? hiddenChats : visibleChats
+    }
+
     @ViewBuilder
     private var mainContent: some View {
-        if chatsWithMessages.isEmpty {
-            emptyStateView
+        if displayedChats.isEmpty {
+            if showHiddenChats {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 36))
+                        .foregroundColor(.secondary)
+                    Text("No hidden chats")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+            } else {
+                emptyStateView
+            }
         } else {
             chatListView
         }
@@ -94,12 +124,16 @@ struct MessagesView: View {
 
     private var chatListView: some View {
         List {
-            ForEach(chatsWithMessages) { chat in
-                NavigationLink(value: chat.id) {
-                    ChatRow(chat: chat)
-                        .environmentObject(firestore)
-                        .environmentObject(auth)
+            if showHiddenChats {
+                Section {
+                    chatRows
+                } header: {
+                    Text("Hidden Chats")
+                } footer: {
+                    Text("Hidden chats reappear automatically when you receive a new message.")
                 }
+            } else {
+                chatRows
             }
         }
         .refreshable {
@@ -109,11 +143,50 @@ struct MessagesView: View {
         }
     }
 
+    private var chatRows: some View {
+        ForEach(displayedChats) { chat in
+            NavigationLink(value: chat.id) {
+                ChatRow(chat: chat)
+                    .environmentObject(firestore)
+                    .environmentObject(auth)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if showHiddenChats {
+                    Button {
+                        firestore.setChatHidden(chatId: chat.id, hidden: false) { err in
+                            if err == nil { firestore.showToast("Chat unhidden") }
+                        }
+                    } label: {
+                        Label("Unhide", systemImage: "eye")
+                    }
+                    .tint(Color("LogoGreen"))
+                } else {
+                    Button {
+                        firestore.setChatHidden(chatId: chat.id, hidden: true) { err in
+                            if err == nil { firestore.showToast("Chat hidden") }
+                        }
+                    } label: {
+                        Label("Hide", systemImage: "eye.slash")
+                    }
+                    .tint(.gray)
+                }
+            }
+        }
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
             Button(action: { showingNewConversation = true }) {
                 Image(systemName: "plus")
+            }
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if !hiddenChats.isEmpty || showHiddenChats {
+                Button(action: { withAnimation { showHiddenChats.toggle() } }) {
+                    Image(systemName: showHiddenChats ? "eye" : "eye.slash")
+                }
+                .accessibilityLabel(showHiddenChats ? "Show active chats" : "Show hidden chats")
             }
         }
     }

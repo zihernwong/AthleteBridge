@@ -334,7 +334,7 @@ struct ClientFormView: View {
                                 HStack {
                                     Image(systemName: "location.fill")
                                         .foregroundColor(Color("LogoGreen"))
-                                    Text("Manage Places Contact")
+                                    Text("Manage My Clubs (Club Admin)")
                                 }
                             }
                         }

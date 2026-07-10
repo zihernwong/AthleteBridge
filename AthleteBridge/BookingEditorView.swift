@@ -34,6 +34,24 @@ struct BookingEditorView: View {
     @State private var repeatWeekly: Bool = false
     @State private var repeatWeeks: Int = 4
 
+    // Agreed rates for the selected coach (simplified one-tap flow).
+    // When present, the request carries the rate and the coach's acceptance
+    // confirms the booking immediately — no separate client confirmation step.
+    @State private var agreedRates: [FirestoreManager.AgreedRate] = []
+    @State private var selectedAgreedRateLabel: String = ""
+    // When the client deselects the agreed rate they can propose their own
+    @State private var proposedRateText: String = ""
+
+    private var selectedAgreedRate: FirestoreManager.AgreedRate? {
+        agreedRates.first(where: { $0.label == selectedAgreedRateLabel })
+    }
+
+    private var proposedRateValue: Double? {
+        let v = Double(proposedRateText.replacingOccurrences(of: ",", with: "."))
+        if let v = v, v > 0 { return v }
+        return nil
+    }
+
     @State private var isSaving = false
     @State private var alertMessage: String = ""
     @State private var showAlert = false
@@ -247,63 +265,16 @@ struct BookingEditorView: View {
                 }
 
                 // Only after a coach is selected, show Coach Info and Calendar
-                if isGroupBooking && selectedCoaches.count > 1 {
-                    // Show all selected coaches' info in a horizontal TabView
-                    Section {
-                        VStack(spacing: 0) {
-                            // Coach name tabs
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(selectedCoaches, id: \.id) { coach in
-                                        Button(action: {
-                                            withAnimation { selectedCoachTabId = coach.id }
-                                        }) {
-                                            Text(coach.name)
-                                                .font(.subheadline)
-                                                .fontWeight(selectedCoachTabId == coach.id ? .semibold : .regular)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 8)
-                                                .background(selectedCoachTabId == coach.id ? Color.blue : Color(UIColor.secondarySystemBackground))
-                                                .foregroundColor(selectedCoachTabId == coach.id ? .white : .primary)
-                                                .cornerRadius(20)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                            }
-
-                            Divider()
-
-                            // Coach info content for selected tab
-                            if let coach = selectedCoaches.first(where: { $0.id == selectedCoachTabId }) ?? selectedCoaches.first {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    coachInfoContent(coach: coach)
-                                }
-                                .padding(.top, 12)
-                            }
-                        }
-                    } header: {
-                        Text("Coaches (\(selectedCoaches.count) selected)")
-                    }
-                } else if isGroupBooking && selectedCoaches.count == 1, let coach = selectedCoaches.first {
-                    // Single coach selected in group booking mode
-                    Section {
-                        coachInfoContent(coach: coach)
-                    } header: {
-                        Text(coach.name)
-                    }
-                } else if let coach = selectedCoach {
-                    // Single coach info section (original behavior)
-                    Section {
-                        coachInfoContent(coach: coach)
-                    } header: {
-                        Text(coach.name)
-                    }
-                }
+                coachInfoSections
 
                 // Show coach calendar grid once any coach is selected; hide time pickers
                 if (isGroupBooking && !selectedCoaches.isEmpty) || selectedCoach != nil {
+                    // Agreed rate quick-book (single coach only): show the rates this
+                    // coach has already agreed with this client as tappable options.
+                    if !isGroupBooking && !agreedRates.isEmpty {
+                        agreedRateSection
+                    }
+
                     // Details section (location) shown first
                     Section {
                         if availableCoachPlaces.isEmpty {
@@ -472,16 +443,13 @@ struct BookingEditorView: View {
                 }
 
                 // Snap initial start/end to nearest 30-minute increment so wheels align on load
-                let snap: (Date) -> Date = { date in
-                    let interval = 30 * 60
-                    let t = date.timeIntervalSinceReferenceDate
-                    let snapped = TimeInterval(Int((t + Double(interval)/2.0) / Double(interval))) * Double(interval)
-                    return Date(timeIntervalSinceReferenceDate: snapped)
-                }
-                startAt = snap(startAt)
-                endAt = snap(endAt)
+                startAt = Self.snapTo30(startAt)
+                endAt = Self.snapTo30(endAt)
 
                 calendarDate = Calendar.current.startOfDay(for: Date())
+
+                // Load agreed rates when the coach was pre-filled (e.g. from a calendar slot)
+                loadAgreedRates(coachId: selectedCoachId)
             }
         }
         // Replace sheet with a custom overlay so dismissal is simultaneous
@@ -518,10 +486,7 @@ struct BookingEditorView: View {
                                     .frame(height: 150)
                                     .padding(.bottom, 8)
                                     .onChange(of: startAt) { _, newStart in
-                                        let intervalSeconds = 30 * 60
-                                        let t = newStart.timeIntervalSinceReferenceDate
-                                        let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
-                                        let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                        let snappedDate = Self.snapTo30(newStart)
                                         if abs(snappedDate.timeIntervalSince(newStart)) > 0.1 { startAt = snappedDate }
                                         // Enforce minimum 1-hour booking
                                         if endAt.timeIntervalSince(startAt) < 3600 { endAt = Calendar.current.date(byAdding: .hour, value: 1, to: startAt) ?? startAt.addingTimeInterval(3600) }
@@ -531,10 +496,7 @@ struct BookingEditorView: View {
                                 MinuteIntervalDatePicker(date: $endAt, minuteInterval: 30)
                                     .frame(height: 150)
                                     .onChange(of: endAt) { _, newEnd in
-                                        let intervalSeconds = 30 * 60
-                                        let t = newEnd.timeIntervalSinceReferenceDate
-                                        let snapped = TimeInterval(Int((t + Double(intervalSeconds)/2.0) / Double(intervalSeconds))) * Double(intervalSeconds)
-                                        let snappedDate = Date(timeIntervalSinceReferenceDate: snapped)
+                                        let snappedDate = Self.snapTo30(newEnd)
                                         if abs(snappedDate.timeIntervalSince(newEnd)) > 0.1 { endAt = snappedDate }
                                         // Enforce minimum 1-hour booking
                                         if endAt.timeIntervalSince(startAt) < 3600 { startAt = Calendar.current.date(byAdding: .hour, value: -1, to: endAt) ?? endAt.addingTimeInterval(-3600) }
@@ -581,6 +543,7 @@ struct BookingEditorView: View {
                     DispatchQueue.main.async { coachReviewsMap[newCoachId] = items }
                 }
             }
+            loadAgreedRates(coachId: newCoachId)
         }
         .onChange(of: selectedCoachIds) { _, newCoachIds in
             // Fetch reviews for all selected coaches (group booking)
@@ -605,6 +568,139 @@ struct BookingEditorView: View {
             ChatView(chatId: sheet.id)
                 .environmentObject(firestore)
         }
+    }
+
+    @ViewBuilder
+    private var coachInfoSections: some View {
+        if isGroupBooking && selectedCoaches.count > 1 {
+            // Show all selected coaches' info in a horizontal TabView
+            Section {
+                VStack(spacing: 0) {
+                    // Coach name tabs
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(selectedCoaches, id: \.id) { coach in
+                                coachTabButton(coach)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+
+                    Divider()
+
+                    // Coach info content for selected tab
+                    if let coach = selectedCoaches.first(where: { $0.id == selectedCoachTabId }) ?? selectedCoaches.first {
+                        VStack(alignment: .leading, spacing: 12) {
+                            coachInfoContent(coach: coach)
+                        }
+                        .padding(.top, 12)
+                    }
+                }
+            } header: {
+                Text("Coaches (\(selectedCoaches.count) selected)")
+            }
+        } else if isGroupBooking && selectedCoaches.count == 1, let coach = selectedCoaches.first {
+            // Single coach selected in group booking mode
+            Section {
+                coachInfoContent(coach: coach)
+            } header: {
+                Text(coach.name)
+            }
+        } else if let coach = selectedCoach {
+            // Single coach info section (original behavior)
+            Section {
+                coachInfoContent(coach: coach)
+            } header: {
+                Text(coach.name)
+            }
+        }
+    }
+
+    private func coachTabButton(_ coach: Coach) -> some View {
+        let isSelected = selectedCoachTabId == coach.id
+        return Button(action: {
+            withAnimation { selectedCoachTabId = coach.id }
+        }) {
+            Text(coach.name)
+                .font(.subheadline)
+                .fontWeight(isSelected ? .semibold : .regular)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color.blue : Color(UIColor.secondarySystemBackground))
+                .foregroundColor(isSelected ? .white : .primary)
+                .cornerRadius(20)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var agreedRateSessionHours: Double {
+        max(1.0, (endAt.timeIntervalSince(startAt) / 1800).rounded() * 0.5)
+    }
+
+    private var agreedRateSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(agreedRates) { rate in
+                        agreedRateChip(rate)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let rate = selectedAgreedRate {
+                HStack {
+                    Text("Session total").font(.subheadline)
+                    Spacer()
+                    Text(String(format: "$%.2f", rate.rateUSD * agreedRateSessionHours))
+                        .font(.subheadline).bold()
+                    Text(String(format: "(%.1f hr)", agreedRateSessionHours))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Label("Booked at your agreed rate — the session is confirmed as soon as your coach accepts. No extra steps.", systemImage: "bolt.fill")
+                    .font(.caption)
+                    .foregroundColor(Color("LogoGreen"))
+            } else {
+                // Agreed rate deselected: the client may propose their own rate
+                HStack {
+                    Text("$")
+                    TextField("Propose a different rate per hour (optional)", text: $proposedRateText)
+                        .keyboardType(.decimalPad)
+                        .disableAutocorrection(true)
+                }
+                Text("Tap a rate above to book at your agreed rate, or propose your own — your coach will review and confirm it.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Rate")
+        } footer: {
+            selectedAgreedRate != nil ? Text("Tap the selected rate again to deselect it and propose a different rate.") : Text("")
+        }
+    }
+
+    private func agreedRateChip(_ rate: FirestoreManager.AgreedRate) -> some View {
+        let isSelected = selectedAgreedRateLabel == rate.label
+        return Button(action: {
+            // Tapping the selected chip deselects it (propose-your-own mode)
+            selectedAgreedRateLabel = isSelected ? "" : rate.label
+        }) {
+            VStack(spacing: 2) {
+                Text(rate.label)
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                Text(String(format: "$%.0f/hr", rate.rateUSD))
+                    .font(.caption)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
+            .foregroundColor(isSelected ? .white : .primary)
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -701,6 +797,26 @@ struct BookingEditorView: View {
         .padding(.top, 8)
     }
 
+    /// Round a date to the nearest 30-minute boundary.
+    private static func snapTo30(_ date: Date) -> Date {
+        let interval: Double = 30 * 60
+        let units = (date.timeIntervalSinceReferenceDate / interval).rounded()
+        return Date(timeIntervalSinceReferenceDate: units * interval)
+    }
+
+    private func loadAgreedRates(coachId: String) {
+        agreedRates = []
+        selectedAgreedRateLabel = ""
+        guard !coachId.isEmpty, let uid = auth.user?.uid else { return }
+        firestore.fetchAgreedRates(coachId: coachId, clientId: uid) { rates in
+            DispatchQueue.main.async {
+                guard self.selectedCoachId == coachId else { return }
+                self.agreedRates = rates
+                self.selectedAgreedRateLabel = rates.first?.label ?? ""
+            }
+        }
+    }
+
     private func saveBooking() {
         guard let clientUid = auth.user?.uid, !clientUid.isEmpty else {
             alertMessage = "You must be signed in to create a booking"
@@ -727,14 +843,8 @@ struct BookingEditorView: View {
         }
 
         // Snap times to nearest 30-minute boundary before validation/save
-        func snapTo30(_ date: Date) -> Date {
-            let interval = 30 * 60
-            let t = date.timeIntervalSinceReferenceDate
-            let snapped = TimeInterval(Int((t + Double(interval)/2.0) / Double(interval))) * Double(interval)
-            return Date(timeIntervalSinceReferenceDate: snapped)
-        }
-        startAt = snapTo30(startAt)
-        endAt = snapTo30(endAt)
+        startAt = Self.snapTo30(startAt)
+        endAt = Self.snapTo30(endAt)
 
         // Validate times before saving
         if !(startAt < endAt) {
@@ -880,6 +990,19 @@ struct BookingEditorView: View {
                 if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
                 return m
             }()
+
+            // Agreed-rate request: carry the pre-agreed price so the coach can
+            // accept-and-confirm in one tap (no client confirmation round-trip).
+            if let agreed = selectedAgreedRate {
+                extra["RateUSD"] = agreed.rateUSD
+                extra["RateLabel"] = agreed.label
+                extra["AgreedRate"] = true
+            } else if let proposed = proposedRateValue {
+                // Client proposed their own rate: goes through the classic
+                // coach-review flow, with the coach's rate field pre-filled.
+                extra["RateUSD"] = proposed
+                extra["ProposedRate"] = true
+            }
 
             let weeks = repeatWeekly ? min(max(repeatWeeks, 1), 12) : 1
             if weeks > 1 {

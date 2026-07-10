@@ -57,8 +57,8 @@ struct PlaceDetailView: View {
 
                 eventsSection
 
-                if let contactUid = place.contactUid, !contactUid.isEmpty {
-                    contactSection(contactUid: contactUid)
+                if !livePlace.admins.isEmpty {
+                    adminsSection
                 }
 
                 if placeCoordinate != nil || !place.address.isEmpty {
@@ -284,7 +284,7 @@ struct PlaceDetailView: View {
         livePlace.pendingMembers.contains { $0.id == currentUid }
     }
     private var isContact: Bool {
-        livePlace.contactUid == currentUid
+        livePlace.isAdmin(currentUid)
     }
 
     private var clubSection: some View {
@@ -303,7 +303,7 @@ struct PlaceDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(Color("LogoGreen"))
-                    Text(isContact ? "Club Leader" : "You're a member")
+                    Text(isContact ? "Club Admin" : "You're a member")
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(Color("LogoGreen"))
@@ -522,41 +522,35 @@ struct PlaceDetailView: View {
         }
     }
 
-    // MARK: - Contact Section
+    // MARK: - Club Admins Section
 
-    private func contactSection(contactUid: String) -> some View {
+    private var adminsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Contact")
+            Text(livePlace.admins.count == 1 ? "Club Admin" : "Club Admins")
                 .font(.headline)
 
-            HStack(spacing: 12) {
-                Image(systemName: "person.circle.fill")
-                    .font(.largeTitle)
-                    .foregroundColor(Color("LogoGreen"))
-                VStack(alignment: .leading, spacing: 2) {
-                    if let name = place.contactName, !name.isEmpty {
-                        Text(name)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    } else {
-                        Text("Contact")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+            ForEach(livePlace.admins) { admin in
+                HStack(spacing: 12) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.largeTitle)
+                        .foregroundColor(Color("LogoGreen"))
+                    Text(admin.name.isEmpty ? "Club Admin" : admin.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    if admin.id != currentUid {
+                        Button(action: { openChat(withUid: admin.id) }) {
+                            Image(systemName: "message.fill")
+                                .font(.title3)
+                                .foregroundColor(Color("LogoBlue"))
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
                     }
                 }
-                Spacer()
-                if contactUid != currentUid {
-                    Button(action: { openChat(withUid: contactUid) }) {
-                        Image(systemName: "message.fill")
-                            .font(.title3)
-                            .foregroundColor(Color("LogoBlue"))
-                    }
-                    .buttonStyle(BorderlessButtonStyle())
-                }
+                .padding()
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(12)
             }
-            .padding()
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
         }
     }
 

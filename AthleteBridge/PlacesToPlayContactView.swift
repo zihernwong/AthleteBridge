@@ -11,7 +11,7 @@ struct PlacesToPlayContactView: View {
     private var currentUid: String { Auth.auth().currentUser?.uid ?? "" }
 
     private var myPlaces: [PlaceToPlay] {
-        firestore.placesToPlay.filter { $0.contactUid == currentUid }
+        firestore.placesToPlay.filter { $0.isAdmin(currentUid) }
     }
 
     var body: some View {
@@ -24,7 +24,7 @@ struct PlacesToPlayContactView: View {
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(firestore.placesToPlay) { place in
-                        let isMine = place.contactUid == currentUid
+                        let isMine = place.isAdmin(currentUid)
                         Button(action: { toggleContact(place: place, isMine: isMine) }) {
                             HStack(spacing: 12) {
                                 Image(systemName: isMine ? "checkmark.circle.fill" : "circle")
@@ -39,8 +39,9 @@ struct PlacesToPlayContactView: View {
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
-                                    if let contact = place.contactName, let uid = place.contactUid, uid != currentUid {
-                                        Text("Contact: \(contact)")
+                                    let otherAdmins = place.admins.filter { $0.id != currentUid }
+                                    if !otherAdmins.isEmpty {
+                                        Text("Admin\(otherAdmins.count == 1 ? "" : "s"): \(otherAdmins.map { $0.name }.joined(separator: ", "))")
                                             .font(.caption2)
                                             .foregroundColor(.orange)
                                     }
@@ -53,9 +54,9 @@ struct PlacesToPlayContactView: View {
                     }
                 }
             } header: {
-                Text("My Places")
+                Text("My Clubs")
             } footer: {
-                Text("Select the places you are the contact for. Other users will see your name and be able to message you.")
+                Text("Select the clubs you are an admin for. A club can have multiple admins — all admins can approve members and send announcements.")
             }
 
             // Club Management — pending requests, members, announcements
@@ -149,7 +150,7 @@ struct PlacesToPlayContactView: View {
                         }
                     }
 
-                    // Send announcement
+                    // Send announcement + history of sent announcements
                     Section(header: Text("\(place.name) — Announcements")) {
                         NavigationLink {
                             SendAnnouncementView(place: place)
@@ -162,6 +163,39 @@ struct PlacesToPlayContactView: View {
                             }
                         }
                         .disabled(place.members.isEmpty)
+
+                        let sent = firestore.clubAnnouncements[place.id] ?? []
+                        if sent.isEmpty {
+                            Text("No announcements sent yet.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(sent.prefix(3)) { announcement in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(announcement.body)
+                                        .font(.subheadline)
+                                        .lineLimit(2)
+                                    HStack {
+                                        Text("Sent by \(announcement.senderName)")
+                                        Spacer()
+                                        Text(DateFormatter.localizedString(from: announcement.createdAt, dateStyle: .medium, timeStyle: .short))
+                                    }
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            if sent.count > 3 {
+                                NavigationLink {
+                                    ClubAnnouncementsView(place: place)
+                                        .environmentObject(firestore)
+                                } label: {
+                                    Text("View All (\(sent.count))")
+                                        .font(.subheadline)
+                                        .foregroundColor(Color("LogoGreen"))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -196,13 +230,14 @@ struct PlacesToPlayContactView: View {
                 Text("Managing Registrations")
             }
         }
-        .navigationTitle("Places to Play Contact")
+        .navigationTitle("Club Admin")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             firestore.fetchPlacesToPlay()
             firestore.fetchSignupEvents()
-            // Prefetch profile photos for all members and pending members
+            // Prefetch profile photos and sent announcements for managed clubs
             for place in myPlaces {
+                firestore.fetchClubAnnouncements(placeId: place.id)
                 for member in place.members { firestore.fetchAndCacheUserPhotoURL(uid: member.id) }
                 for pending in place.pendingMembers { firestore.fetchAndCacheUserPhotoURL(uid: pending.id) }
             }
@@ -216,6 +251,7 @@ struct PlacesToPlayContactView: View {
         }
         .onChange(of: firestore.placesToPlay) { _, _ in
             for place in myPlaces {
+                firestore.fetchClubAnnouncements(placeId: place.id)
                 for member in place.members { firestore.fetchAndCacheUserPhotoURL(uid: member.id) }
                 for pending in place.pendingMembers { firestore.fetchAndCacheUserPhotoURL(uid: pending.id) }
             }
@@ -227,9 +263,8 @@ struct PlacesToPlayContactView: View {
         if isMine {
             firestore.removePlaceContact(placeId: place.id) { _ in }
         } else {
-            if place.contactUid == nil || place.contactUid?.isEmpty == true {
-                firestore.assignPlaceContact(placeId: place.id) { _ in }
-            }
+            // Clubs support multiple admins — anyone with this role can join as one
+            firestore.assignPlaceContact(placeId: place.id) { _ in }
         }
     }
 
@@ -431,24 +466,30 @@ struct SendAnnouncementView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @Environment(\.dismiss) private var dismiss
     let place: PlaceToPlay
-    @State private var announcementTitle = ""
     @State private var announcementBody = ""
     @State private var isSending = false
 
     private var isValid: Bool {
-        !announcementTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !announcementBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
         Form {
             Section(header: Text("Announcement")) {
-                TextField("Title", text: $announcementTitle)
+                // The notification title is always the club's name so members
+                // immediately know which club it's from — no editable title.
+                HStack {
+                    Text("From")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(place.name)
+                        .fontWeight(.medium)
+                }
                 TextField("Message", text: $announcementBody, axis: .vertical)
                     .lineLimit(3...8)
             }
             Section {
-                Text("This will send a push notification to all \(place.members.count) member\(place.members.count == 1 ? "" : "s") of \(place.name).")
+                Text("This will send a push notification titled \"\(place.name)\" to all \(place.members.count) member\(place.members.count == 1 ? "" : "s").")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -461,7 +502,6 @@ struct SendAnnouncementView: View {
                     isSending = true
                     firestore.sendClubAnnouncement(
                         placeId: place.id,
-                        title: announcementTitle.trimmingCharacters(in: .whitespacesAndNewlines),
                         body: announcementBody.trimmingCharacters(in: .whitespacesAndNewlines)
                     ) { err in
                         DispatchQueue.main.async {

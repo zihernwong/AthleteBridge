@@ -270,7 +270,7 @@ enum AdditionalUserType: String, CaseIterable, Identifiable {
         switch self {
         case .stringer: return "Badminton Stringer"
         case .tournamentOrganizer: return "Tournament Organizer"
-        case .placesToPlayContact: return "Place to Play Contact"
+        case .placesToPlayContact: return "Club Admin"
         }
     }
 
@@ -363,10 +363,20 @@ struct PlaceToPlay: Identifiable, Hashable {
     let playingTimes: [String: String]
     let pricePerSession: String
     let createdBy: String
+    /// Legacy single-contact fields (still written for the first admin so the
+    /// Android app keeps working). Prefer `admins` for all new logic.
     let contactUid: String?
     let contactName: String?
+    /// Club admins (formerly "places to play contacts"). A club can have several.
+    let admins: [ClubMember]
     let members: [ClubMember]
     let pendingMembers: [ClubMember]
+
+    var adminIds: [String] { admins.map { $0.id } }
+
+    func isAdmin(_ uid: String) -> Bool {
+        !uid.isEmpty && adminIds.contains(uid)
+    }
 }
 
 struct PlayerToPlayWith: Identifiable, Hashable {

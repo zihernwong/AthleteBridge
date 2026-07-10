@@ -16,7 +16,33 @@ struct AcceptBookingView: View {
     @State private var showRejectOptions: Bool = false
     @State private var selectedRejectReason: String = "Not Qualified"
 
+    // Agreed-rate quick flow: the client requested at a pre-agreed price, so
+    // accepting confirms the booking immediately (no client confirmation step).
+    @State private var isAgreedRateRequest: Bool = false
+    @State private var agreedRateLabel: String? = nil
+    @State private var agreedRateUSD: Double? = nil
+    @State private var showProposeDifferentRate: Bool = false
+    // Client typed their own rate at request time (classic review flow)
+    @State private var isClientProposedRate: Bool = false
+
+    // Weekly series support: sibling "requested" bookings sharing recurrenceGroupId
+    @State private var seriesBookingIds: [String] = []
+    @State private var applyToSeries: Bool = true
+
+    // Classic flow: remember this rate for future one-tap bookings
+    @State private var saveAsAgreedRate: Bool = true
+    @State private var agreedRateSaveLabel: String = "1-on-1"
+
     private let rejectReasons = ["Not Qualified", "Coach Unavailable", "Other"]
+
+    // Whether the classic rate/note entry UI should be shown
+    private var showClassicSections: Bool {
+        !isAgreedRateRequest || showProposeDifferentRate
+    }
+
+    private var quickAcceptRate: Double? {
+        agreedRateUSD ?? booking.RateUSD
+    }
 
     // Calculate duration in 0.5 hour increments (used for cost calculation)
     private var durationHours: Double {
@@ -165,37 +191,122 @@ struct AcceptBookingView: View {
                     }
                 }
 
-                Section(header: Text("Rate")) {
-                    HStack {
-                        Text("$")
-                        TextField("e.g. 45.00", text: $rateText)
-                            .keyboardType(.decimalPad)
-                            .disableAutocorrection(true)
+                // Weekly series: offer to handle every requested session at once
+                if !seriesBookingIds.isEmpty {
+                    Section(header: Text("Weekly Series")) {
+                        Toggle("Apply to all \(seriesBookingIds.count + 1) requested sessions", isOn: $applyToSeries)
+                        Text("This booking is part of a weekly series. Accepting with this on handles every requested week in one tap.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
 
-                Section(header: Text("Total Booking Cost (USD)")) {
-                    HStack {
-                        Text("$")
-                        if let total = totalBookingCost {
-                            Text(String(format: "%.2f", total))
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("—")
-                                .foregroundColor(.secondary)
+                // Agreed-rate quick accept: rate was pre-agreed, one tap confirms
+                if isAgreedRateRequest && !isGroupBooking {
+                    Section(header: Text("Agreed Rate")) {
+                        HStack {
+                            Text(agreedRateLabel ?? "Agreed rate").bold()
+                            Spacer()
+                            if let rate = quickAcceptRate {
+                                Text(String(format: "$%.2f / hr", rate))
+                            }
                         }
-                        Spacer()
-                        if durationMinutes > 0 {
-                            Text("(\(durationMinutes) mins)")
+                        if let rate = quickAcceptRate, durationHours > 0 {
+                            HStack {
+                                Text("Session total")
+                                Spacer()
+                                Text(String(format: "$%.2f", rate * durationHours)).bold()
+                                Text("(\(durationMinutes) mins)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        Label("\(clientDisplayName) booked at your agreed rate. Accepting confirms the session immediately — no further steps for either of you.", systemImage: "bolt.fill")
+                            .font(.caption)
+                            .foregroundColor(Color("LogoGreen"))
+                    }
+
+                    Section {
+                        Button(action: acceptAndConfirm) {
+                            HStack {
+                                if isSaving {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text(firestore.currentCoach?.subscriptionTier == .pro ? "Accept — Awaiting Payment" : "Accept & Confirm")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color("LogoGreen"))
+                        .disabled(isSaving || quickAcceptRate == nil)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+
+                        if !showProposeDifferentRate {
+                            Button("Propose a different rate instead") {
+                                if let rate = quickAcceptRate { rateText = String(format: "%.2f", rate) }
+                                showProposeDifferentRate = true
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+                }
+
+                if showClassicSections {
+                    Section {
+                        HStack {
+                            Text("$")
+                            TextField("e.g. 45.00", text: $rateText)
+                                .keyboardType(.decimalPad)
+                                .disableAutocorrection(true)
+                        }
+                        if isClientProposedRate {
+                            Label("\(clientDisplayName) proposed this rate. Save to accept it, or change it before saving.", systemImage: "person.fill.questionmark")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.orange)
+                        }
+                    } header: {
+                        Text("Rate")
+                    }
+
+                    Section(header: Text("Total Booking Cost (USD)")) {
+                        HStack {
+                            Text("$")
+                            if let total = totalBookingCost {
+                                Text(String(format: "%.2f", total))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("—")
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            if durationMinutes > 0 {
+                                Text("(\(durationMinutes) mins)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
-                }
 
-                Section(header: Text("Optional note to client")) {
-                    TextEditor(text: $note)
-                        .frame(minHeight: 100)
+                    // Remember this rate so future bookings from this client are one-tap
+                    if !isGroupBooking {
+                        Section(header: Text("Agreed Rate for Future Bookings")) {
+                            Toggle("Save as agreed rate", isOn: $saveAsAgreedRate)
+                            if saveAsAgreedRate {
+                                TextField("Rate label (e.g. 1-on-1, Joint session)", text: $agreedRateSaveLabel)
+                                Text("\(clientDisplayName) will see this rate when requesting future sessions, and your acceptance will confirm them instantly.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    Section(header: Text("Optional note to client")) {
+                        TextEditor(text: $note)
+                            .frame(minHeight: 100)
+                    }
                 }
 
                 if let err = errorMessage {
@@ -237,10 +348,12 @@ struct AcceptBookingView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: save) {
-                        if isSaving { ProgressView() } else { Text("Save") }
+                    if showClassicSections {
+                        Button(action: save) {
+                            if isSaving { ProgressView() } else { Text("Save") }
+                        }
+                        .disabled(isSaving || !(isValidRate() || note.count > 0))
                     }
-                    .disabled(isSaving || !(isValidRate() || note.count > 0))
                 }
             }
             .onAppear {
@@ -252,6 +365,7 @@ struct AcceptBookingView: View {
                 }
                 // Ensure clients list is available for name resolution
                 firestore.fetchClients()
+                loadRequestDetails()
             }
         }
     }
@@ -259,6 +373,132 @@ struct AcceptBookingView: View {
     private func isValidRate() -> Bool {
         guard !rateText.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
         return Double(rateText.replacingOccurrences(of: ",", with: ".")) != nil
+    }
+
+    /// Load fields not carried on BookingItem: the agreed-rate flag/label and
+    /// any sibling bookings in the same weekly series that are still requested.
+    private func loadRequestDetails() {
+        let db = Firestore.firestore()
+        db.collection("bookings").document(booking.id).getDocument { snap, _ in
+            guard let data = snap?.data() else { return }
+            let docRate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+            DispatchQueue.main.async {
+                self.agreedRateUSD = self.booking.RateUSD ?? docRate
+                if (data["AgreedRate"] as? Bool) == true, self.agreedRateUSD != nil {
+                    self.isAgreedRateRequest = true
+                }
+                if (data["ProposedRate"] as? Bool) == true {
+                    self.isClientProposedRate = true
+                }
+                if let label = data["RateLabel"] as? String, !label.isEmpty {
+                    self.agreedRateLabel = label
+                    self.agreedRateSaveLabel = label
+                }
+            }
+            if let groupId = data["recurrenceGroupId"] as? String, !groupId.isEmpty {
+                db.collection("bookings")
+                    .whereField("recurrenceGroupId", isEqualTo: groupId)
+                    .whereField("Status", isEqualTo: "requested")
+                    .getDocuments { qsnap, _ in
+                        let siblingIds = (qsnap?.documents.map { $0.documentID } ?? []).filter { $0 != self.booking.id }
+                        DispatchQueue.main.async { self.seriesBookingIds = siblingIds }
+                    }
+            }
+        }
+    }
+
+    /// One-tap accept for agreed-rate requests: the client already committed to
+    /// the price, so the coach's acceptance confirms the booking directly
+    /// (Pro coaches still collect payment first).
+    private func acceptAndConfirm() {
+        guard let currentUserId = auth.user?.uid else {
+            errorMessage = "Not authenticated"
+            return
+        }
+        guard let rate = quickAcceptRate else {
+            errorMessage = "Missing agreed rate"
+            return
+        }
+
+        isSaving = true
+        errorMessage = nil
+
+        let isPro = firestore.currentCoach?.subscriptionTier == .pro
+        let newStatus = isPro ? "pending_payment" : "confirmed"
+
+        var updatePayload: [String: Any] = [
+            "Status": newStatus,
+            "RateUSD": rate,
+            "confirmedVia": "agreed_rate"
+        ]
+        if isPro {
+            updatePayload["requiresPaymentUpfront"] = true
+            updatePayload["pendingAt"] = FieldValue.serverTimestamp()
+        } else {
+            updatePayload["confirmedAt"] = FieldValue.serverTimestamp()
+        }
+
+        let db = Firestore.firestore()
+        let coachId = booking.coachID
+        let clientId = booking.clientID
+        let targetIds = (applyToSeries && !seriesBookingIds.isEmpty) ? [booking.id] + seriesBookingIds : [booking.id]
+
+        let batch = db.batch()
+        for bookingId in targetIds {
+            batch.updateData(updatePayload, forDocument: db.collection("bookings").document(bookingId))
+            if !coachId.isEmpty {
+                batch.updateData(updatePayload, forDocument: db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
+                let summary: [String: Any] = ["id": bookingId, "updatedAt": Timestamp(date: Date()), "Status": newStatus, "RateUSD": rate]
+                batch.updateData(["calendar": FieldValue.arrayUnion([summary])], forDocument: db.collection("coaches").document(coachId))
+            }
+            if !clientId.isEmpty {
+                batch.updateData(updatePayload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(bookingId))
+            }
+        }
+
+        batch.commit { err in
+            DispatchQueue.main.async {
+                self.isSaving = false
+                if let err = err {
+                    self.errorMessage = err.localizedDescription
+                    return
+                }
+                // Notify the client
+                if !clientId.isEmpty {
+                    let coachName = self.firestore.currentCoach?.name ?? "Your coach"
+                    let sessionText = targetIds.count > 1 ? "your \(targetIds.count) weekly sessions" : "your booking"
+                    let notifRef = Firestore.firestore().collection("pendingNotifications").document(clientId).collection("notifications").document()
+                    let notifPayload: [String: Any] = isPro ? [
+                        "title": "Payment Required to Confirm Booking",
+                        "body": "\(coachName) has accepted \(sessionText) at your agreed rate. Please make payment to confirm.",
+                        "bookingId": self.booking.id,
+                        "senderId": coachId,
+                        "type": "payment_required",
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ] : [
+                        "title": "Booking Confirmed 🎉",
+                        "body": "\(coachName) confirmed \(sessionText) at \(String(format: "$%.2f", rate))/hr. You're all set!",
+                        "bookingId": self.booking.id,
+                        "senderId": coachId,
+                        "type": "booking_confirmed",
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ]
+                    notifRef.setData(notifPayload) { nerr in
+                        if let nerr = nerr {
+                            print("[AcceptBookingView] Failed to send confirmation notification: \(nerr)")
+                        }
+                    }
+                }
+                self.firestore.fetchBookingsForCurrentCoachSubcollection()
+                let toast = isPro
+                    ? "Accepted — awaiting client payment"
+                    : (targetIds.count > 1 ? "Confirmed \(targetIds.count) sessions" : "Booking confirmed")
+                self.firestore.showToast(toast)
+                dismiss()
+            }
+        }
     }
 
     private func rejectBooking() {
@@ -377,7 +617,7 @@ struct AcceptBookingView: View {
         }
 
         // Original single-coach booking flow
-        let bookingRef = Firestore.firestore().collection("bookings").document(booking.id)
+        let db = Firestore.firestore()
         let coachId = booking.coachID
         let clientId = booking.clientID
 
@@ -390,23 +630,28 @@ struct AcceptBookingView: View {
         updatePayload["pendingAt"] = FieldValue.serverTimestamp()
         if isPro { updatePayload["requiresPaymentUpfront"] = true }
 
-        let batch = Firestore.firestore().batch()
-        batch.updateData(updatePayload, forDocument: bookingRef)
+        // Apply to the whole weekly series when requested
+        let targetIds = (applyToSeries && !seriesBookingIds.isEmpty) ? [booking.id] + seriesBookingIds : [booking.id]
 
-        if !coachId.isEmpty {
-            let coachBookingRef = Firestore.firestore().collection("coaches").document(coachId).collection("bookings").document(booking.id)
-            batch.updateData(updatePayload, forDocument: coachBookingRef)
-            // append small summary to coach.calendar
-            var bookingSummary: [String: Any] = ["id": booking.id, "updatedAt": Timestamp(date: Date()), "Status": newStatus]
-            if let r = rateVal { bookingSummary["RateUSD"] = r }
-            if !note.isEmpty { bookingSummary["CoachNote"] = note }
-            let coachDocRef = Firestore.firestore().collection("coaches").document(coachId)
-            batch.updateData(["calendar": FieldValue.arrayUnion([bookingSummary])], forDocument: coachDocRef)
+        let batch = db.batch()
+        for bookingId in targetIds {
+            batch.updateData(updatePayload, forDocument: db.collection("bookings").document(bookingId))
+            if !coachId.isEmpty {
+                batch.updateData(updatePayload, forDocument: db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
+                // append small summary to coach.calendar
+                var bookingSummary: [String: Any] = ["id": bookingId, "updatedAt": Timestamp(date: Date()), "Status": newStatus]
+                if let r = rateVal { bookingSummary["RateUSD"] = r }
+                if !note.isEmpty { bookingSummary["CoachNote"] = note }
+                batch.updateData(["calendar": FieldValue.arrayUnion([bookingSummary])], forDocument: db.collection("coaches").document(coachId))
+            }
+            if !clientId.isEmpty {
+                batch.updateData(updatePayload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(bookingId))
+            }
         }
 
-        if !clientId.isEmpty {
-            let clientBookingRef = Firestore.firestore().collection("clients").document(clientId).collection("bookings").document(booking.id)
-            batch.updateData(updatePayload, forDocument: clientBookingRef)
+        // Remember this rate for future one-tap bookings with this client
+        if saveAsAgreedRate, !isGroupBooking, let r = rateVal, r > 0, !clientId.isEmpty {
+            firestore.saveAgreedRate(coachId: currentUserId, clientId: clientId, label: agreedRateSaveLabel, rateUSD: r)
         }
 
         batch.commit { err in

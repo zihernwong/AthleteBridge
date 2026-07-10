@@ -298,7 +298,27 @@ struct ChatView: View {
             }
             guard !participantsArr.isEmpty else { return }
             let current = Auth.auth().currentUser?.uid
+
+            // Seed name/photo caches from the chat doc's denormalized maps
+            self.firestore.seedParticipantInfo(fromChatData: data)
+
+            // Keep my own denormalized entry fresh so the other side always has
+            // an up-to-date name and photo to display (self-heals legacy chats)
+            if let me = current {
+                self.firestore.updateChatParticipantInfo(chatId: self.chatId, uid: me)
+            }
+
             let other = participantsArr.first(where: { $0 != current }) ?? participantsArr.first
+
+            // Backfill the other participant's entry too when the doc doesn't
+            // have it yet — heals legacy chats even if that user never opens
+            // the app again, so the list renders instantly next launch.
+            if let o = other {
+                let storedNames = data["participantNames"] as? [String: String] ?? [:]
+                if (storedNames[o] ?? "").isEmpty {
+                    self.firestore.updateChatParticipantInfo(chatId: self.chatId, uid: o)
+                }
+            }
             DispatchQueue.main.async {
                 self.otherParticipantUID = other
                 if let o = other {
@@ -313,31 +333,30 @@ struct ChatView: View {
         }
     }
 
-    /// Fetch a single participant document (coach then client) and populate FirestoreManager's caches
+    /// Fetch a single participant document (coach then client) and populate FirestoreManager's caches.
+    /// Falls through to the clients doc when the coaches doc exists but has no usable name.
     private func fetchAndCacheParticipant(_ uid: String) {
         let db = Firestore.firestore()
         let coachRef = db.collection("coaches").document(uid)
         coachRef.getDocument { snap, err in
             if let err = err { print("ChatView: fetchAndCacheParticipant coach error: \(err)") }
             if let data = snap?.data(), snap?.exists == true {
-                let first = (data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? ""
-                let last = (data["LastName"] as? String) ?? (data["lastName"] as? String) ?? ""
-                let name = [first, last].filter { !$0.isEmpty }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
-                DispatchQueue.main.async { self.firestore.participantNames[uid] = name.isEmpty ? uid : name }
-                let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
-                if let ps = photoStr, !ps.isEmpty {
-                    self.firestore.resolvePhotoURL(ps) { url in DispatchQueue.main.async { self.firestore.coachPhotoURLs[uid] = url } }
+                let name = FirestoreManager.profileDisplayName(from: data)
+                if !name.isEmpty {
+                    DispatchQueue.main.async { self.firestore.participantNames[uid] = name }
+                    if let ps = FirestoreManager.profilePhotoString(from: data) {
+                        self.firestore.resolvePhotoURL(ps) { url in DispatchQueue.main.async { self.firestore.coachPhotoURLs[uid] = url } }
+                    }
+                    return
                 }
-                return
             }
             let clientRef = db.collection("clients").document(uid)
             clientRef.getDocument { csnap, cerr in
                 if let cerr = cerr { print("ChatView: fetchAndCacheParticipant client error: \(cerr)") }
                 if let cdata = csnap?.data(), csnap?.exists == true {
-                    let name = (cdata["name"] as? String) ?? (cdata["Name"] as? String) ?? uid
-                    DispatchQueue.main.async { self.firestore.participantNames[uid] = name }
-                    let photoStr = (cdata["photoURL"] as? String) ?? (cdata["PhotoURL"] as? String) ?? (cdata["photoUrl"] as? String)
-                    if let ps = photoStr, !ps.isEmpty {
+                    let name = FirestoreManager.profileDisplayName(from: cdata)
+                    DispatchQueue.main.async { self.firestore.participantNames[uid] = name.isEmpty ? uid : name }
+                    if let ps = FirestoreManager.profilePhotoString(from: cdata) {
                         self.firestore.resolvePhotoURL(ps) { url in DispatchQueue.main.async { self.firestore.clientPhotoURLs[uid] = url } }
                     }
                 } else {
@@ -579,30 +598,71 @@ struct ChatView: View {
 // MARK: - Models & Cells
 
 /// Image message bubble with progressive loading.
+// Cached, retrying image loader for chat photos.
+// AsyncImage was unreliable here: chat rows are recreated constantly (new
+// snapshots, typing indicators, read receipts), and AsyncImage cancels its
+// download when the row is recreated mid-load, then sticks in the grey
+// failure state and never retries — recipients saw a grey box while senders
+// (whose URL cache was primed by the upload) saw the photo fine.
 fileprivate struct ChatImageBubble: View {
     let url: URL
+    @State private var image: UIImage? = nil
+    @State private var failed = false
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
+        Group {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.6, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if failed {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 200, height: 120)
+                    .overlay(
+                        VStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.secondary)
+                            Text("Tap to retry")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    )
+                    .onTapGesture {
+                        failed = false
+                        Task { await load() }
+                    }
+            } else {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.gray.opacity(0.2))
                     .frame(width: 200, height: 200)
                     .overlay(ProgressView())
-            case .success(let img):
-                img.resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.6, maxHeight: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            case .failure(_):
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 200, height: 120)
-                    .overlay(Image(systemName: "photo").foregroundColor(.secondary))
-            @unknown default:
-                EmptyView()
             }
+        }
+        .task(id: url) { await load() }
+    }
+
+    private func load() async {
+        if let cached = AvatarImageCache.shared.image(for: url) {
+            image = cached
+            return
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let ui = UIImage(data: data) else {
+                await MainActor.run { failed = true }
+                return
+            }
+            AvatarImageCache.shared.set(ui, for: url)
+            await MainActor.run { image = ui }
+        } catch is CancellationError {
+            // Row was recreated mid-download — the new instance's .task retries
+        } catch {
+            let nsError = error as NSError
+            if nsError.code == NSURLErrorCancelled { return } // same: retried by new instance
+            await MainActor.run { failed = true }
         }
     }
 }

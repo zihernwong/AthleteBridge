@@ -36,10 +36,14 @@ extension UIImage {
         guard targetSize.width > 0 && targetSize.height > 0 else { return self }
         let widthRatio = targetSize.width / self.size.width
         let heightRatio = targetSize.height / self.size.height
-        let scale = min(widthRatio, heightRatio)
+        // Never upscale — only shrink to fit
+        let scale = min(widthRatio, heightRatio, 1.0)
         let newSize = CGSize(width: self.size.width * scale, height: self.size.height * scale)
-        // Use UIGraphicsImageRenderer for better fidelity
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        // Render at 1x: the default renderer format uses the device screen
+        // scale, which triples the pixel size (and file size) on 3x devices.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         let rendered = renderer.image { _ in
             self.draw(in: CGRect(origin: .zero, size: newSize))
         }
