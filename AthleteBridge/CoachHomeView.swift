@@ -17,6 +17,15 @@ struct CoachHomeView: View {
     @State private var clubDeepLinkAnnouncementId: String? = nil
     @State private var navigateToClubDeepLink = false
 
+    // Session logging: prompt the coach to log every completed session
+    @State private var showPendingSessionLogs = false
+    @State private var didAutoPresentSessionLogs = false
+
+    private var pendingSessionLogCount: Int {
+        guard let uid = auth.user?.uid else { return 0 }
+        return firestore.pendingSessionLogs(coachId: uid).count
+    }
+
     var body: some View {
         ZStack {
             // Subtle background logo similar to ClientFormView
@@ -48,6 +57,24 @@ struct CoachHomeView: View {
                                 Text("\(upcoming) upcoming")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    // Completed sessions waiting for a session log
+                    if pendingSessionLogCount > 0 {
+                        Button {
+                            showPendingSessionLogs = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "square.and.pencil")
+                                    .foregroundColor(.orange)
+                                Text("Log \(pendingSessionLogCount) completed session\(pendingSessionLogCount == 1 ? "" : "s")")
+                                    .font(.body)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.orange)
                             }
                         }
                     }
@@ -237,6 +264,13 @@ struct CoachHomeView: View {
             // Fetch places for club deep links
             firestore.fetchPlacesToPlay()
 
+            // Session logs: listen for this coach's logs and load bookings so
+            // completed-but-unlogged sessions can be detected
+            if let uid = auth.user?.uid {
+                firestore.listenSessionLogsForCoach(coachId: uid)
+                firestore.fetchBookingsForCurrentCoachSubcollection()
+            }
+
             // Handle stringing deep link on cold start
             if case .stringing(let orderId) = deepLink.pendingDestination, let orderId = orderId {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -268,6 +302,19 @@ struct CoachHomeView: View {
             if deepLink.pendingDestination != nil {
                 handleClubDeepLink(deepLink.pendingDestination)
             }
+        }
+        // Force the coach to log completed sessions: auto-present the sheet
+        // once per visit when unlogged sessions exist (after bookings and
+        // existing logs have both loaded)
+        .onChange(of: pendingSessionLogCount) { _, newCount in
+            if newCount > 0 && !didAutoPresentSessionLogs {
+                didAutoPresentSessionLogs = true
+                showPendingSessionLogs = true
+            }
+        }
+        .sheet(isPresented: $showPendingSessionLogs) {
+            PendingSessionLogsView()
+                .environmentObject(firestore)
         }
         .navigationDestination(isPresented: $navigateToDeepLinkedOrder) {
             if let order = deepLinkedOrder {

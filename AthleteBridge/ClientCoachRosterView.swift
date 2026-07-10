@@ -187,18 +187,36 @@ struct ClientCoachDetailView: View {
             .sorted { ($0.startAt ?? .distantPast) > ($1.startAt ?? .distantPast) }
     }
 
+    private var coachSessionLogs: [FirestoreManager.SessionLog] {
+        firestore.clientSessionLogs.filter { $0.coachID == coachId }
+    }
+
     var body: some View {
         List {
-            if coachBookings.isEmpty {
-                Text("No bookings found")
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(coachBookings) { booking in
-                    NavigationLink(destination: BookingDetailView(booking: booking)
-                        .environmentObject(firestore)
-                        .environmentObject(auth)
-                    ) {
-                        ClientBookingRow(booking: booking)
+            // Metric progress across all logged sessions with this coach
+            MetricProgressSection(logs: coachSessionLogs)
+
+            // Session logs written by the coach (read-only for the client)
+            if !coachSessionLogs.isEmpty {
+                Section(header: Text("Session Logs")) {
+                    ForEach(coachSessionLogs) { log in
+                        SessionLogCard(log: log)
+                    }
+                }
+            }
+
+            Section(header: Text("Bookings")) {
+                if coachBookings.isEmpty {
+                    Text("No bookings found")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(coachBookings) { booking in
+                        NavigationLink(destination: BookingDetailView(booking: booking)
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                        ) {
+                            ClientBookingRow(booking: booking)
+                        }
                     }
                 }
             }
@@ -206,6 +224,11 @@ struct ClientCoachDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(coachName)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if let uid = auth.user?.uid {
+                firestore.listenSessionLogsForClient(clientId: uid)
+            }
+        }
     }
 }
 

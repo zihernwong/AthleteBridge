@@ -361,6 +361,149 @@ class FirestoreManager: ObservableObject {
     @Published var bookings: [BookingItem] = []
     @Published var bookingsDebug: String = ""
 
+    // MARK: - Session Logs
+    // After each completed session the coach logs what was worked on, what
+    // needs improvement, what improved, and optional named metrics (e.g.
+    // "1 mile sprint" -> "8:00"). Metrics are keyed by name so progress across
+    // sessions can be shown. One log per booking (doc id = booking id).
+
+    struct SessionMetric: Identifiable, Equatable, Hashable {
+        var name: String
+        var value: String
+        var id: String { name + "|" + value }
+    }
+
+    struct SessionLog: Identifiable, Equatable {
+        let id: String            // == booking id
+        let coachID: String
+        let clientID: String
+        let coachName: String
+        let clientName: String
+        let sessionDate: Date?
+        let workedOn: String
+        let toImprove: String
+        let improved: String
+        let metrics: [SessionMetric]
+        let createdAt: Date?
+    }
+
+    /// Logs written by the current coach (powers pending-log detection and
+    /// the per-client history in My Clients).
+    @Published var coachSessionLogs: [SessionLog] = []
+    /// Logs about the current client (powers per-coach history in My Coaches).
+    @Published var clientSessionLogs: [SessionLog] = []
+
+    private var coachSessionLogsListener: ListenerRegistration? = nil
+    private var clientSessionLogsListener: ListenerRegistration? = nil
+
+    private static func parseSessionLog(_ id: String, _ data: [String: Any]) -> SessionLog {
+        var metrics: [SessionMetric] = []
+        if let raw = data["Metrics"] as? [[String: Any]] {
+            for entry in raw {
+                let name = (entry["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                let value = (entry["value"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty && !value.isEmpty {
+                    metrics.append(SessionMetric(name: name, value: value))
+                }
+            }
+        }
+        return SessionLog(
+            id: id,
+            coachID: data["CoachID"] as? String ?? "",
+            clientID: data["ClientID"] as? String ?? "",
+            coachName: data["CoachName"] as? String ?? "",
+            clientName: data["ClientName"] as? String ?? "",
+            sessionDate: (data["SessionDate"] as? Timestamp)?.dateValue(),
+            workedOn: data["WorkedOn"] as? String ?? "",
+            toImprove: data["ToImprove"] as? String ?? "",
+            improved: data["Improved"] as? String ?? "",
+            metrics: metrics,
+            createdAt: (data["createdAt"] as? Timestamp)?.dateValue()
+        )
+    }
+
+    /// Live listener for all logs written by this coach.
+    func listenSessionLogsForCoach(coachId: String) {
+        guard !coachId.isEmpty, coachSessionLogsListener == nil else { return }
+        coachSessionLogsListener = db.collection("sessionLogs")
+            .whereField("CoachID", isEqualTo: coachId)
+            .addSnapshotListener { [weak self] snap, err in
+                if let err = err { print("listenSessionLogsForCoach error: \(err)"); return }
+                let logs = (snap?.documents ?? [])
+                    .map { Self.parseSessionLog($0.documentID, $0.data()) }
+                    .sorted { ($0.sessionDate ?? .distantPast) > ($1.sessionDate ?? .distantPast) }
+                DispatchQueue.main.async { self?.coachSessionLogs = logs }
+            }
+    }
+
+    /// Live listener for all logs about this client.
+    func listenSessionLogsForClient(clientId: String) {
+        guard !clientId.isEmpty, clientSessionLogsListener == nil else { return }
+        clientSessionLogsListener = db.collection("sessionLogs")
+            .whereField("ClientID", isEqualTo: clientId)
+            .addSnapshotListener { [weak self] snap, err in
+                if let err = err { print("listenSessionLogsForClient error: \(err)"); return }
+                let logs = (snap?.documents ?? [])
+                    .map { Self.parseSessionLog($0.documentID, $0.data()) }
+                    .sorted { ($0.sessionDate ?? .distantPast) > ($1.sessionDate ?? .distantPast) }
+                DispatchQueue.main.async { self?.clientSessionLogs = logs }
+            }
+    }
+
+    /// Create or update the session log for a booking (doc id = booking id, so
+    /// re-saving edits the same log).
+    func saveSessionLog(bookingId: String,
+                        coachId: String,
+                        clientId: String,
+                        coachName: String,
+                        clientName: String,
+                        sessionDate: Date?,
+                        workedOn: String,
+                        toImprove: String,
+                        improved: String,
+                        metrics: [SessionMetric],
+                        completion: ((Error?) -> Void)? = nil) {
+        guard !bookingId.isEmpty, !coachId.isEmpty else {
+            completion?(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "Missing booking or coach id"]))
+            return
+        }
+        var payload: [String: Any] = [
+            "BookingID": bookingId,
+            "CoachID": coachId,
+            "ClientID": clientId,
+            "CoachName": coachName,
+            "ClientName": clientName,
+            "WorkedOn": workedOn.trimmingCharacters(in: .whitespacesAndNewlines),
+            "ToImprove": toImprove.trimmingCharacters(in: .whitespacesAndNewlines),
+            "Improved": improved.trimmingCharacters(in: .whitespacesAndNewlines),
+            "Metrics": metrics
+                .filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+                .map { ["name": $0.name.trimmingCharacters(in: .whitespaces), "value": $0.value.trimmingCharacters(in: .whitespaces)] },
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+        if let d = sessionDate { payload["SessionDate"] = Timestamp(date: d) }
+        payload["createdAt"] = FieldValue.serverTimestamp()
+        db.collection("sessionLogs").document(bookingId).setData(payload, merge: true) { err in
+            if let err = err { print("saveSessionLog error: \(err)") }
+            completion?(err)
+        }
+    }
+
+    /// Completed (confirmed, ended) sessions from the last 14 days that the
+    /// coach has not logged yet — used to prompt the coach after each session.
+    func pendingSessionLogs(coachId: String) -> [BookingItem] {
+        let loggedIds = Set(coachSessionLogs.map { $0.id })
+        let now = Date()
+        let cutoff = Calendar.current.date(byAdding: .day, value: -14, to: now) ?? now
+        return coachBookings.filter { b in
+            guard (b.status ?? "").lowercased() == "confirmed" else { return false }
+            guard let end = b.endAt, end < now, end > cutoff else { return false }
+            guard !loggedIds.contains(b.id) else { return false }
+            return true
+        }
+        .sorted { ($0.endAt ?? .distantPast) > ($1.endAt ?? .distantPast) }
+    }
+
     // MARK: - Agreed Rates (simplified booking flow)
     // Once a coach and client have settled on a price, it is stored in
     // agreedRates/{coachId}_{clientId} so future requests can carry the rate

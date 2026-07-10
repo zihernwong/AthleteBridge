@@ -253,18 +253,45 @@ struct CoachClientDetailView: View {
             .sorted { ($0.startAt ?? .distantPast) > ($1.startAt ?? .distantPast) }
     }
 
+    private var clientSessionLogs: [FirestoreManager.SessionLog] {
+        firestore.coachSessionLogs.filter { $0.clientID == clientId }
+    }
+
     var body: some View {
         List {
-            if clientBookings.isEmpty {
-                Text("No bookings found")
-                    .foregroundColor(.secondary)
-            } else {
-                ForEach(clientBookings) { booking in
-                    NavigationLink(destination: BookingDetailView(booking: booking)
-                        .environmentObject(firestore)
-                        .environmentObject(auth)
-                    ) {
-                        ClientBookingRow(booking: booking)
+            // Metric progress across all logged sessions (e.g. 8:00 → 7:45 → 7:30)
+            MetricProgressSection(logs: clientSessionLogs)
+
+            // Session logs — tap to edit
+            if !clientSessionLogs.isEmpty {
+                Section(header: Text("Session Logs")) {
+                    ForEach(clientSessionLogs) { log in
+                        if let booking = clientBookings.first(where: { $0.id == log.id }) {
+                            NavigationLink {
+                                SessionLogEditorView(booking: booking)
+                                    .environmentObject(firestore)
+                            } label: {
+                                SessionLogCard(log: log)
+                            }
+                        } else {
+                            SessionLogCard(log: log)
+                        }
+                    }
+                }
+            }
+
+            Section(header: Text("Bookings")) {
+                if clientBookings.isEmpty {
+                    Text("No bookings found")
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(clientBookings) { booking in
+                        NavigationLink(destination: BookingDetailView(booking: booking)
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                        ) {
+                            ClientBookingRow(booking: booking)
+                        }
                     }
                 }
             }
@@ -272,6 +299,11 @@ struct CoachClientDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(clientName)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if let uid = auth.user?.uid {
+                firestore.listenSessionLogsForCoach(coachId: uid)
+            }
+        }
     }
 }
 
