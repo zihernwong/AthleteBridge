@@ -16,11 +16,9 @@ struct BookingDetailView: View {
     @State private var showCoachPickerForNotify: Bool = false
     @State private var isConfirmingPayment: Bool = false
 
-    // Post-session notes state (coach-only)
-    @State private var sessionNotesDraft: String = ""
-    @State private var isSavingNotes: Bool = false
-    @State private var sessionRecapDraft: String = ""
-    @State private var isSavingRecap: Bool = false
+    // Structured post-session log (replaces the old private notes + recap;
+    // everything is visible to the client)
+    @State private var showSessionLogEditor: Bool = false
 
     private var currentUserRole: String? {
         firestore.currentUserType?.uppercased()
@@ -143,11 +141,11 @@ struct BookingDetailView: View {
                         coachPaymentConfirmationSection
                     }
 
-                    // Notes Section
+                    // Notes Section (the client's booking-request notes)
                     notesSection
 
-                    // Shared session recap (coach edits, client reads)
-                    sessionRecapSection
+                    // Structured session log (coach writes, both can read)
+                    sessionLogSection
 
                     // Rejection Reason (if applicable)
                     if let reason = booking.rejectionReason, !reason.isEmpty {
@@ -166,8 +164,20 @@ struct BookingDetailView: View {
             .navigationTitle("Booking Details")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                sessionNotesDraft = booking.coachNote ?? ""
-                sessionRecapDraft = booking.sessionRecap ?? ""
+                // Listen for session logs so the log section stays live
+                if let uid = auth.user?.uid {
+                    if currentUserRole == "COACH" {
+                        firestore.listenSessionLogsForCoach(coachId: uid)
+                    } else {
+                        firestore.listenSessionLogsForClient(clientId: uid)
+                    }
+                }
+            }
+            .sheet(isPresented: $showSessionLogEditor) {
+                NavigationStack {
+                    SessionLogEditorView(booking: booking)
+                        .environmentObject(firestore)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -416,55 +426,14 @@ struct BookingDetailView: View {
 
     @ViewBuilder
     private var notesSection: some View {
-        // Show section if there are client notes (both roles) OR if coach (always show notes editor)
-        if hasClientNotes || isCoachRole {
+        // The client's booking-request notes — visible to both roles
+        if hasClientNotes {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Notes")
                     .font(.headline)
-
-                // Client notes — visible to both roles
-                if let notes = booking.notes, !notes.isEmpty {
-                    Text(notes)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-
-                    if isCoachRole { Divider() }
-                }
-
-                // Coach private session notes — coach only
-                if isCoachRole {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Session Notes (Private)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-
-                        TextEditor(text: $sessionNotesDraft)
-                            .frame(minHeight: 80, maxHeight: 160)
-                            .padding(6)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                            .font(.body)
-
-                        if sessionNotesDraft != (booking.coachNote ?? "") {
-                            Button(action: saveSessionNotes) {
-                                HStack {
-                                    if isSavingNotes {
-                                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    } else {
-                                        Text("Save Notes")
-                                    }
-                                }
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color("LogoBlue"))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                            }
-                            .disabled(isSavingNotes)
-                        }
-                    }
-                }
+                Text(booking.notes ?? "")
+                    .font(.body)
+                    .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
@@ -472,36 +441,34 @@ struct BookingDetailView: View {
         }
     }
 
-    // MARK: - Session Recap (client-visible)
+    // MARK: - Session Log (coach writes, fully visible to the client)
+
+    private var sessionLog: FirestoreManager.SessionLog? {
+        (isCoachRole ? firestore.coachSessionLogs : firestore.clientSessionLogs)
+            .first(where: { $0.id == booking.id })
+    }
 
     @ViewBuilder
-    private var sessionRecapSection: some View {
-        let recap = booking.sessionRecap ?? ""
-        if isCoachRole || !recap.isEmpty {
+    private var sessionLogSection: some View {
+        let isConfirmed = (booking.status ?? "").lowercased() == "confirmed"
+        if sessionLog != nil || (isCoachRole && isConfirmed) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Session Recap")
+                Text("Session Log")
                     .font(.headline)
 
-                if isCoachRole {
-                    Text("Visible to the client — what you worked on and what to practice.")
+                if let log = sessionLog {
+                    SessionLogCard(log: log)
+                } else if isCoachRole {
+                    Text("Log what was worked on, what needs improvement, what improved, and any metrics. The client will see this and be notified.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
 
-                    TextEditor(text: $sessionRecapDraft)
-                        .frame(minHeight: 80, maxHeight: 160)
-                        .padding(6)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                        .font(.body)
-
-                    if sessionRecapDraft != recap {
-                        Button(action: saveSessionRecap) {
-                            HStack {
-                                if isSavingRecap {
-                                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                } else {
-                                    Text("Share Recap with Client")
-                                }
-                            }
+                if isCoachRole && isConfirmed {
+                    Button {
+                        showSessionLogEditor = true
+                    } label: {
+                        Text(sessionLog == nil ? "Log This Session" : "Edit Session Log")
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
@@ -509,57 +476,12 @@ struct BookingDetailView: View {
                             .background(Color("LogoGreen"))
                             .foregroundColor(.white)
                             .cornerRadius(8)
-                        }
-                        .disabled(isSavingRecap)
                     }
-                } else {
-                    Text(recap)
-                        .font(.body)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
-        }
-    }
-
-    private func saveSessionRecap() {
-        guard let coachId = auth.user?.uid else { return }
-        isSavingRecap = true
-        firestore.saveSessionRecap(
-            bookingId: booking.id,
-            coachId: booking.coachID.isEmpty ? coachId : booking.coachID,
-            clientId: booking.clientID,
-            recap: sessionRecapDraft
-        ) { err in
-            DispatchQueue.main.async {
-                self.isSavingRecap = false
-                if let err = err {
-                    self.errorMessage = err.localizedDescription
-                } else {
-                    self.firestore.showToast("Session recap shared with client")
-                }
-            }
-        }
-    }
-
-    private func saveSessionNotes() {
-        guard let coachId = auth.user?.uid else { return }
-        isSavingNotes = true
-        firestore.saveSessionNotes(
-            bookingId: booking.id,
-            coachId: coachId,
-            clientId: booking.clientID,
-            notes: sessionNotesDraft
-        ) { err in
-            DispatchQueue.main.async {
-                self.isSavingNotes = false
-                if let err = err {
-                    self.errorMessage = err.localizedDescription
-                } else {
-                    self.firestore.showToast("Session notes saved")
-                }
-            }
         }
     }
 

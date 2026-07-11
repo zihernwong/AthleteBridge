@@ -483,9 +483,40 @@ class FirestoreManager: ObservableObject {
         ]
         if let d = sessionDate { payload["SessionDate"] = Timestamp(date: d) }
         payload["createdAt"] = FieldValue.serverTimestamp()
-        db.collection("sessionLogs").document(bookingId).setData(payload, merge: true) { err in
-            if let err = err { print("saveSessionLog error: \(err)") }
-            completion?(err)
+
+        let docRef = db.collection("sessionLogs").document(bookingId)
+        // Check existence first so the client notification can say
+        // "shared" (new) vs "updated" (edit)
+        docRef.getDocument { [weak self] snap, _ in
+            let isUpdate = snap?.exists == true
+            docRef.setData(payload, merge: true) { err in
+                if let err = err {
+                    print("saveSessionLog error: \(err)")
+                    completion?(err)
+                    return
+                }
+                // Notify the client that session notes are available
+                if let self = self, !clientId.isEmpty, clientId != coachId {
+                    let coachDisplay = coachName.isEmpty ? "Your coach" : coachName
+                    let dateText = sessionDate.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .none) }
+                    let body = isUpdate
+                        ? "\(coachDisplay) updated the session notes\(dateText.map { " for your \($0) session" } ?? "")."
+                        : "\(coachDisplay) shared session notes\(dateText.map { " for your \($0) session" } ?? ""). See what you worked on and what improved!"
+                    let notifRef = self.db.collection("pendingNotifications").document(clientId).collection("notifications").document()
+                    notifRef.setData([
+                        "title": isUpdate ? "Session Notes Updated" : "Session Notes Shared",
+                        "body": body,
+                        "type": "session_log",
+                        "bookingId": bookingId,
+                        "senderId": coachId,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "delivered": false
+                    ]) { nerr in
+                        if let nerr = nerr { print("saveSessionLog: failed to notify client: \(nerr)") }
+                    }
+                }
+                completion?(nil)
+            }
         }
     }
 
