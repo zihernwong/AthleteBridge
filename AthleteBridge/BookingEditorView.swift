@@ -362,30 +362,7 @@ struct BookingEditorView: View {
                             .padding(.vertical, 4)
                         }
 
-                        // Calendar day controls
-                        HStack {
-                            let today = Calendar.current.startOfDay(for: Date())
-                            Button(action: {
-                                let newDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate
-                                // Prevent navigating to past dates
-                                if newDate >= today {
-                                    calendarDate = newDate
-                                }
-                            }) {
-                                Image(systemName: "chevron.left")
-                                    .foregroundColor(calendarDate <= today ? .gray : .primary)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(calendarDate <= today)
-                            Spacer()
-                            Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
-                                .font(.subheadline).bold()
-                            Spacer()
-                            Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: 1, to: calendarDate) ?? calendarDate }) { Image(systemName: "chevron.right") }
-                                .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 6)
-
+                        // Day/week navigation now lives inside the calendar's week strip
                         CoachCalendarGridView(coachID: selectedCoachId.isEmpty ? (selectedCoachIds.first ?? "") : selectedCoachId,
                                               coachIDs: isGroupBooking ? Array(selectedCoachIds) : nil,
                                               date: $calendarDate,
@@ -403,7 +380,9 @@ struct BookingEditorView: View {
                                               })
                             .environmentObject(firestore)
                             .environmentObject(auth)
-                            .id("\(calendarDate)-\(Array(selectedCoachIds).sorted().joined(separator: ","))")
+                            // Recreate only when the coach selection changes — the grid
+                            // handles date changes itself (week data stays cached)
+                            .id(Array(selectedCoachIds).sorted().joined(separator: ","))
 
                         if let s = selectedSlotStart, let e = selectedSlotEnd {
                             Text("Selected: \(DateFormatter.localizedString(from: s, dateStyle: .none, timeStyle: .short)) - \(DateFormatter.localizedString(from: e, dateStyle: .none, timeStyle: .short))")

@@ -218,24 +218,7 @@ struct ClientRescheduleView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Day navigation
-                HStack {
-                    Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: -1, to: calendarDate) ?? calendarDate }) {
-                        Image(systemName: "chevron.left").font(.headline)
-                    }
-                    .buttonStyle(.plain)
-                    Spacer()
-                    Text(DateFormatter.localizedString(from: calendarDate, dateStyle: .medium, timeStyle: .none))
-                        .font(.subheadline).bold()
-                    Spacer()
-                    Button(action: { calendarDate = Calendar.current.date(byAdding: .day, value: 1, to: calendarDate) ?? calendarDate }) {
-                        Image(systemName: "chevron.right").font(.headline)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-
+                // Day/week navigation now lives inside the calendar's week strip
                 Text("Tap an available slot to select a new time")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -255,7 +238,6 @@ struct ClientRescheduleView: View {
                                       })
                     .environmentObject(firestore)
                     .environmentObject(auth)
-                    .id(calendarDate)
             }
             .navigationTitle("Reschedule Booking")
             .navigationBarTitleDisplayMode(.inline)

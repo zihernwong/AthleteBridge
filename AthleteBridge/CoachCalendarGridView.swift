@@ -421,27 +421,7 @@ import FirebaseAuth
             }
 
             Section {
-                HStack {
-                    let today = Calendar.current.startOfDay(for: Date())
-                    Button(action: {
-                        let newDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
-                        if newDate >= today {
-                            selectedDate = newDate
-                        }
-                    }) {
-                        Image(systemName: "chevron.left").font(.headline)
-                            .foregroundColor(selectedDate <= today ? .gray : .primary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selectedDate <= today)
-                    Spacer()
-                    Text(DateFormatter.localizedString(from: selectedDate, dateStyle: .medium, timeStyle: .none)).font(.subheadline).bold()
-                    Spacer()
-                    Button(action: { selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate }) { Image(systemName: "chevron.right").font(.headline) }
-                        .buttonStyle(.plain)
-                }
-                .padding(.vertical, 6)
-
+                // Day/week navigation now lives inside the calendar's week strip
                 CoachCalendarGridView(coachID: coach.id, date: $selectedDate, showOnlyAvailable: false, onSlotSelected: nil, embedMode: true, onAvailableSlot: { start, end in
                     selectedSlotStart = start
                     // Enforce minimum 1-hour booking from selected slot
@@ -615,6 +595,9 @@ import FirebaseAuth
      @State private var selectedSlotStart: Date = Date()
      @State private var selectedSlotEnd: Date = Date().addingTimeInterval(60*60)
      @State private var awayTimes: [FirestoreManager.AwayTimeItem] = []
+     // Week shown in the strip; bookings/away times are fetched for the whole
+     // week so switching days is instant and per-day availability can be shown.
+     @State private var weekStart: Date = CoachCalendarGridView.startOfWeek(for: Date())
 
      // Computed property for effective coach IDs (supports both single and multiple)
      private var effectiveCoachIDs: [String] {
@@ -710,7 +693,9 @@ import FirebaseAuth
 
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isBlocked ? Color.red.opacity(0.85) : Color.green.opacity(0.12))
+                    .fill(overlappingAway != nil ? Color.orange.opacity(0.85)
+                          : isBlocked ? Color.red.opacity(0.85)
+                          : Color.green.opacity(0.12))
                     .frame(height: 44)
 
                 HStack {
@@ -791,9 +776,157 @@ import FirebaseAuth
         .padding(.horizontal, 6)
     }
 
+     // MARK: - Week helpers
+
+     static func startOfWeek(for date: Date) -> Date {
+         let cal = Calendar.current
+         let comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+         return cal.date(from: comps) ?? cal.startOfDay(for: date)
+     }
+
+     private var weekDays: [Date] {
+         let cal = Calendar.current
+         return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
+     }
+
+     private var canGoToPreviousWeek: Bool {
+         weekStart > CoachCalendarGridView.startOfWeek(for: Date())
+     }
+
+     /// Open (future, unblocked) slot count for a day — powers the per-day chips.
+     private func openSlotCount(on day: Date) -> Int {
+         let now = Date()
+         return generateSlots(for: day).filter { slot in
+             slot.start > now &&
+             bookingOverlapping(slotStart: slot.start, slotEnd: slot.end) == nil &&
+             awayOverlapping(slotStart: slot.start, slotEnd: slot.end) == nil
+         }.count
+     }
+
+     private func moveWeek(by offset: Int) {
+         let cal = Calendar.current
+         guard let newStart = cal.date(byAdding: .day, value: 7 * offset, to: weekStart) else { return }
+         weekStart = max(newStart, CoachCalendarGridView.startOfWeek(for: Date()))
+         // Keep the selected day inside the visible week (first non-past day)
+         let today = cal.startOfDay(for: Date())
+         let firstSelectable = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
+             .first { $0 >= today } ?? weekStart
+         date = firstSelectable
+         fetchWeek()
+     }
+
+     private var weekRangeLabel: String {
+         let cal = Calendar.current
+         let end = cal.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
+         let fmt = DateFormatter()
+         fmt.dateFormat = "MMM d"
+         let endFmt = DateFormatter()
+         endFmt.dateFormat = cal.isDate(weekStart, equalTo: end, toGranularity: .month) ? "d" : "MMM d"
+         return "\(fmt.string(from: weekStart)) – \(endFmt.string(from: end))"
+     }
+
+     // MARK: - Week strip
+
+     @ViewBuilder
+     private func dayChip(for day: Date) -> some View {
+         let cal = Calendar.current
+         let isSelected = cal.isDate(day, inSameDayAs: date)
+         let isToday = cal.isDateInToday(day)
+         let isPast = cal.startOfDay(for: day) < cal.startOfDay(for: Date())
+         let openCount = loading ? nil : openSlotCount(on: day)
+
+         Button {
+             date = day
+         } label: {
+             VStack(spacing: 3) {
+                 Text(day, format: .dateTime.weekday(.abbreviated))
+                     .font(.caption2)
+                     .foregroundColor(isSelected ? .white : .secondary)
+                 Text(day, format: .dateTime.day())
+                     .font(.subheadline)
+                     .fontWeight(isSelected || isToday ? .bold : .regular)
+                     .foregroundColor(isSelected ? .white : (isPast ? .secondary : .primary))
+                 // Per-day availability summary
+                 if isPast {
+                     Text("—")
+                         .font(.system(size: 9))
+                         .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+                 } else if let count = openCount {
+                     Text(count == 0 ? "Full" : "\(count) open")
+                         .font(.system(size: 9, weight: .medium))
+                         .foregroundColor(isSelected ? .white.opacity(0.9)
+                                          : (count == 0 ? .red : Color("LogoGreen")))
+                 } else {
+                     Text(" ")
+                         .font(.system(size: 9))
+                 }
+             }
+             .frame(maxWidth: .infinity)
+             .padding(.vertical, 8)
+             .background(
+                 RoundedRectangle(cornerRadius: 10, style: .continuous)
+                     .fill(isSelected ? Color("LogoGreen") : Color(UIColor.secondarySystemBackground))
+             )
+             .overlay(
+                 RoundedRectangle(cornerRadius: 10, style: .continuous)
+                     .stroke(isToday && !isSelected ? Color("LogoGreen") : Color.clear, lineWidth: 1.5)
+             )
+             .opacity(isPast ? 0.45 : 1)
+         }
+         .buttonStyle(.plain)
+         .disabled(isPast)
+     }
+
+     private var weekStripView: some View {
+         VStack(spacing: 8) {
+             HStack {
+                 Button { moveWeek(by: -1) } label: {
+                     Image(systemName: "chevron.left").font(.subheadline)
+                         .foregroundColor(canGoToPreviousWeek ? .primary : .gray)
+                 }
+                 .buttonStyle(.plain)
+                 .disabled(!canGoToPreviousWeek)
+                 Spacer()
+                 Text(weekRangeLabel)
+                     .font(.subheadline).bold()
+                 Spacer()
+                 Button { moveWeek(by: 1) } label: {
+                     Image(systemName: "chevron.right").font(.subheadline)
+                 }
+                 .buttonStyle(.plain)
+             }
+             .padding(.horizontal, 6)
+
+             HStack(spacing: 6) {
+                 ForEach(weekDays, id: \.self) { day in
+                     dayChip(for: day)
+                 }
+             }
+
+             // Legend
+             HStack(spacing: 14) {
+                 legendDot(color: Color.green.opacity(0.25), label: "Available")
+                 legendDot(color: Color.red.opacity(0.85), label: "Booked")
+                 legendDot(color: Color.orange.opacity(0.85), label: "Away")
+                 Spacer()
+             }
+             .padding(.horizontal, 6)
+         }
+     }
+
+     private func legendDot(color: Color, label: String) -> some View {
+         HStack(spacing: 4) {
+             Circle().fill(color).frame(width: 8, height: 8)
+             Text(label).font(.caption2).foregroundColor(.secondary)
+         }
+     }
+
      var body: some View {
          ScrollView {
              VStack(alignment: .leading, spacing: 8) {
+                 weekStripView
+                     .padding(.top, 4)
+
                  if loading {
                      HStack { Spacer(); ProgressView(); Spacer() }
                          .padding(.vertical, 8)
@@ -815,8 +948,20 @@ import FirebaseAuth
                  }
              }
          }
-         .onAppear { fetchForSelectedDate() }
-         .onChange(of: date) { _old, _new in fetchForSelectedDate() }
+         .onAppear {
+             weekStart = CoachCalendarGridView.startOfWeek(for: date)
+             fetchWeek()
+         }
+         .onChange(of: date) { _old, newDate in
+             // If the day moved outside the visible week (e.g. external controls),
+             // shift the strip; data for the current week is already loaded.
+             let cal = Calendar.current
+             let newWeek = CoachCalendarGridView.startOfWeek(for: newDate)
+             if !cal.isDate(newWeek, inSameDayAs: weekStart) {
+                 weekStart = newWeek
+                 fetchWeek()
+             }
+         }
          // Present booking form only when not embedded
          .sheet(isPresented: $showBookingSheet) {
              if !embedMode {
@@ -826,14 +971,16 @@ import FirebaseAuth
                      .environmentObject(auth)
              }
          }
-         .onChange(of: showBookingSheet) { _old, newVal in if newVal == false { fetchForSelectedDate() } }
+         .onChange(of: showBookingSheet) { _old, newVal in if newVal == false { fetchWeek() } }
      }
 
-     private func fetchForSelectedDate() {
+     /// Fetch bookings and away times for the whole visible week so day chips
+     /// can show availability and switching days doesn't refetch.
+     private func fetchWeek() {
          loading = true
          let cal = Calendar.current
-         let dayStart = cal.startOfDay(for: date)
-         let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
+         let dayStart = weekStart
+         let dayEnd = cal.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart
 
          // For multiple coaches, fetch all their bookings and away times
          if effectiveCoachIDs.count > 1 {
