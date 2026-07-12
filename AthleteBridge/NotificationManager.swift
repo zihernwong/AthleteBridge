@@ -294,6 +294,72 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         completionHandler()
     }
 
+    // MARK: - Session reminders (local notifications)
+
+    /// Schedule local reminders 24 hours and 1 hour before each upcoming
+    /// confirmed session. Replaces previously scheduled reminders from the same
+    /// source on every call, so it is safe to re-invoke whenever bookings reload
+    /// (cancelled sessions simply drop out of the schedule).
+    func scheduleSessionReminders(for bookings: [FirestoreManager.BookingItem], asCoach: Bool) {
+        // Separate prefixes so client-side and coach-side reminder batches
+        // (a user can be both) don't clear each other.
+        let prefix = asCoach ? "session-reminder-coach-" : "session-reminder-client-"
+        let center = UNUserNotificationCenter.current()
+
+        center.getPendingNotificationRequests { pending in
+            let stale = pending.map(\.identifier).filter { $0.hasPrefix(prefix) }
+            center.removePendingNotificationRequests(withIdentifiers: stale)
+
+            let now = Date()
+            let upcoming = bookings
+                .filter { b in
+                    guard let start = b.startAt, start > now else { return false }
+                    return (b.status ?? "").lowercased() == "confirmed"
+                }
+                .sorted { ($0.startAt ?? .distantFuture) < ($1.startAt ?? .distantFuture) }
+                .prefix(20) // iOS caps pending local notifications at 64 per app
+
+            let timeFormatter = DateFormatter()
+            timeFormatter.timeStyle = .short
+
+            for booking in upcoming {
+                guard let start = booking.startAt else { continue }
+                let otherParty = asCoach ? (booking.clientName ?? "your client")
+                                         : (booking.coachName ?? "your coach")
+                let reminders: [(offset: TimeInterval, phrase: String)] = [
+                    (24 * 3600, "tomorrow at \(timeFormatter.string(from: start))"),
+                    (3600, "in 1 hour (\(timeFormatter.string(from: start)))")
+                ]
+
+                for reminder in reminders {
+                    let fireDate = start.addingTimeInterval(-reminder.offset)
+                    guard fireDate > now else { continue }
+
+                    let content = UNMutableNotificationContent()
+                    content.title = "Upcoming Session"
+                    var body = "Session with \(otherParty) \(reminder.phrase)"
+                    if let location = booking.location, !location.isEmpty {
+                        // Location is stored as "Name — Address"; the name is enough here
+                        body += " at \(location.components(separatedBy: " — ").first ?? location)"
+                    }
+                    content.body = body
+                    content.sound = .default
+                    // Tapping routes through the existing booking deep-link handling
+                    content.userInfo = ["bookingId": booking.id, "type": "session_reminder"]
+
+                    let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+                    let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+                    let request = UNNotificationRequest(
+                        identifier: "\(prefix)\(booking.id)-\(Int(reminder.offset))",
+                        content: content,
+                        trigger: trigger
+                    )
+                    center.add(request)
+                }
+            }
+        }
+    }
+
     // MARK: - Calendar removal for cancelled bookings
 
     /// Removes the Apple Calendar event for a cancelled booking on this device.

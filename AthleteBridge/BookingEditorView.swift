@@ -278,34 +278,60 @@ struct BookingEditorView: View {
                     // Details section (location) shown first
                     Section {
                         if availableCoachPlaces.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("No locations configured by this coach.")
-                                    .foregroundColor(.secondary)
-                                    .font(.subheadline)
-                                Text("Location will be arranged separately.")
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.orange)
+                                    Text("This coach hasn't added any preferred locations yet.")
+                                        .foregroundColor(.secondary)
+                                        .font(.subheadline)
+                                }
+                                Text("A location is required to book a session. Please message the coach and ask them to add their preferred locations in their profile.")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
                         } else {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Picker("Location", selection: $selectedLocationId) {
-                                    Text("Select a location").tag("")
-                                    ForEach(availableCoachPlaces) { place in
-                                        Text(place.name).tag(place.id)
+                            Text("Choose one of the coach's preferred locations")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            ForEach(availableCoachPlaces) { place in
+                                Button {
+                                    selectedLocationId = place.id
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        if !place.address.isEmpty {
+                                            LocationThumbnailView(address: place.address)
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(place.name)
+                                                .font(.subheadline)
+                                                .fontWeight(.medium)
+                                                .foregroundColor(.primary)
+                                            if !place.address.isEmpty {
+                                                Text(place.address)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(2)
+                                            }
+                                        }
+                                        Spacer()
+                                        Image(systemName: selectedLocationId == place.id ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(selectedLocationId == place.id ? Color("LogoGreen") : .secondary)
+                                            .font(.title3)
                                     }
+                                    .contentShape(Rectangle())
                                 }
-                                if let selected = availableCoachPlaces.first(where: { $0.id == selectedLocationId }),
-                                   !selected.address.isEmpty {
-                                    Text(selected.address)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .padding(.leading, 4)
-                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                            // Larger Apple Maps preview of the chosen location
+                            if let selected = availableCoachPlaces.first(where: { $0.id == selectedLocationId }),
+                               !selected.address.isEmpty {
+                                LocationSnapshotView(address: selected.address, height: 140)
                             }
                         }
                         TextEditor(text: $notes).frame(minHeight: 80)
                     } header: {
-                        Text("Details")
+                        Text("Location (required)")
                     }
 
                     // Weekly repeat — book the same slot for several weeks in a row
@@ -423,7 +449,7 @@ struct BookingEditorView: View {
                         if let s = selectedSlotStart, let e = selectedSlotEnd { startAt = s; endAt = e }
                         saveBooking()
                     }
-                    .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil)
+                    .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil || selectedLocationId.isEmpty)
                 }
             }
             .alert(isPresented: $showAlert) {
@@ -506,6 +532,16 @@ struct BookingEditorView: View {
 
                             Divider()
 
+                            if selectedLocationId.isEmpty {
+                                Text(availableCoachPlaces.isEmpty
+                                     ? "This coach hasn't added preferred locations yet — a location is required to book."
+                                     : "Select a location in the Location section before confirming.")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal)
+                                    .padding(.top, 8)
+                            }
+
                             HStack(spacing: 12) {
                                 Button(role: .cancel) { withAnimation(.easeInOut) { showConfirmOverlay = false } } label: {
                                     Text("Cancel").frame(maxWidth: .infinity)
@@ -519,7 +555,7 @@ struct BookingEditorView: View {
                                     Text("Confirm Booking Time").frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil || !(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600)
+                                .disabled((isGroupBooking ? selectedCoachIds.isEmpty : selectedCoachId.isEmpty) || auth.user == nil || !(startAt < endAt) || endAt.timeIntervalSince(startAt) < 3600 || selectedLocationId.isEmpty)
                             }
                             .padding()
                         }
@@ -865,8 +901,13 @@ struct BookingEditorView: View {
             return
         }
 
-        // Require location selection when the coach has linked places
-        if !availableCoachPlaces.isEmpty && selectedLocationId.isEmpty {
+        // Location is mandatory: the client must pick one of the coach's preferred locations
+        if availableCoachPlaces.isEmpty {
+            alertMessage = "This coach hasn't added any preferred locations yet. A location is required to book — please message the coach so they can add locations to their profile."
+            showAlert = true
+            return
+        }
+        if selectedLocationId.isEmpty {
             alertMessage = "Please select a location for the session"
             showAlert = true
             return
@@ -977,6 +1018,7 @@ struct BookingEditorView: View {
                 notes: notes,
                 creatorID: clientUid,
                 creatorType: "client",
+                extra: selectedLocationId.isEmpty ? nil : ["locationPlaceId": selectedLocationId],
                 completion: saveCompletion
             )
         } else {
@@ -988,6 +1030,7 @@ struct BookingEditorView: View {
                 var m: [String: Any] = [:]
                 if !clientNameExtra.isEmpty { m["ClientName"] = clientNameExtra }
                 if !coachNameExtra.isEmpty { m["CoachName"] = coachNameExtra }
+                if !selectedLocationId.isEmpty { m["locationPlaceId"] = selectedLocationId }
                 return m
             }()
 

@@ -30,6 +30,25 @@ struct PlacesToPlayView: View {
                             .environmentObject(auth)
                     } label: {
                         VStack(alignment: .leading, spacing: 8) {
+                            // Club-uploaded photo wins; otherwise Apple Maps imagery
+                            if let photo = place.photoURL, let url = URL(string: photo) {
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 120)
+                                    .overlay(
+                                        AsyncImage(url: url) { phase in
+                                            if let image = phase.image {
+                                                image.resizable().scaledToFill()
+                                            } else {
+                                                Color(UIColor.secondarySystemBackground)
+                                            }
+                                        }
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            } else if !place.address.isEmpty {
+                                LocationSnapshotView(address: place.address, height: 120)
+                            }
+
                             Text(place.name)
                                 .font(.headline)
 
@@ -301,7 +320,7 @@ struct AddPlaceToPlayView: View {
                             address: address.trimmingCharacters(in: .whitespacesAndNewlines),
                             playingTimes: playingTimesMap,
                             pricePerSession: pricePerSession.trimmingCharacters(in: .whitespacesAndNewlines)
-                        ) { err in
+                        ) { _, err in
                             DispatchQueue.main.async {
                                 isSaving = false
                                 if err == nil { dismiss() }

@@ -362,6 +362,8 @@ struct PlaceToPlay: Identifiable, Hashable {
     /// Weekly schedule: day name -> time range string (e.g. "6:00 AM - 9:00 PM")
     let playingTimes: [String: String]
     let pricePerSession: String
+    /// Club profile picture uploaded by an admin (falls back to map imagery in UI)
+    let photoURL: String?
     let createdBy: String
     /// Legacy single-contact fields (still written for the first admin so the
     /// Android app keeps working). Prefer `admins` for all new logic.

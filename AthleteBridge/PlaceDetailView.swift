@@ -30,6 +30,12 @@ struct PlaceDetailView: View {
     @State private var hasCalculatedDrivingTime = false
     @State private var isJoining = false
 
+    // Club photo upload (admins only)
+    @State private var showClubPhotoPicker = false
+    @State private var selectedClubImage: UIImage? = nil
+    @State private var isUploadingClubPhoto = false
+    @State private var clubPhotoError: String? = nil
+
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
         df.dateStyle = .medium
@@ -47,7 +53,13 @@ struct PlaceDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                clubPhotoSection
                 placeInfoSection
+                // Street-level Apple Maps photo when Look Around imagery exists;
+                // collapses silently otherwise (the live map below covers that case)
+                if livePlace.photoURL == nil && !place.address.isEmpty {
+                    LocationSnapshotView(address: place.address, height: 180, lookAroundOnly: true)
+                }
                 mapSection
                 drivingTimeSection
 
@@ -268,6 +280,84 @@ struct PlaceDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(UIColor.secondarySystemBackground))
                 .cornerRadius(12)
+            }
+        }
+    }
+
+    // MARK: - Club Photo
+
+    /// Club profile picture with an admin-only change control. Hidden entirely
+    /// for non-admins when no photo has been uploaded.
+    @ViewBuilder
+    private var clubPhotoSection: some View {
+        let photoURL = livePlace.photoURL.flatMap { URL(string: $0) }
+        if photoURL != nil || isContact {
+            VStack(alignment: .leading, spacing: 8) {
+                if let url = photoURL {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 200)
+                        .overlay(
+                            AsyncImage(url: url) { phase in
+                                if let image = phase.image {
+                                    image.resizable().scaledToFill()
+                                } else {
+                                    Color(UIColor.secondarySystemBackground)
+                                        .overlay(ProgressView())
+                                }
+                            }
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                if isContact {
+                    Button {
+                        showClubPhotoPicker = true
+                    } label: {
+                        Label(photoURL == nil ? "Add Club Photo" : "Change Club Photo",
+                              systemImage: "camera.fill")
+                            .font(.subheadline)
+                    }
+                    .disabled(isUploadingClubPhoto)
+                    if isUploadingClubPhoto {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Uploading photo…").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    if let err = clubPhotoError {
+                        Text(err).font(.caption).foregroundColor(.red)
+                    }
+                }
+            }
+            .sheet(isPresented: $showClubPhotoPicker) {
+                PhotoPicker(selectedImage: $selectedClubImage)
+            }
+            .onChange(of: selectedClubImage) { image in
+                guard let image = image else { return }
+                uploadClubPhoto(image)
+            }
+        }
+    }
+
+    private func uploadClubPhoto(_ image: UIImage) {
+        clubPhotoError = nil
+        let resized = image.resizeMaintainingAspectRatio(targetSize: CGSize(width: 1280, height: 1280))
+        guard let jpegData = resized.jpegData(compressionQuality: 0.75) else {
+            clubPhotoError = "Failed processing image"
+            selectedClubImage = nil
+            return
+        }
+        isUploadingClubPhoto = true
+        firestore.uploadClubPhoto(placeId: place.id, imageData: jpegData) { err in
+            DispatchQueue.main.async {
+                isUploadingClubPhoto = false
+                selectedClubImage = nil
+                if let err = err {
+                    clubPhotoError = err.localizedDescription
+                } else {
+                    firestore.showToast("Club photo updated")
+                }
             }
         }
     }

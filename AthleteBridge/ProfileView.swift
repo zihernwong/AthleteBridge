@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 import UIKit
 import CoreLocation
+import MapKit
 import FirebaseFirestore
 
 struct ProfileView: View {
@@ -196,10 +197,10 @@ struct ProfileView: View {
                 }
                 .sheet(isPresented: $showingPlacesPicker) {
                     CoachPlacesPickerView(
-                        places: firestore.placesToPlay,
                         selectedIds: $selectedPlaceIds,
                         onDone: { saveProfile() }
                     )
+                    .environmentObject(firestore)
                 }
                 .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
                     Button("Delete", role: .destructive) {
@@ -626,11 +627,14 @@ struct ProfileView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Places to Play").font(.subheadline).foregroundColor(.secondary)
+                Text("Preferred Locations").font(.subheadline).foregroundColor(.secondary)
+                Text("Clients must pick one of these when booking you.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Button(action: { showingPlacesPicker = true }) {
                     HStack {
                         if selectedPlaceIds.isEmpty {
-                            Text("Select places to play")
+                            Text("Search & select your locations")
                                 .foregroundColor(.secondary)
                         } else {
                             let names = firestore.placesToPlay
@@ -758,7 +762,12 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 8) {
                 if isSaving { ProgressView() }
                 Button("Save Profile") { self.saveProfile() }
-                    .disabled(isSaving)
+                    .disabled(isSaving || !canSaveProfile)
+                if !canSaveProfile {
+                    Text("Loading your profile…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 if let msg = saveMessage { Text(msg).foregroundColor(.green) }
             }
         }
@@ -848,94 +857,86 @@ struct ProfileView: View {
             firestore.currentAdditionalTypes.compactMap { AdditionalUserType(rawValue: $0) }
         )
 
-        if let client = firestore.currentClient {
-            role = .client
-            name = client.name
-            selectedGoals = Set(client.goals)
-            selectedClientAvailability = Set(client.preferredAvailability)
-            selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
-            selectedClientSkillLevel = client.skillLevel ?? "Beginner"
-            clientZipCode = client.zipCode ?? ""
-            clientCity = client.city ?? ""
-            clientBioText = client.bio ?? ""
-            clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
-            isEditMode = true
-            hasPopulatedFromExisting = true
-        } else if let coach = firestore.currentCoach {
-            role = .coach
-            name = coach.name
-            selectedSpecialties = Set(coach.specialties)
-            experienceYears = coach.experienceYears
-            selectedCoachAvailability = Set(coach.availability)
-            bioText = coach.bio ?? ""
-            selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
-            if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
-            coachZipCode = coach.zipCode ?? ""
-            coachCity = coach.city ?? ""
-            coachCancellationHoursText = coach.cancellationWindowHours > 0 ? String(coach.cancellationWindowHours) : ""
-            if let rr = coach.rateRange, rr.count == 2 {
-                coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
-                coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
+        // Populate for the user's actual role first. Users can have BOTH a
+        // client and a coach record; always preferring the client here used to
+        // leave the coach fields empty, and a later save wiped the coach profile.
+        if let t = firestore.currentUserType?.uppercased() {
+            if t == "COACH" {
+                // Coach: wait for the coach document — don't fall back to the
+                // client record, whose values would then be saved over the coach's.
+                if let coach = firestore.currentCoach { populateCoachFields(coach) }
             } else {
-                coachRateLowerText = ""
-                coachRateUpperText = ""
+                if let client = firestore.currentClient { populateClientFields(client) }
             }
-            coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
-            selectedPlaceIds = Set(coach.linkedPlaceIds)
-            isEditMode = true
-            hasPopulatedFromExisting = true
+        } else if let client = firestore.currentClient {
+            populateClientFields(client)
+        } else if let coach = firestore.currentCoach {
+            populateCoachFields(coach)
         } else {
             isEditMode = false
         }
     }
 
-    private func updateModeForRole() {
-        if role == .client {
-            if let client = firestore.currentClient {
-                isEditMode = true
-                name = client.name
-                selectedGoals = Set(client.goals)
-                selectedClientAvailability = Set(client.preferredAvailability)
-                selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
-                selectedClientSkillLevel = client.skillLevel ?? "Beginner"
-                clientZipCode = client.zipCode ?? ""
-                clientCity = client.city ?? ""
-                clientBioText = client.bio ?? ""
-                clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
-            } else {
-                isEditMode = false
-            }
+    private func populateClientFields(_ client: Client) {
+        role = .client
+        name = client.name
+        selectedGoals = Set(client.goals)
+        selectedClientAvailability = Set(client.preferredAvailability)
+        selectedClientMeetingPreference = client.meetingPreference ?? meetingOptionsClient.first!
+        selectedClientSkillLevel = client.skillLevel ?? "Beginner"
+        clientZipCode = client.zipCode ?? ""
+        clientCity = client.city ?? ""
+        clientBioText = client.bio ?? ""
+        clientTournamentSoftwareLink = client.tournamentSoftwareLink ?? ""
+        isEditMode = true
+        hasPopulatedFromExisting = true
+    }
+
+    private func populateCoachFields(_ coach: Coach) {
+        role = .coach
+        name = coach.name
+        selectedSpecialties = Set(coach.specialties)
+        experienceYears = coach.experienceYears
+        selectedCoachAvailability = Set(coach.availability)
+        bioText = coach.bio ?? ""
+        selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
+        if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
+        coachZipCode = coach.zipCode ?? ""
+        coachCity = coach.city ?? ""
+        coachCancellationHoursText = coach.cancellationWindowHours > 0 ? String(coach.cancellationWindowHours) : ""
+        if let rr = coach.rateRange, rr.count == 2 {
+            coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
+            coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
         } else {
-            if let coach = firestore.currentCoach {
-                isEditMode = true
-                name = coach.name
-                selectedSpecialties = Set(coach.specialties)
-                experienceYears = coach.experienceYears
-                selectedCoachAvailability = Set(coach.availability)
-                bioText = coach.bio ?? ""
-                selectedCoachMeetingPreference = coach.meetingPreference ?? meetingOptionsCoach.first!
-                if let hr = coach.hourlyRate { hourlyRateText = String(format: "%.2f", hr) } else { hourlyRateText = "" }
-                coachZipCode = coach.zipCode ?? ""
-                coachCity = coach.city ?? ""
-                coachCancellationHoursText = coach.cancellationWindowHours > 0 ? String(coach.cancellationWindowHours) : ""
-                if let rr = coach.rateRange, rr.count == 2 {
-                    coachRateLowerText = rr.first.map { String(format: "%.2f", $0) } ?? ""
-                    coachRateUpperText = rr.last.map { String(format: "%.2f", $0) } ?? ""
-                } else {
-                    coachRateLowerText = ""
-                    coachRateUpperText = ""
-                }
-                coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
-                selectedPlaceIds = Set(coach.linkedPlaceIds)
-            } else {
-                isEditMode = false
-            }
+            coachRateLowerText = ""
+            coachRateUpperText = ""
         }
+        coachTournamentSoftwareLink = coach.tournamentSoftwareLink ?? ""
+        selectedPlaceIds = Set(coach.linkedPlaceIds)
+        isEditMode = true
+        hasPopulatedFromExisting = true
+    }
+
+    /// Saving is only safe once the fetched profile has been loaded into the
+    /// form; saving earlier would overwrite the stored profile with empty fields.
+    private var canSaveProfile: Bool {
+        guard firestore.profilesLoaded else { return false }
+        if role == .coach && firestore.currentCoach != nil { return hasPopulatedFromExisting }
+        if role == .client && firestore.currentClient != nil { return hasPopulatedFromExisting }
+        return true // no existing profile for this role — creating a new one
     }
 
     private func saveProfile() {
         guard let uid = auth.user?.uid else { saveMessage = "No authenticated user"; return }
-        
+        guard canSaveProfile else {
+            saveMessage = "Your profile is still loading — please try again in a moment."
+            return
+        }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            saveMessage = "Please enter your name before saving."
+            return
+        }
+
         // Dismiss keyboard
         DispatchQueue.main.async {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -952,7 +953,7 @@ struct ProfileView: View {
                             let meetingPrefToSave = selectedClientMeetingPreference
                             let skillLevelToSave = selectedClientSkillLevel
                             fm.saveClient(id: uid,
-                                          name: name.isEmpty ? "Unnamed" : name,
+                                          name: name,
                                           goals: goals,
                                           preferredAvailability: preferred,
                                           meetingPreference: meetingPrefToSave,
@@ -983,7 +984,7 @@ struct ProfileView: View {
                 let experience = experienceYears
                 let hourlyRate = Double(hourlyRateText)
                 let parts = name.split(separator: " ").map { String($0) }
-                let firstName = parts.first ?? (name.isEmpty ? "Unnamed" : name)
+                let firstName = parts.first ?? name
                 let lastName = parts.dropFirst().joined(separator: " ")
                 let meetingPrefToSave = selectedCoachMeetingPreference
                 // Build rateRange from text fields
@@ -1208,15 +1209,50 @@ struct AdditionalTypesEditorView: View {
 
 // MARK: - Coach Places Picker Sheet
 
+// MARK: - Preferred Locations Picker (coach)
+
+/// Search completer for the preferred-locations picker: venues + addresses,
+/// biased to the user's area when location permission is available.
+private final class PreferredLocationCompleter: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    @Published var results: [MKLocalSearchCompletion] = []
+    private let completer = MKLocalSearchCompleter()
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        completer.resultTypes = [.pointOfInterest, .address]
+        if let coord = CLLocationManager().location?.coordinate {
+            completer.region = MKCoordinateRegion(center: coord, latitudinalMeters: 50_000, longitudinalMeters: 50_000)
+        }
+    }
+
+    func search(_ text: String) {
+        guard text.count >= 2 else { results = []; return }
+        completer.queryFragment = text
+    }
+
+    func clear() { results = [] }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        DispatchQueue.main.async { self.results = Array(completer.results.prefix(6)) }
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {}
+}
+
 struct CoachPlacesPickerView: View {
-    let places: [PlaceToPlay]
+    @EnvironmentObject var firestore: FirestoreManager
     @Binding var selectedIds: Set<String>
     var onDone: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var localSelection: Set<String>
 
-    init(places: [PlaceToPlay], selectedIds: Binding<Set<String>>, onDone: (() -> Void)? = nil) {
-        self.places = places
+    @StateObject private var completer = PreferredLocationCompleter()
+    @State private var searchText = ""
+    @State private var isAddingPlace = false
+    @State private var addErrorMessage: String? = nil
+
+    init(selectedIds: Binding<Set<String>>, onDone: (() -> Void)? = nil) {
         self._selectedIds = selectedIds
         self.onDone = onDone
         self._localSelection = State(initialValue: selectedIds.wrappedValue)
@@ -1225,35 +1261,96 @@ struct CoachPlacesPickerView: View {
     var body: some View {
         NavigationView {
             List {
-                if places.isEmpty {
-                    Text("No places to play available.")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(places) { place in
-                        Button(action: {
-                            if localSelection.contains(place.id) {
-                                localSelection.remove(place.id)
-                            } else {
-                                localSelection.insert(place.id)
+                Section {
+                    HStack {
+                        Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                        TextField("Search a venue or address", text: $searchText)
+                            .autocorrectionDisabled()
+                            .onChange(of: searchText) { _, newValue in
+                                if newValue.count >= 2 { completer.search(newValue) } else { completer.clear() }
                             }
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: localSelection.contains(place.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(localSelection.contains(place.id) ? Color("LogoGreen") : .secondary)
-                                    .font(.title3)
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                                completer.clear()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if isAddingPlace {
+                        HStack {
+                            ProgressView()
+                            Text("Adding location…").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+
+                    if let err = addErrorMessage {
+                        Text(err).font(.caption).foregroundColor(.red)
+                    }
+
+                    ForEach(completer.results, id: \.self) { result in
+                        Button {
+                            addPlace(from: result)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(Color("LogoGreen"))
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(place.name).font(.body)
-                                    Text(place.address).font(.caption).foregroundColor(.secondary)
+                                    Text(result.title).font(.subheadline).foregroundColor(.primary)
+                                    if !result.subtitle.isEmpty {
+                                        Text(result.subtitle).font(.caption).foregroundColor(.secondary)
+                                    }
                                 }
-                                Spacer()
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .disabled(isAddingPlace)
+                    }
+                } header: {
+                    Text("Add a new location")
+                } footer: {
+                    Text("Search by name (e.g. a gym or club) or address — no need to remember the exact address. Selecting a result adds it to your preferred locations.")
+                }
+
+                Section(header: Text("Your preferred locations")) {
+                    let places = firestore.placesToPlay
+                    if places.isEmpty {
+                        Text("No places yet — search above to add one.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(places) { place in
+                            Button(action: {
+                                if localSelection.contains(place.id) {
+                                    localSelection.remove(place.id)
+                                } else {
+                                    localSelection.insert(place.id)
+                                }
+                            }) {
+                                HStack(spacing: 12) {
+                                    Image(systemName: localSelection.contains(place.id) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(localSelection.contains(place.id) ? Color("LogoGreen") : .secondary)
+                                        .font(.title3)
+                                    if !place.address.isEmpty {
+                                        LocationThumbnailView(address: place.address, width: 56, height: 44)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(place.name).font(.body)
+                                        Text(place.address).font(.caption).foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                     }
                 }
             }
-            .navigationTitle("Places to Play")
+            .navigationTitle("Preferred Locations")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1264,6 +1361,57 @@ struct CoachPlacesPickerView: View {
                         selectedIds = localSelection
                         dismiss()
                         onDone?()
+                    }
+                }
+            }
+            .onAppear {
+                if firestore.placesToPlay.isEmpty { firestore.fetchPlacesToPlay() }
+            }
+        }
+    }
+
+    /// Resolves a search completion to a concrete place, reusing an existing
+    /// Place to Play when it matches, otherwise creating a new one.
+    private func addPlace(from completion: MKLocalSearchCompletion) {
+        addErrorMessage = nil
+
+        let request = MKLocalSearch.Request(completion: completion)
+        isAddingPlace = true
+        MKLocalSearch(request: request).start { response, error in
+            DispatchQueue.main.async {
+                guard let item = response?.mapItems.first, error == nil else {
+                    self.isAddingPlace = false
+                    self.addErrorMessage = "Couldn't resolve that location. Please try another result."
+                    return
+                }
+
+                let name = item.name ?? completion.title
+                let address = item.placemark.title ?? completion.subtitle
+
+                // Reuse an existing place instead of creating a duplicate
+                if let existing = self.firestore.placesToPlay.first(where: {
+                    $0.name.caseInsensitiveCompare(name) == .orderedSame ||
+                    (!address.isEmpty && $0.address.caseInsensitiveCompare(address) == .orderedSame)
+                }) {
+                    self.isAddingPlace = false
+                    self.localSelection.insert(existing.id)
+                    self.searchText = ""
+                    self.completer.clear()
+                    return
+                }
+
+                self.firestore.addPlaceToPlay(name: name, address: address, playingTimes: [:], pricePerSession: "") { newId, err in
+                    DispatchQueue.main.async {
+                        self.isAddingPlace = false
+                        if let err = err {
+                            self.addErrorMessage = "Couldn't add location: \(err.localizedDescription)"
+                            return
+                        }
+                        if let newId = newId {
+                            self.localSelection.insert(newId)
+                        }
+                        self.searchText = ""
+                        self.completer.clear()
                     }
                 }
             }

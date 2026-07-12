@@ -172,6 +172,10 @@ struct BookingDetailView: View {
                         firestore.listenSessionLogsForClient(clientId: uid)
                     }
                 }
+                // Needed to resolve the booking's linked place (picture/directions)
+                if booking.locationPlaceId != nil && firestore.placesToPlay.isEmpty {
+                    firestore.fetchPlacesToPlay()
+                }
             }
             .sheet(isPresented: $showSessionLogEditor) {
                 NavigationStack {
@@ -350,6 +354,19 @@ struct BookingDetailView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
 
+    /// Address to geocode / navigate to. Prefer the linked Place to Play
+    /// (kept up to date by the club); fall back to parsing the stored
+    /// "Name — Address" string on older bookings.
+    private var sessionAddress: String? {
+        if let placeId = booking.locationPlaceId,
+           let place = firestore.placesToPlay.first(where: { $0.id == placeId }),
+           !place.address.isEmpty {
+            return place.address
+        }
+        guard let location = booking.location, !location.isEmpty else { return nil }
+        return location.components(separatedBy: " — ").last ?? location
+    }
+
     private func locationSection(_ location: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Location")
@@ -360,10 +377,34 @@ struct BookingDetailView: View {
                     .foregroundColor(.secondary)
                 Text(location)
             }
+
+            if let address = sessionAddress {
+                LocationSnapshotView(address: address, height: 140)
+
+                Button {
+                    openDirections(to: address)
+                } label: {
+                    Label("Get Directions", systemImage: "car.fill")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color("LogoGreen")))
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+    }
+
+    private func openDirections(to address: String) {
+        let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? address
+        if let url = URL(string: "maps://?daddr=\(encoded)") {
+            UIApplication.shared.open(url)
+        }
     }
 
     private var rateSection: some View {

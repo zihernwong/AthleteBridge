@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import FirebaseAuth
 
 // MARK: - Session Log Editor
@@ -25,9 +26,21 @@ struct SessionLogEditorView: View {
     var onSaved: (() -> Void)? = nil
 
     private var isValid: Bool {
-        !workedOn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !toImprove.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !improved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !Self.cleanBulletText(workedOn).isEmpty &&
+        !Self.cleanBulletText(toImprove).isEmpty &&
+        !Self.cleanBulletText(improved).isEmpty
+    }
+
+    /// Drops empty bullet lines (a lone "•") and surrounding whitespace so a
+    /// field that only contains auto-inserted bullets counts as empty.
+    static func cleanBulletText(_ text: String) -> String {
+        text
+            .components(separatedBy: .newlines)
+            .filter { line in
+                let stripped = line.trimmingCharacters(in: .whitespaces)
+                return !stripped.isEmpty && stripped != "•"
+            }
+            .joined(separator: "\n")
     }
 
     /// Most recent previous value per metric name for this coach-client pair.
@@ -65,13 +78,13 @@ struct SessionLogEditorView: View {
             }
 
             Section(header: Text("What was worked on today?")) {
-                TextEditor(text: $workedOn).frame(minHeight: 70)
+                BulletTextEditor(text: $workedOn)
             }
             Section(header: Text("What needs to be improved?")) {
-                TextEditor(text: $toImprove).frame(minHeight: 70)
+                BulletTextEditor(text: $toImprove)
             }
             Section(header: Text("What improved?")) {
-                TextEditor(text: $improved).frame(minHeight: 70)
+                BulletTextEditor(text: $improved)
             }
 
             Section {
@@ -151,9 +164,9 @@ struct SessionLogEditorView: View {
             coachName: firestore.currentCoach?.name ?? (booking.coachName ?? ""),
             clientName: booking.clientName ?? "",
             sessionDate: booking.startAt,
-            workedOn: workedOn,
-            toImprove: toImprove,
-            improved: improved,
+            workedOn: Self.cleanBulletText(workedOn),
+            toImprove: Self.cleanBulletText(toImprove),
+            improved: Self.cleanBulletText(improved),
             metrics: metrics
         ) { err in
             DispatchQueue.main.async {
@@ -167,6 +180,34 @@ struct SessionLogEditorView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Bullet Text Editor
+
+/// TextEditor that formats input as a bulleted list: the first line starts
+/// with a bullet as soon as the field gains focus, and pressing return starts
+/// the next line with a new bullet automatically.
+struct BulletTextEditor: View {
+    @Binding var text: String
+    var minHeight: CGFloat = 70
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        TextEditor(text: $text)
+            .frame(minHeight: minHeight)
+            .focused($isFocused)
+            .onChange(of: isFocused) { _, focused in
+                if focused && text.isEmpty {
+                    text = "• "
+                }
+            }
+            .onChange(of: text) { oldValue, newValue in
+                // Only react to a newline the user just typed at the end;
+                // rewriting the string mid-edit would move the cursor.
+                guard newValue.count > oldValue.count, newValue.hasSuffix("\n") else { return }
+                text = newValue + "• "
+            }
     }
 }
 
@@ -299,10 +340,11 @@ struct MetricProgressSection: View {
                         Text(group.name)
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                        // e.g. 8:00 → 7:45 → 7:30
+                        // e.g. 8:00 → 7:45 → 7:30 (exact values, kept alongside the chart)
                         Text(group.entries.map { $0.value }.joined(separator: " → "))
                             .font(.subheadline)
                             .foregroundColor(Color("LogoGreen"))
+                        MetricTrendChart(entries: group.entries.map { $0.value })
                         if let firstDate = group.entries.first?.date, let lastDate = group.entries.last?.date, group.entries.count > 1 {
                             Text("\(DateFormatter.localizedString(from: firstDate, dateStyle: .short, timeStyle: .none)) – \(DateFormatter.localizedString(from: lastDate, dateStyle: .short, timeStyle: .none))")
                                 .font(.caption2)
@@ -312,6 +354,68 @@ struct MetricProgressSection: View {
                     .padding(.vertical, 2)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Metric Trend Chart
+
+/// Compact per-exercise trend line, one point per session (oldest → newest).
+/// Shown only when at least two of the recorded values are quantifiable;
+/// exact values stay in the text row above, so the chart carries just the shape.
+struct MetricTrendChart: View {
+    let entries: [String]
+
+    private struct MetricPoint: Identifiable {
+        let id: Int      // session index
+        let value: Double
+    }
+
+    private var points: [MetricPoint] {
+        entries.enumerated().compactMap { index, raw in
+            Self.parseValue(raw).map { MetricPoint(id: index, value: $0) }
+        }
+    }
+
+    /// Parses times like "8:00" or "1:02:30" (to seconds) and plain numbers
+    /// like "12", "8.5" or "$25" — returns nil for non-quantifiable values.
+    static func parseValue(_ raw: String) -> Double? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.contains(":") {
+            let segments = trimmed.split(separator: ":").map { $0.trimmingCharacters(in: .whitespaces) }
+            let numbers = segments.compactMap { Double($0) }
+            guard numbers.count == segments.count, !numbers.isEmpty else { return nil }
+            return numbers.reversed().enumerated().reduce(0) { $0 + $1.element * pow(60, Double($1.offset)) }
+        }
+        let cleaned = trimmed.replacingOccurrences(of: ",", with: ".").filter { "0123456789.-".contains($0) }
+        guard let value = Double(cleaned), value.isFinite else { return nil }
+        return value
+    }
+
+    var body: some View {
+        let pts = points
+        if pts.count >= 2, let minV = pts.map(\.value).min(), let maxV = pts.map(\.value).max() {
+            // Pad the domain so the line doesn't hug the edges; guard flat series
+            let pad = max((maxV - minV) * 0.15, maxV == minV ? max(abs(maxV) * 0.1, 1) : 0.0001)
+            Chart(pts) { point in
+                LineMark(
+                    x: .value("Session", point.id),
+                    y: .value("Value", point.value)
+                )
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                .foregroundStyle(Color("LogoGreen"))
+                PointMark(
+                    x: .value("Session", point.id),
+                    y: .value("Value", point.value)
+                )
+                .symbolSize(50)
+                .foregroundStyle(Color("LogoGreen"))
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartYScale(domain: (minV - pad)...(maxV + pad))
+            .frame(height: 70)
+            .accessibilityLabel("Trend across \(pts.count) sessions")
         }
     }
 }
