@@ -24,6 +24,10 @@ struct PaymentsView: View {
     @State private var showClientSummary: Bool = false
     // State for coach revenue summary sheet
     @State private var showCoachSummary: Bool = false
+    // State for coach earnings forecaster sheet
+    @State private var showEarningsForecast: Bool = false
+    // State for client spending forecaster sheet
+    @State private var showSpendingForecast: Bool = false
     // Upgrade prompt when coach free tier tries to access gated features
     @State private var showUpgradeAlert: Bool = false
     @State private var showManageSubscription: Bool = false
@@ -298,6 +302,22 @@ struct PaymentsView: View {
                 }
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
+
+                // Spending forecaster — logged-in clients only
+                if auth.user != nil {
+                    Button(action: { showSpendingForecast = true }) {
+                        HStack {
+                            Image(systemName: "creditcard")
+                            Text("Spending Forecaster").bold()
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+                }
             } else {
                 // Coach header shows Total Revenue + summary button
                 HStack(spacing: 12) {
@@ -335,6 +355,22 @@ struct PaymentsView: View {
                 }
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
+
+                // Earnings forecaster — logged-in coaches only
+                if isCoach && auth.user != nil {
+                    Button(action: { showEarningsForecast = true }) {
+                        HStack {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                            Text("Earnings Forecaster").bold()
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+                }
             }
 
             // Input form for new/updated payment entry — SHOW ONLY FOR COACHES
@@ -672,6 +708,18 @@ struct PaymentsView: View {
         }
         .sheet(isPresented: $showManageSubscription) {
             ManageSubscriptionView()
+        }
+        // Coach-only earnings forecaster
+        .sheet(isPresented: $showEarningsForecast) {
+            ForecastView(mode: .coachEarnings)
+                .environmentObject(firestore)
+                .environmentObject(auth)
+        }
+        // Client-only spending forecaster
+        .sheet(isPresented: $showSpendingForecast) {
+            ForecastView(mode: .clientSpending)
+                .environmentObject(firestore)
+                .environmentObject(auth)
         }
     }
 

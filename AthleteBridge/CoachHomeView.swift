@@ -21,6 +21,9 @@ struct CoachHomeView: View {
     @State private var showPendingSessionLogs = false
     @State private var didAutoPresentSessionLogs = false
 
+    // Session timer: shared so the "Running" badge stays live from anywhere
+    @ObservedObject private var sessionTimer = SessionTimerModel.shared
+
     private var pendingSessionLogCount: Int {
         guard let uid = auth.user?.uid else { return 0 }
         return firestore.pendingSessionLogs(coachId: uid).count
@@ -57,6 +60,29 @@ struct CoachHomeView: View {
                                 Text("\(upcoming) upcoming")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    // In-app stopwatch that saves times into session log metrics
+                    NavigationLink {
+                        SessionTimerView()
+                            .environmentObject(firestore)
+                            .environmentObject(auth)
+                    } label: {
+                        HStack {
+                            Image(systemName: "stopwatch")
+                                .foregroundColor(Color("LogoBlue"))
+                            Text("Session Timer")
+                                .font(.body)
+                            Spacer()
+                            if sessionTimer.isRunning {
+                                HStack(spacing: 4) {
+                                    Circle().fill(Color.red).frame(width: 8, height: 8)
+                                    Text("Running")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
                             }
                         }
                     }

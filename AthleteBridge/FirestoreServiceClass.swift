@@ -530,10 +530,54 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Append a single metric to the session log for a booking, creating a log
+    /// shell if none exists yet — used by the in-app session timer. A shell has
+    /// empty text fields, so the booking still counts as pending a full log.
+    func appendMetricToSessionLog(booking: BookingItem, coachName: String, metricName: String, value: String, completion: ((Error?) -> Void)? = nil) {
+        guard let coachId = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let name = metricName.trimmingCharacters(in: .whitespaces)
+        let val = value.trimmingCharacters(in: .whitespaces)
+        guard !booking.id.isEmpty, !name.isEmpty, !val.isEmpty else {
+            completion?(NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "Missing booking or metric"]))
+            return
+        }
+        let docRef = db.collection("sessionLogs").document(booking.id)
+        docRef.getDocument { snap, _ in
+            var metrics = (snap?.data()?["Metrics"] as? [[String: Any]]) ?? []
+            metrics.append(["name": name, "value": val])
+            var payload: [String: Any] = [
+                "Metrics": metrics,
+                "updatedAt": FieldValue.serverTimestamp()
+            ]
+            if snap?.exists != true {
+                payload["BookingID"] = booking.id
+                payload["CoachID"] = coachId
+                payload["ClientID"] = booking.clientID
+                payload["CoachName"] = coachName
+                payload["ClientName"] = booking.clientName ?? ""
+                payload["WorkedOn"] = ""
+                payload["ToImprove"] = ""
+                payload["Improved"] = ""
+                if let d = booking.startAt { payload["SessionDate"] = Timestamp(date: d) }
+                payload["createdAt"] = FieldValue.serverTimestamp()
+            }
+            docRef.setData(payload, merge: true) { err in
+                if let err = err { print("appendMetricToSessionLog error: \(err)") }
+                DispatchQueue.main.async { completion?(err) }
+            }
+        }
+    }
+
     /// Completed (confirmed, ended) sessions from the last 14 days that the
     /// coach has not logged yet — used to prompt the coach after each session.
     func pendingSessionLogs(coachId: String) -> [BookingItem] {
-        let loggedIds = Set(coachSessionLogs.map { $0.id })
+        // Timer-only log shells (metrics but no text) still count as unlogged
+        let loggedIds = Set(coachSessionLogs
+            .filter { !($0.workedOn.isEmpty && $0.toImprove.isEmpty && $0.improved.isEmpty) }
+            .map { $0.id })
         let now = Date()
         let cutoff = Calendar.current.date(byAdding: .day, value: -14, to: now) ?? now
         return coachBookings.filter { b in
@@ -6609,6 +6653,175 @@ class FirestoreManager: ObservableObject {
     func handleFirestoreError(_ error: Error?) -> Error? {
         guard let error = error else { return nil }
         return error
+    }
+}
+
+// MARK: - Manual Forecast Entries (coach earnings and client spending forecasters)
+extension FirestoreManager {
+    /// One manually entered forecast amount. Used for both coach earnings
+    /// (coaches/{uid}/manualEarnings) and client spending (clients/{uid}/manualSpending).
+    struct ManualEarningItem: Identifiable, Equatable {
+        let id: String
+        let amount: Double
+        let date: Date
+        let note: String?
+        /// Shared id linking all occurrences created from one recurring entry.
+        var recurrenceGroupId: String? = nil
+    }
+
+    // Shared plumbing — root is "coaches" or "clients", subcollection the entries collection.
+
+    private func fetchManualEntries(root: String, subcollection: String, completion: @escaping ([ManualEarningItem]) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            DispatchQueue.main.async { completion([]) }
+            return
+        }
+        db.collection(root).document(uid).collection(subcollection).getDocuments { snapshot, error in
+            if let error = error {
+                print("fetchManualEntries(\(root)/\(subcollection)) error: \(error)")
+                DispatchQueue.main.async { completion([]) }
+                return
+            }
+            let items: [ManualEarningItem] = (snapshot?.documents ?? []).compactMap { d in
+                let data = d.data()
+                guard let ts = data["date"] as? Timestamp else { return nil }
+                let amount = (data["amount"] as? NSNumber)?.doubleValue ?? 0.0
+                let note = (data["note"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                let groupId = (data["recurrenceGroupId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                return ManualEarningItem(id: d.documentID, amount: amount, date: ts.dateValue(), note: note, recurrenceGroupId: groupId)
+            }.sorted { $0.date < $1.date }
+            DispatchQueue.main.async { completion(items) }
+        }
+    }
+
+    /// Batch-write one or more entries. Pass a recurrenceGroupId to link a recurring series.
+    private func addManualEntries(root: String, subcollection: String, amount: Double, dates: [Date], note: String?, recurrenceGroupId: String?, completion: @escaping (Result<[ManualEarningItem], Error>) -> Void) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            DispatchQueue.main.async {
+                completion(.failure(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"])))
+            }
+            return
+        }
+        let coll = db.collection(root).document(uid).collection(subcollection)
+        let batch = db.batch()
+        var items: [ManualEarningItem] = []
+        for date in dates {
+            let ref = coll.document()
+            var payload: [String: Any] = [
+                "amount": amount,
+                "date": Timestamp(date: date),
+                "createdAt": FieldValue.serverTimestamp()
+            ]
+            if let note = note, !note.isEmpty { payload["note"] = note }
+            if let groupId = recurrenceGroupId { payload["recurrenceGroupId"] = groupId }
+            batch.setData(payload, forDocument: ref)
+            items.append(ManualEarningItem(id: ref.documentID, amount: amount, date: date, note: note, recurrenceGroupId: recurrenceGroupId))
+        }
+        batch.commit { err in
+            DispatchQueue.main.async {
+                if let err = err {
+                    print("addManualEntries(\(root)/\(subcollection)) error: \(err)")
+                    completion(.failure(err))
+                    return
+                }
+                completion(.success(items))
+            }
+        }
+    }
+
+    private func addSingleManualEntry(root: String, subcollection: String, amount: Double, date: Date, note: String?, completion: @escaping (Result<ManualEarningItem, Error>) -> Void) {
+        addManualEntries(root: root, subcollection: subcollection, amount: amount, dates: [date], note: note, recurrenceGroupId: nil) { result in
+            switch result {
+            case .success(let items):
+                if let first = items.first {
+                    completion(.success(first))
+                } else {
+                    completion(.failure(NSError(domain: "FirestoreManager", code: 500, userInfo: [NSLocalizedDescriptionKey: "No entry created"])))
+                }
+            case .failure(let err):
+                completion(.failure(err))
+            }
+        }
+    }
+
+    private func deleteManualEntry(root: String, subcollection: String, id: String, completion: ((Error?) -> Void)?) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        db.collection(root).document(uid).collection(subcollection).document(id).delete { err in
+            if let err = err { print("deleteManualEntry(\(root)/\(subcollection)) error: \(err)") }
+            DispatchQueue.main.async { completion?(err) }
+        }
+    }
+
+    private func deleteManualEntrySeries(root: String, subcollection: String, groupId: String, completion: ((Error?) -> Void)?) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
+            return
+        }
+        let coll = db.collection(root).document(uid).collection(subcollection)
+        coll.whereField("recurrenceGroupId", isEqualTo: groupId).getDocuments { snap, err in
+            if let err = err {
+                print("deleteManualEntrySeries(\(root)/\(subcollection)) error: \(err)")
+                DispatchQueue.main.async { completion?(err) }
+                return
+            }
+            let batch = self.db.batch()
+            (snap?.documents ?? []).forEach { batch.deleteDocument($0.reference) }
+            batch.commit { err in
+                if let err = err { print("deleteManualEntrySeries(\(root)/\(subcollection)) commit error: \(err)") }
+                DispatchQueue.main.async { completion?(err) }
+            }
+        }
+    }
+
+    // Coach earnings — coaches/{uid}/manualEarnings
+
+    func fetchManualEarningsForCurrentCoach(completion: @escaping ([ManualEarningItem]) -> Void) {
+        fetchManualEntries(root: "coaches", subcollection: "manualEarnings", completion: completion)
+    }
+
+    func addManualEarningForCurrentCoach(amount: Double, date: Date, note: String?, completion: @escaping (Result<ManualEarningItem, Error>) -> Void) {
+        addSingleManualEntry(root: "coaches", subcollection: "manualEarnings", amount: amount, date: date, note: note, completion: completion)
+    }
+
+    /// Add a recurring series of manual earnings entries for the current coach.
+    /// All occurrences share a recurrenceGroupId so the series can be deleted together.
+    func addManualEarningSeriesForCurrentCoach(amount: Double, dates: [Date], note: String?, completion: @escaping (Result<[ManualEarningItem], Error>) -> Void) {
+        addManualEntries(root: "coaches", subcollection: "manualEarnings", amount: amount, dates: dates, note: note, recurrenceGroupId: UUID().uuidString, completion: completion)
+    }
+
+    func deleteManualEarningForCurrentCoach(id: String, completion: ((Error?) -> Void)? = nil) {
+        deleteManualEntry(root: "coaches", subcollection: "manualEarnings", id: id, completion: completion)
+    }
+
+    func deleteManualEarningSeriesForCurrentCoach(groupId: String, completion: ((Error?) -> Void)? = nil) {
+        deleteManualEntrySeries(root: "coaches", subcollection: "manualEarnings", groupId: groupId, completion: completion)
+    }
+
+    // Client spending — clients/{uid}/manualSpending
+
+    func fetchManualSpendingForCurrentClient(completion: @escaping ([ManualEarningItem]) -> Void) {
+        fetchManualEntries(root: "clients", subcollection: "manualSpending", completion: completion)
+    }
+
+    func addManualSpendingForCurrentClient(amount: Double, date: Date, note: String?, completion: @escaping (Result<ManualEarningItem, Error>) -> Void) {
+        addSingleManualEntry(root: "clients", subcollection: "manualSpending", amount: amount, date: date, note: note, completion: completion)
+    }
+
+    /// Add a recurring series of manual spending entries for the current client.
+    /// All occurrences share a recurrenceGroupId so the series can be deleted together.
+    func addManualSpendingSeriesForCurrentClient(amount: Double, dates: [Date], note: String?, completion: @escaping (Result<[ManualEarningItem], Error>) -> Void) {
+        addManualEntries(root: "clients", subcollection: "manualSpending", amount: amount, dates: dates, note: note, recurrenceGroupId: UUID().uuidString, completion: completion)
+    }
+
+    func deleteManualSpendingForCurrentClient(id: String, completion: ((Error?) -> Void)? = nil) {
+        deleteManualEntry(root: "clients", subcollection: "manualSpending", id: id, completion: completion)
+    }
+
+    func deleteManualSpendingSeriesForCurrentClient(groupId: String, completion: ((Error?) -> Void)? = nil) {
+        deleteManualEntrySeries(root: "clients", subcollection: "manualSpending", groupId: groupId, completion: completion)
     }
 }
 
