@@ -6,7 +6,7 @@ final class ScreenshotTests: XCTestCase {
     let screenshotDir = "/Users/hernwong/Desktop/AthleteBridgeScreenshots"
 
     // Test account credentials
-    let testEmail    = "zihernwong@yahoo.com"
+    let testEmail    = "client@gmail.com"
     let testPassword = "Hercia12"
 
     override func setUpWithError() throws {
