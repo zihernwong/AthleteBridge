@@ -8,11 +8,18 @@ struct CreateSignupEventView: View {
     @State private var description = ""
     @State private var eventDate = Date()
     @State private var maxSignups = 10
+    @State private var repeatsWeekly = false
+    @State private var feeText = ""
+    @State private var paymentLink = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
 
     private var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var feeUSD: Double? {
+        Double(feeText.replacingOccurrences(of: "$", with: "").trimmingCharacters(in: .whitespaces))
     }
 
     var body: some View {
@@ -39,6 +46,21 @@ struct CreateSignupEventView: View {
                 Section(header: Text("Capacity")) {
                     Stepper("Max Signups: \(maxSignups)", value: $maxSignups, in: 2...500)
                 }
+                Section(header: Text("Schedule")) {
+                    Toggle("Repeats Weekly", isOn: $repeatsWeekly)
+                }
+                Section(header: Text("Payment (optional)"), footer: Text("Players see the fee and a payment button on the signup page. You can mark who has paid on the event screen.")) {
+                    HStack {
+                        Text("$")
+                            .foregroundColor(.secondary)
+                        TextField("Fee per player, e.g. 8", text: $feeText)
+                            .keyboardType(.decimalPad)
+                    }
+                    TextField("Payment link (Stripe, Venmo, PayPal…)", text: $paymentLink)
+                        .textContentType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                }
             }
             .navigationTitle("New Event")
             .navigationBarTitleDisplayMode(.inline)
@@ -59,7 +81,10 @@ struct CreateSignupEventView: View {
                                 location: place.address,
                                 placeId: place.id,
                                 placeName: place.name,
-                                maxSignups: maxSignups
+                                maxSignups: maxSignups,
+                                recurrence: repeatsWeekly ? "weekly" : nil,
+                                feeUSD: feeUSD,
+                                paymentLink: paymentLink.trimmingCharacters(in: .whitespacesAndNewlines)
                             ) { err in
                                 DispatchQueue.main.async {
                                     isSaving = false

@@ -68,6 +68,22 @@ struct SignupEventDetailView: View {
                             .foregroundColor(ev.isFull ? .red : Color("LogoGreen"))
                     }
                     .font(.subheadline)
+                    if let fee = ev.feeUSD, fee > 0 {
+                        HStack(spacing: 6) {
+                            Image(systemName: "dollarsign.circle")
+                                .foregroundColor(Color("LogoBlue"))
+                            Text(String(format: "$%.2f per player", fee))
+                        }
+                        .font(.subheadline)
+                    }
+                    if ev.isRecurringWeekly {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundColor(Color("LogoBlue"))
+                            Text("Repeats weekly")
+                        }
+                        .font(.subheadline)
+                    }
                 }
                 .padding(.vertical, 4)
             }
@@ -134,6 +150,28 @@ struct SignupEventDetailView: View {
                 }
             }
 
+            // Fee payment — shown to attendees when the event charges a fee
+            if let fee = ev.feeUSD, fee > 0, !isCreator {
+                Section(header: Text("Payment")) {
+                    let myPaid = ev.signups.first(where: { $0.userId == currentUid })?.paid ?? false
+                    if myPaid {
+                        HStack {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(Color("LogoGreen"))
+                            Text("You're marked as paid")
+                                .foregroundColor(Color("LogoGreen"))
+                        }
+                    } else if let link = ev.paymentLink, !link.isEmpty, let url = URL(string: link) {
+                        Link(destination: url) {
+                            Label(String(format: "Pay $%.2f", fee), systemImage: "creditcard")
+                        }
+                    } else {
+                        Text(String(format: "Bring $%.2f to the event", fee))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
             // Waitlist: join when the event is full, or show queue position
             if !isAlreadySignedUp && ev.isFull {
                 Section {
@@ -191,9 +229,23 @@ struct SignupEventDetailView: View {
 
             // Attendees
             if !ev.signups.isEmpty {
-                Section(header: Text("Signed Up (\(ev.signups.count))")) {
+                let hasFee = (ev.feeUSD ?? 0) > 0
+                Section(header: Text(isCreator && hasFee
+                                     ? "Signed Up (\(ev.signups.count)) · \(ev.paidCount) paid"
+                                     : "Signed Up (\(ev.signups.count))")) {
                     ForEach(ev.signups) { signup in
                         HStack {
+                            // Creator collecting a fee: tap to toggle paid
+                            if isCreator && hasFee {
+                                Button {
+                                    firestore.toggleSignupPaid(eventId: ev.id, signupId: signup.id, paid: !signup.paid)
+                                } label: {
+                                    Image(systemName: signup.paid ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(signup.paid ? Color("LogoGreen") : .secondary)
+                                        .font(.title3)
+                                }
+                                .buttonStyle(.plain)
+                            }
                             VStack(alignment: .leading) {
                                 Text(signup.name)
                                     .font(.body)
@@ -214,6 +266,22 @@ struct SignupEventDetailView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                    }
+                }
+            }
+
+            // Weekly events: creator rolls the next occurrence forward
+            if isCreator && ev.isRecurringWeekly {
+                Section(footer: Text("Creates a copy of this event one week later with an empty signup list.")) {
+                    Button {
+                        firestore.createNextOccurrence(of: ev) { err in
+                            DispatchQueue.main.async {
+                                firestore.showToast(err == nil ? "Next week's event created" : (err?.localizedDescription ?? "Couldn't create event"))
+                            }
+                        }
+                    } label: {
+                        Label("Schedule Next Week's Event", systemImage: "calendar.badge.plus")
+                            .foregroundColor(Color("LogoGreen"))
                     }
                 }
             }

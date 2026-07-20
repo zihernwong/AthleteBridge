@@ -114,7 +114,10 @@
         + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     }
 
+    let currentEvent = null;
+
     function renderEvent(ev) {
+      currentEvent = ev;
       const isFull = ev.signupCount >= ev.maxSignups;
       const spotsLeft = Math.max(0, ev.maxSignups - ev.signupCount);
 
@@ -156,6 +159,14 @@
           <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z"/></svg>
           <span>${escapeHtml(ev.location)}</span>
         </div>
+        ${ev.feeUSD ? `<div class="meta">
+          <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+          <span>$${Number(ev.feeUSD).toFixed(2)} per player</span>
+        </div>` : ''}
+        ${ev.recurrence === 'weekly' ? `<div class="meta">
+          <svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8A5.87 5.87 0 016 12c0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg>
+          <span>Repeats weekly</span>
+        </div>` : ''}
         <div class="spots ${isFull ? 'full' : 'open'}">
           ${isFull ? 'This event is full' : spotsLeft + ' of ' + ev.maxSignups + ' spots remaining'}
         </div>
@@ -183,12 +194,20 @@
         const data = await res.json();
 
         if (res.ok && data.success) {
+          let payHtml = '';
+          if (currentEvent && currentEvent.feeUSD) {
+            const feeText = '$' + Number(currentEvent.feeUSD).toFixed(2);
+            payHtml = currentEvent.paymentLink
+              ? `<hr class="divider" /><a class="btn" style="text-decoration:none;text-align:center" href="${escapeHtml(currentEvent.paymentLink)}" target="_blank" rel="noopener">Pay ${feeText} to confirm your spot</a>`
+              : `<hr class="divider" /><div class="success-text">Please bring ${feeText} to the event.</div>`;
+          }
           app.innerHTML = `
             <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
             <div class="brand">ATHLETEBRIDGE</div>
             <div class="success-icon">&#10003;</div>
             <div class="success-title">You're signed up!</div>
-            <div class="success-text">${escapeHtml(name)}, you've been registered for this event.</div>`;
+            <div class="success-text">${escapeHtml(name)}, you've been registered for this event.</div>
+            ${payHtml}`;
         } else {
           errEl.textContent = data.error || 'Something went wrong';
           errEl.style.display = 'block';
