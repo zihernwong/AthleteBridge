@@ -13,13 +13,31 @@ enum CoachTier: String, CaseIterable {
         }
     }
 
+    var rank: Int {
+        switch self {
+        case .free: return 0
+        case .plus: return 1
+        case .pro: return 2
+        }
+    }
+
+    /// Effective tier for a coach doc: the StoreKit-synced `subscriptionTier`
+    /// or a manually granted `lifetimeTier`, whichever is higher. The lifetime
+    /// field is never touched by StoreKit/Stripe sync, so comp accounts keep
+    /// their access permanently.
+    static func effectiveTier(from data: [String: Any]) -> CoachTier {
+        let sub = CoachTier(rawValue: data["subscriptionTier"] as? String ?? "free") ?? .free
+        let life = CoachTier(rawValue: data["lifetimeTier"] as? String ?? "") ?? .free
+        return life.rank > sub.rank ? life : sub
+    }
+
     /// Feature gating by subscription tier.
     /// Free coaches are restricted from premium features; Plus and Pro have full access.
     func hasAccess(to feature: String) -> Bool {
         switch self {
         case .free:
             // Features locked on the free tier
-            let lockedFeatures: Set<String> = ["paymentSummary"]
+            let lockedFeatures: Set<String> = ["paymentSummary", "earningsForecaster", "metricHistory", "recommendToClients"]
             return !lockedFeatures.contains(feature)
         case .plus, .pro:
             return true
@@ -326,8 +344,10 @@ struct Tournament: Identifiable, Hashable {
     let createdBy: String
     let signupLink: String?
     let participants: [String: TournamentParticipantInfo]
+    // Link to a webTournaments doc managed by the web tournament manager
+    let webTournamentId: String?
 
-    init(id: String = UUID().uuidString, name: String, startDate: Date, endDate: Date, location: String, createdBy: String = "", signupLink: String? = nil, participants: [String: TournamentParticipantInfo] = [:]) {
+    init(id: String = UUID().uuidString, name: String, startDate: Date, endDate: Date, location: String, createdBy: String = "", signupLink: String? = nil, participants: [String: TournamentParticipantInfo] = [:], webTournamentId: String? = nil) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespaces)
         self.startDate = startDate
@@ -336,6 +356,7 @@ struct Tournament: Identifiable, Hashable {
         self.createdBy = createdBy
         self.signupLink = signupLink
         self.participants = participants
+        self.webTournamentId = webTournamentId
     }
 }
 
@@ -482,6 +503,14 @@ struct SignupEvent: Identifiable, Hashable {
     let signups: [SignupEventSignup]
     // People waiting for a spot, promoted first-in-first-out when someone drops out
     var waitlist: [SignupEventSignup] = []
+    // "weekly" for repeating events; the creator can roll the next occurrence forward
+    var recurrence: String? = nil
+    // Optional per-player fee and where to pay it (e.g. a Stripe payment link)
+    var feeUSD: Double? = nil
+    var paymentLink: String? = nil
+
+    var isRecurringWeekly: Bool { recurrence == "weekly" }
+    var paidCount: Int { signups.filter { $0.paid }.count }
 
     func isWaitlisted(userId: String) -> Bool {
         waitlist.contains { $0.userId == userId }

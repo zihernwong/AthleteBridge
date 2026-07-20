@@ -6,6 +6,7 @@ import Foundation
 import SwiftUI
 import CoreLocation
 @preconcurrency import EventKit
+import UserNotifications
 
 @MainActor
 class FirestoreManager: ObservableObject {
@@ -1790,8 +1791,7 @@ class FirestoreManager: ObservableObject {
                 let bio = data["Bio"] as? String
                 let hourlyRate = data["HourlyRate"] as? Double
                 let rateRange = data["RateRange"] as? [Double]
-                let tierRaw = data["subscriptionTier"] as? String ?? "free"
-                let subscriptionTier = CoachTier(rawValue: tierRaw) ?? .free
+                let subscriptionTier = CoachTier.effectiveTier(from: data)
                 let phoneVerified = data["phoneVerified"] as? Bool ?? false
                 let linkedPlaceIds = data["linkedPlaceIds"] as? [String] ?? []
 
@@ -1922,7 +1922,10 @@ class FirestoreManager: ObservableObject {
                     }
                 }
                 waitlist.sort { $0.signedUpAt < $1.signedUpAt }
-                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist))
+                let recurrence = data["recurrence"] as? String
+                let feeUSD = (data["feeUSD"] as? NSNumber)?.doubleValue
+                let paymentLink = data["paymentLink"] as? String
+                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist, recurrence: recurrence, feeUSD: feeUSD, paymentLink: paymentLink))
             }
             DispatchQueue.main.async {
                 self.signupEvents = results
@@ -1930,12 +1933,12 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, completion: @escaping (Error?) -> Void) {
+    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, recurrence: String? = nil, feeUSD: Double? = nil, paymentLink: String? = nil, completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
         }
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "title": title,
             "description": description,
             "eventDate": Timestamp(date: eventDate),
@@ -1948,6 +1951,9 @@ class FirestoreManager: ObservableObject {
             "createdAt": FieldValue.serverTimestamp(),
             "signups": [String: Any]()
         ]
+        if let recurrence = recurrence { data["recurrence"] = recurrence }
+        if let feeUSD = feeUSD, feeUSD > 0 { data["feeUSD"] = feeUSD }
+        if let paymentLink = paymentLink, !paymentLink.isEmpty { data["paymentLink"] = paymentLink }
         self.db.collection("signupEvents").addDocument(data: data) { err in
             if let err = err {
                 print("createSignupEvent error: \(err)")
@@ -1959,6 +1965,33 @@ class FirestoreManager: ObservableObject {
             }
             completion(nil)
         }
+    }
+
+    /// Roll a weekly event forward: create next week's occurrence with a fresh
+    /// signup list. No-op (reports an error) if the next occurrence already exists.
+    func createNextOccurrence(of event: SignupEvent, completion: @escaping (Error?) -> Void) {
+        let nextDate = Calendar.current.date(byAdding: .day, value: 7, to: event.eventDate) ?? event.eventDate
+        let duplicate = signupEvents.contains { existing in
+            existing.placeId == event.placeId && existing.title == event.title
+                && abs(existing.eventDate.timeIntervalSince(nextDate)) < 86400
+        }
+        if duplicate {
+            completion(NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "Next week's event already exists."]))
+            return
+        }
+        createSignupEvent(
+            title: event.title,
+            description: event.description,
+            eventDate: nextDate,
+            location: event.location,
+            placeId: event.placeId,
+            placeName: event.placeName,
+            maxSignups: event.maxSignups,
+            recurrence: event.recurrence,
+            feeUSD: event.feeUSD,
+            paymentLink: event.paymentLink,
+            completion: completion
+        )
     }
 
     func signupForEvent(eventId: String, completion: ((Error?) -> Void)? = nil) {
@@ -2218,7 +2251,8 @@ class FirestoreManager: ObservableObject {
                         }
                     }
                 }
-                results.append(Tournament(id: id, name: name, startDate: startDate, endDate: endDate, location: location, createdBy: createdBy, signupLink: signupLink, participants: participantsMap))
+                let webTournamentId = data["webTournamentId"] as? String
+                results.append(Tournament(id: id, name: name, startDate: startDate, endDate: endDate, location: location, createdBy: createdBy, signupLink: signupLink, participants: participantsMap, webTournamentId: webTournamentId))
             }
             DispatchQueue.main.async {
                 self.tournaments = results
@@ -2255,6 +2289,64 @@ class FirestoreManager: ObservableObject {
         }
     }
 
+    /// Gender/event/skill compatibility shared by partner search filtering and
+    /// join notifications. `gender`/`events`/`skillLevels` describe one player,
+    /// `other` the potential partner; the rules are symmetric.
+    static func partnersCompatible(gender: String, events: Set<String>, skillLevels: Set<String>, with other: TournamentParticipantInfo) -> Bool {
+        // Skill levels must overlap; an empty selection on either side means any level
+        if !skillLevels.isEmpty && !other.skillLevels.isEmpty
+            && skillLevels.intersection(Set(other.skillLevels)).isEmpty { return false }
+        // At least one overlapping event must pass the gender rules
+        let sharedEvents = events.intersection(Set(other.events))
+        if sharedEvents.isEmpty { return false }
+        for event in sharedEvents {
+            switch event {
+            case "Men's Doubles":
+                if gender == "Male" && other.gender == "Male" { return true }
+            case "Women's Doubles":
+                if gender == "Female" && other.gender == "Female" { return true }
+            case "Mixed Doubles":
+                if gender != other.gender { return true }
+            default:
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Resolve one user's display name from clients/ then coaches/ without
+    /// touching any @Published state, so pushed views can call it without
+    /// triggering parent-list rebuilds that pop the navigation stack.
+    func fetchUserDisplayName(uid: String, completion: @escaping (String?) -> Void) {
+        func nameFrom(_ data: [String: Any]) -> String {
+            if let n = data["name"] as? String, !n.isEmpty { return n }
+            if let n = data["Name"] as? String, !n.isEmpty { return n }
+            let first = ((data["FirstName"] as? String) ?? (data["firstName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+            let last = ((data["LastName"] as? String) ?? (data["lastName"] as? String) ?? "").trimmingCharacters(in: .whitespaces)
+            return [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        self.db.collection("clients").document(uid).getDocument { snap, _ in
+            if let data = snap?.data() {
+                let name = nameFrom(data)
+                if !name.isEmpty {
+                    DispatchQueue.main.async { completion(name) }
+                    return
+                }
+            }
+            self.db.collection("coaches").document(uid).getDocument { csnap, _ in
+                let name = csnap?.data().map(nameFrom) ?? ""
+                DispatchQueue.main.async { completion(name.isEmpty ? nil : name) }
+            }
+        }
+    }
+
+    /// Display name of the signed-in user for outgoing notifications.
+    private var currentUserDisplayName: String {
+        if let name = currentCoach?.name, !name.isEmpty { return name }
+        if let name = currentClient?.name, !name.isEmpty { return name }
+        return Auth.auth().currentUser?.displayName ?? "A player"
+    }
+
     func joinTournament(tournamentId: String, gender: String, events: [String], skillLevels: [String], completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
@@ -2265,6 +2357,10 @@ class FirestoreManager: ObservableObject {
             "events": events,
             "skillLevels": skillLevels
         ]
+        // Snapshot pre-join state so we only notify existing seekers on a first-time join,
+        // not on preference updates
+        let tournament = self.tournaments.first(where: { $0.id == tournamentId })
+        let isNewJoin = !(tournament?.participants.keys.contains(uid) ?? false)
         let ref = self.db.collection("tournaments").document(tournamentId)
         ref.updateData(["participants.\(uid)": info]) { err in
             if let err = err {
@@ -2272,7 +2368,15 @@ class FirestoreManager: ObservableObject {
                 completion?(err)
                 return
             }
-            DispatchQueue.main.async { self.fetchTournaments() }
+            DispatchQueue.main.async {
+                if let tournament = tournament {
+                    if isNewJoin {
+                        self.notifyCompatiblePartnerSeekers(tournament: tournament, joinerUid: uid, gender: gender, events: events, skillLevels: skillLevels)
+                    }
+                    self.scheduleTournamentReminder(for: tournament)
+                }
+                self.fetchTournaments()
+            }
             completion?(nil)
         }
     }
@@ -2289,9 +2393,190 @@ class FirestoreManager: ObservableObject {
                 completion?(err)
                 return
             }
-            DispatchQueue.main.async { self.fetchTournaments() }
+            DispatchQueue.main.async {
+                self.cancelTournamentReminder(tournamentId: tournamentId)
+                self.fetchTournaments()
+            }
             completion?(nil)
         }
+    }
+
+    /// Tell existing compatible partner seekers that a new player just joined the pool.
+    private func notifyCompatiblePartnerSeekers(tournament: Tournament, joinerUid: String, gender: String, events: [String], skillLevels: [String]) {
+        let joinerName = currentUserDisplayName
+        let joinerInfo = TournamentParticipantInfo(gender: gender, events: events, skillLevels: skillLevels)
+        let eventText = events.sorted().joined(separator: " / ")
+        for (uid, _) in tournament.participants where uid != joinerUid {
+            guard let recipientInfo = tournament.participants[uid],
+                  Self.partnersCompatible(gender: recipientInfo.gender, events: Set(recipientInfo.events), skillLevels: Set(recipientInfo.skillLevels), with: joinerInfo) else { continue }
+            let notifRef = self.db.collection("pendingNotifications").document(uid).collection("notifications").document()
+            notifRef.setData([
+                "title": "New Tournament Partner Option",
+                "body": "\(joinerName) is looking for a \(eventText) partner at \(tournament.name).",
+                "type": "tournament_partner",
+                "tournamentId": tournament.id,
+                "senderId": joinerUid,
+                "createdAt": FieldValue.serverTimestamp(),
+                "delivered": false
+            ]) { nerr in
+                if let nerr = nerr { print("notifyCompatiblePartnerSeekers: failed to notify \(uid): \(nerr)") }
+            }
+        }
+    }
+
+    /// Schedule a local "starts in 3 days" reminder for a tournament the user
+    /// joined partner search for. No-op if that moment is already in the past.
+    func scheduleTournamentReminder(for tournament: Tournament) {
+        let identifier = "tournament-reminder-\(tournament.id)"
+        let startOfDay = Calendar.current.startOfDay(for: tournament.startDate)
+        guard var reminderDate = Calendar.current.date(byAdding: .day, value: -3, to: startOfDay) else { return }
+        reminderDate = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: reminderDate) ?? reminderDate
+        guard reminderDate > Date() else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Tournament Coming Up"
+        content.body = "\(tournament.name) starts in 3 days at \(tournament.location)."
+        content.sound = .default
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)) { err in
+            if let err = err { print("scheduleTournamentReminder error: \(err)") }
+        }
+    }
+
+    func cancelTournamentReminder(tournamentId: String) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["tournament-reminder-\(tournamentId)"])
+    }
+
+    /// Add a tournament to the user's Apple Calendar as an all-day event.
+    /// Mirrors addBookingToAppleCalendar's per-user dedupe via calendarEventIds.
+    func addTournamentToAppleCalendar(_ tournament: Tournament, completion: @escaping (Result<String, Error>) -> Void) {
+        let handleAccessResponse: (Bool, Error?) -> Void = { granted, error in
+            let eventStore = EKEventStore()
+            if let err = error {
+                DispatchQueue.main.async { completion(.failure(err)) }
+                return
+            }
+            if !granted {
+                let err = NSError(domain: "FirestoreManager", code: 403, userInfo: [NSLocalizedDescriptionKey: "Calendar access not granted"])
+                DispatchQueue.main.async { completion(.failure(err)) }
+                return
+            }
+            let currentUid = Auth.auth().currentUser?.uid ?? ""
+            let ref = Firestore.firestore().collection("tournaments").document(tournament.id)
+            ref.getDocument { snap, _ in
+                if let data = snap?.data(),
+                   let perUser = data["calendarEventIds"] as? [String: String],
+                   let existing = perUser[currentUid], !existing.isEmpty {
+                    DispatchQueue.main.async { completion(.success(existing)) }
+                    return
+                }
+                let event = EKEvent(eventStore: eventStore)
+                event.title = tournament.name
+                event.isAllDay = true
+                event.startDate = tournament.startDate
+                event.endDate = tournament.endDate
+                event.location = tournament.location
+                if let link = tournament.signupLink, !link.isEmpty {
+                    event.notes = "Signup: \(link)"
+                }
+                event.calendar = eventStore.defaultCalendarForNewEvents
+                do {
+                    try eventStore.save(event, span: .thisEvent)
+                    let eventId = event.eventIdentifier ?? ""
+                    ref.updateData(["calendarEventIds.\(currentUid)": eventId]) { uerr in
+                        if let uerr = uerr { print("addTournamentToAppleCalendar: failed to persist event id: \(uerr)") }
+                        DispatchQueue.main.async { completion(.success(eventId)) }
+                    }
+                } catch {
+                    print("addTournamentToAppleCalendar: failed to save event: \(error)")
+                    DispatchQueue.main.async { completion(.failure(error)) }
+                }
+            }
+        }
+
+        if #available(iOS 17.0, *) {
+            EKEventStore().requestFullAccessToEvents { granted, error in
+                handleAccessResponse(granted, error)
+            }
+        } else {
+            EKEventStore().requestAccess(to: .event) { granted, error in
+                handleAccessResponse(granted, error)
+            }
+        }
+    }
+
+    /// Coach action: send a tournament recommendation notification to every
+    /// client aggregated from the coach's bookings. Calls back with the number
+    /// of clients notified.
+    func recommendTournamentToClients(_ tournament: Tournament, completion: ((Int) -> Void)? = nil) {
+        guard let coachUid = Auth.auth().currentUser?.uid else {
+            completion?(0)
+            return
+        }
+        var clientIds = Set<String>()
+        for booking in coachBookings {
+            if !booking.clientID.isEmpty { clientIds.insert(booking.clientID) }
+            if let ids = booking.clientIDs {
+                for id in ids where !id.isEmpty { clientIds.insert(id) }
+            }
+        }
+        clientIds.remove(coachUid)
+        if !clientIds.isEmpty {
+            sendTournamentRecommendation(tournament, from: coachUid, to: clientIds, completion: completion)
+            return
+        }
+        // Bookings not loaded locally — read the subcollection directly rather
+        // than publishing coachBookings from here
+        self.db.collection("coaches").document(coachUid).collection("bookings").getDocuments { snap, err in
+            if let err = err {
+                print("recommendTournamentToClients: bookings read failed: \(err)")
+                DispatchQueue.main.async { completion?(0) }
+                return
+            }
+            var ids = Set<String>()
+            for d in snap?.documents ?? [] {
+                let data = d.data()
+                // ClientID may be stored as a string uid or a document reference
+                for value in [data["ClientID"], data["clientID"], data["clientId"]] {
+                    if let s = value as? String, !s.isEmpty { ids.insert(s) }
+                    if let ref = value as? DocumentReference { ids.insert(ref.documentID) }
+                }
+                if let refs = data["ClientIDs"] as? [DocumentReference] {
+                    for r in refs { ids.insert(r.documentID) }
+                }
+                if let strs = data["ClientIDs"] as? [String] {
+                    for s in strs where !s.isEmpty { ids.insert(s) }
+                }
+            }
+            ids.remove(coachUid)
+            DispatchQueue.main.async {
+                guard !ids.isEmpty else {
+                    completion?(0)
+                    return
+                }
+                self.sendTournamentRecommendation(tournament, from: coachUid, to: ids, completion: completion)
+            }
+        }
+    }
+
+    private func sendTournamentRecommendation(_ tournament: Tournament, from coachUid: String, to clientIds: Set<String>, completion: ((Int) -> Void)?) {
+        let coachName = currentUserDisplayName
+        let dateText = DateFormatter.localizedString(from: tournament.startDate, dateStyle: .medium, timeStyle: .none)
+        for clientId in clientIds {
+            let notifRef = self.db.collection("pendingNotifications").document(clientId).collection("notifications").document()
+            notifRef.setData([
+                "title": "Tournament Recommendation",
+                "body": "\(coachName) recommends \(tournament.name) starting \(dateText) at \(tournament.location).",
+                "type": "tournament_recommendation",
+                "tournamentId": tournament.id,
+                "senderId": coachUid,
+                "createdAt": FieldValue.serverTimestamp(),
+                "delivered": false
+            ]) { nerr in
+                if let nerr = nerr { print("recommendTournamentToClients: failed to notify \(clientId): \(nerr)") }
+            }
+        }
+        completion?(clientIds.count)
     }
 
     // MARK: - Places to Play
@@ -3087,8 +3372,7 @@ class FirestoreManager: ObservableObject {
             let hourlyRate = data["HourlyRate"] as? Double
             let rateRange = data["RateRange"] as? [Double]
             let coachTournamentSoftwareLink = data["tournamentSoftwareLink"] as? String
-            let coachTierRaw = data["subscriptionTier"] as? String ?? "free"
-            let coachSubscriptionTier = CoachTier(rawValue: coachTierRaw) ?? .free
+            let coachSubscriptionTier = CoachTier.effectiveTier(from: data)
             let coachPhoneVerified = data["phoneVerified"] as? Bool ?? false
             let coachLinkedPlaceIds = data["linkedPlaceIds"] as? [String] ?? []
 
@@ -3128,8 +3412,7 @@ class FirestoreManager: ObservableObject {
         stopSubscriptionListener()
         subscriptionListener = db.collection("coaches").document(uid).addSnapshotListener { [weak self] snap, err in
             guard let self = self, let data = snap?.data() else { return }
-            let tierRaw = data["subscriptionTier"] as? String ?? "free"
-            let tier = CoachTier(rawValue: tierRaw) ?? .free
+            let tier = CoachTier.effectiveTier(from: data)
             DispatchQueue.main.async {
                 if let current = self.currentCoach, current.subscriptionTier != tier {
                     // Update the coach with the new tier
