@@ -91,8 +91,15 @@ struct ManageSubscriptionView: View {
 
     // MARK: - Subviews
 
+    /// StoreKit entitlement or a Firestore lifetime grant, whichever is higher.
+    private var effectiveTier: CoachTier {
+        let storeTier = subscriptionStore.currentTier
+        let docTier = firestore.currentCoach?.subscriptionTier ?? .free
+        return docTier.rank > storeTier.rank ? docTier : storeTier
+    }
+
     private var currentPlanHeader: some View {
-        let tier = subscriptionStore.currentTier
+        let tier = effectiveTier
         return VStack(spacing: 6) {
             Text("Current Plan")
                 .font(.subheadline)
@@ -120,7 +127,7 @@ struct ManageSubscriptionView: View {
 
     @ViewBuilder
     private func tierCard(tier: CoachTier, product: Product?) -> some View {
-        let isCurrent = tier == subscriptionStore.currentTier
+        let isCurrent = tier == effectiveTier
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(tier.displayName)
@@ -191,11 +198,25 @@ struct ManageSubscriptionView: View {
             Text("Basic coaching profile")
                 .font(.subheadline).foregroundColor(.secondary)
         case .plus:
-            Label("Revenue Insights", systemImage: "chart.bar.fill")
-                .font(.subheadline).foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Revenue Insights", systemImage: "chart.bar.fill")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Earnings Forecaster", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Session Metric History", systemImage: "figure.run")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Tournament Recommendations", systemImage: "megaphone")
+                    .font(.subheadline).foregroundColor(.secondary)
+            }
         case .pro:
             VStack(alignment: .leading, spacing: 4) {
                 Label("Revenue Insights", systemImage: "chart.bar.fill")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Earnings Forecaster", systemImage: "chart.line.uptrend.xyaxis")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Session Metric History", systemImage: "figure.run")
+                    .font(.subheadline).foregroundColor(.secondary)
+                Label("Tournament Recommendations", systemImage: "megaphone")
                     .font(.subheadline).foregroundColor(.secondary)
                 Label("Listed in Coach Search Engine", systemImage: "magnifyingglass")
                     .font(.subheadline).foregroundColor(.secondary)

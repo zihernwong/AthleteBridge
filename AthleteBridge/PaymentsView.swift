@@ -356,16 +356,27 @@ struct PaymentsView: View {
                 .buttonStyle(.bordered)
                 .frame(maxWidth: .infinity)
 
-                // Earnings forecaster — logged-in coaches only
+                // Earnings forecaster — logged-in coaches only, Plus/Pro feature
                 if isCoach && auth.user != nil {
-                    Button(action: { showEarningsForecast = true }) {
+                    let canForecast = (firestore.currentCoach?.subscriptionTier ?? .free).hasAccess(to: "earningsForecaster")
+                    Button(action: {
+                        if canForecast {
+                            showEarningsForecast = true
+                        } else {
+                            showUpgradeAlert = true
+                        }
+                    }) {
                         HStack {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
+                            Image(systemName: canForecast ? "chart.line.uptrend.xyaxis" : "lock.fill")
                             Text("Earnings Forecaster").bold()
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            if canForecast {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("Plus / Pro").font(.caption).foregroundColor(.secondary)
+                            }
                         }
                     }
                     .buttonStyle(.bordered)

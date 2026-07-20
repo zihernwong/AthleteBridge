@@ -246,6 +246,8 @@ struct CoachClientDetailView: View {
     let clientName: String
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
+    @State private var showUpgradeAlert = false
+    @State private var showManageSubscription = false
 
     private var clientBookings: [FirestoreManager.BookingItem] {
         firestore.coachBookings
@@ -257,10 +259,38 @@ struct CoachClientDetailView: View {
         firestore.coachSessionLogs.filter { $0.clientID == clientId }
     }
 
+    private var canSeeMetricHistory: Bool {
+        (firestore.currentCoach?.subscriptionTier ?? .free).hasAccess(to: "metricHistory")
+    }
+
     var body: some View {
         List {
             // Metric progress across all logged sessions (e.g. 8:00 → 7:45 → 7:30)
-            MetricProgressSection(logs: clientSessionLogs)
+            // — Plus/Pro feature
+            if canSeeMetricHistory {
+                MetricProgressSection(logs: clientSessionLogs)
+            } else if !clientSessionLogs.isEmpty {
+                Section {
+                    Button(action: { showUpgradeAlert = true }) {
+                        HStack {
+                            Image(systemName: "lock.fill")
+                                .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Metric Progress")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Text("Track improvement across sessions with Coach Plus")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text("Plus / Pro")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
 
             // Session logs — tap to edit
             if !clientSessionLogs.isEmpty {
@@ -299,6 +329,15 @@ struct CoachClientDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle(clientName)
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Upgrade Required", isPresented: $showUpgradeAlert) {
+            Button("Manage Subscription") { showManageSubscription = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Session metric history is a Coach Plus feature. Upgrade to unlock.")
+        }
+        .sheet(isPresented: $showManageSubscription) {
+            ManageSubscriptionView()
+        }
         .onAppear {
             if let uid = auth.user?.uid {
                 firestore.listenSessionLogsForCoach(coachId: uid)
