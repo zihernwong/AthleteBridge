@@ -116,6 +116,29 @@
 
     let currentEvent = null;
 
+    // Venmo destinations (an @handle or venmo.com link) get the fee amount and
+    // event title prefilled so payers just confirm; other links open unchanged.
+    function venmoHandle(raw) {
+      if (!raw) return null;
+      if (raw.startsWith('@')) return raw.slice(1);
+      if (!raw.toLowerCase().includes('venmo.com')) return null;
+      const parts = raw.split('?')[0].split('/').filter(Boolean);
+      const last = parts[parts.length - 1];
+      if (!last || last.toLowerCase().includes('venmo.com')) return null;
+      return last.replace(/^@/, '');
+    }
+
+    function payUrl(ev) {
+      if (!ev || !ev.paymentLink) return null;
+      const handle = venmoHandle(ev.paymentLink);
+      if (handle && ev.feeUSD) {
+        return 'https://venmo.com/' + encodeURIComponent(handle)
+          + '?txn=pay&amount=' + Number(ev.feeUSD).toFixed(2)
+          + '&note=' + encodeURIComponent(ev.title || 'Event');
+      }
+      return ev.paymentLink.toLowerCase().startsWith('http') ? ev.paymentLink : 'https://' + ev.paymentLink;
+    }
+
     function renderEvent(ev) {
       currentEvent = ev;
       const isFull = ev.signupCount >= ev.maxSignups;
@@ -197,8 +220,9 @@
           let payHtml = '';
           if (currentEvent && currentEvent.feeUSD) {
             const feeText = '$' + Number(currentEvent.feeUSD).toFixed(2);
-            payHtml = currentEvent.paymentLink
-              ? `<hr class="divider" /><a class="btn" style="text-decoration:none;text-align:center" href="${escapeHtml(currentEvent.paymentLink)}" target="_blank" rel="noopener">Pay ${feeText} to confirm your spot</a>`
+            const link = payUrl(currentEvent);
+            payHtml = link
+              ? `<hr class="divider" /><a class="btn" style="text-decoration:none;text-align:center" href="${escapeHtml(link)}" target="_blank" rel="noopener">Pay ${feeText} to confirm your spot</a>`
               : `<hr class="divider" /><div class="success-text">Please bring ${feeText} to the event.</div>`;
           }
           app.innerHTML = `

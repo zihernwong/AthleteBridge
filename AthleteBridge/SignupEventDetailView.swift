@@ -153,21 +153,38 @@ struct SignupEventDetailView: View {
             // Fee payment — shown to attendees when the event charges a fee
             if let fee = ev.feeUSD, fee > 0, !isCreator {
                 Section(header: Text("Payment")) {
-                    let myPaid = ev.signups.first(where: { $0.userId == currentUid })?.paid ?? false
-                    if myPaid {
+                    let mySignup = ev.signups.first(where: { $0.userId == currentUid })
+                    if mySignup?.paid == true {
                         HStack {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundColor(Color("LogoGreen"))
                             Text("You're marked as paid")
                                 .foregroundColor(Color("LogoGreen"))
                         }
-                    } else if let link = ev.paymentLink, !link.isEmpty, let url = URL(string: link) {
-                        Link(destination: url) {
-                            Label(String(format: "Pay $%.2f", fee), systemImage: "creditcard")
+                    } else if mySignup?.selfPaid == true {
+                        HStack {
+                            Image(systemName: "clock.badge.checkmark")
+                                .foregroundColor(.orange)
+                            Text("Payment reported — awaiting organizer confirmation")
+                                .foregroundColor(.orange)
                         }
                     } else {
-                        Text(String(format: "Bring $%.2f to the event", fee))
-                            .foregroundColor(.secondary)
+                        if let url = ev.resolvedPaymentURL {
+                            Link(destination: url) {
+                                Label(String(format: "Pay $%.2f", fee), systemImage: "creditcard")
+                            }
+                        } else {
+                            Text(String(format: "Bring $%.2f to the event", fee))
+                                .foregroundColor(.secondary)
+                        }
+                        if ev.allowSelfReportPaid && mySignup != nil {
+                            Button {
+                                firestore.selfReportEventPaid(eventId: ev.id)
+                            } label: {
+                                Label("I've Paid", systemImage: "hand.thumbsup")
+                                    .foregroundColor(Color("LogoBlue"))
+                            }
+                        }
                     }
                 }
             }
@@ -227,21 +244,33 @@ struct SignupEventDetailView: View {
                 }
             }
 
+            // Organizer payment settings
+            if isCreator && (ev.feeUSD ?? 0) > 0 {
+                Section(footer: Text("When on, players get an \"I've Paid\" button; their name shows an orange clock until you confirm it.")) {
+                    Toggle("Players can mark themselves paid", isOn: Binding(
+                        get: { liveEvent.allowSelfReportPaid },
+                        set: { firestore.setEventAllowSelfReport(eventId: ev.id, allowed: $0) }
+                    ))
+                }
+            }
+
             // Attendees
             if !ev.signups.isEmpty {
                 let hasFee = (ev.feeUSD ?? 0) > 0
+                let reported = ev.selfReportedCount
                 Section(header: Text(isCreator && hasFee
-                                     ? "Signed Up (\(ev.signups.count)) · \(ev.paidCount) paid"
+                                     ? "Signed Up (\(ev.signups.count)) · \(ev.paidCount) paid" + (reported > 0 ? " · \(reported) reported" : "")
                                      : "Signed Up (\(ev.signups.count))")) {
                     ForEach(ev.signups) { signup in
                         HStack {
-                            // Creator collecting a fee: tap to toggle paid
+                            // Creator collecting a fee: tap to toggle paid.
+                            // Orange clock = player self-reported, awaiting confirmation.
                             if isCreator && hasFee {
                                 Button {
                                     firestore.toggleSignupPaid(eventId: ev.id, signupId: signup.id, paid: !signup.paid)
                                 } label: {
-                                    Image(systemName: signup.paid ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(signup.paid ? Color("LogoGreen") : .secondary)
+                                    Image(systemName: signup.paid ? "checkmark.circle.fill" : (signup.selfPaid ? "clock.badge.checkmark" : "circle"))
+                                        .foregroundColor(signup.paid ? Color("LogoGreen") : (signup.selfPaid ? .orange : .secondary))
                                         .font(.title3)
                                 }
                                 .buttonStyle(.plain)

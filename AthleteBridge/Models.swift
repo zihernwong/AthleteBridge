@@ -487,6 +487,8 @@ struct SignupEventSignup: Identifiable, Hashable {
     let userId: String?     // nil for web signups
     let signedUpAt: Date
     let paid: Bool
+    // Player tapped "I've Paid" — pending the organizer's confirmation
+    var selfPaid: Bool = false
 }
 
 struct SignupEvent: Identifiable, Hashable {
@@ -508,9 +510,43 @@ struct SignupEvent: Identifiable, Hashable {
     // Optional per-player fee and where to pay it (e.g. a Stripe payment link)
     var feeUSD: Double? = nil
     var paymentLink: String? = nil
+    // Organizer setting: players may mark themselves paid (pending confirmation)
+    var allowSelfReportPaid: Bool = false
 
     var isRecurringWeekly: Bool { recurrence == "weekly" }
     var paidCount: Int { signups.filter { $0.paid }.count }
+    var selfReportedCount: Int { signups.filter { $0.selfPaid && !$0.paid }.count }
+
+    /// Payment URL players tap. Venmo destinations (an @handle or venmo.com
+    /// link) get the fee amount and event title prefilled so payers just
+    /// confirm; anything else opens unchanged.
+    var resolvedPaymentURL: URL? {
+        guard let raw = paymentLink?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        if let handle = Self.venmoHandle(from: raw), let fee = feeUSD, fee > 0 {
+            var comps = URLComponents()
+            comps.scheme = "https"
+            comps.host = "venmo.com"
+            comps.path = "/\(handle)"
+            comps.queryItems = [
+                URLQueryItem(name: "txn", value: "pay"),
+                URLQueryItem(name: "amount", value: String(format: "%.2f", fee)),
+                URLQueryItem(name: "note", value: title),
+            ]
+            return comps.url
+        }
+        if raw.lowercased().hasPrefix("http") { return URL(string: raw) }
+        return URL(string: "https://\(raw)")
+    }
+
+    /// "@handle", "venmo.com/handle", or "venmo.com/u/handle" → "handle"; nil for non-Venmo links.
+    static func venmoHandle(from raw: String) -> String? {
+        if raw.hasPrefix("@") { return String(raw.dropFirst()) }
+        guard raw.lowercased().contains("venmo.com") else { return nil }
+        let noQuery = raw.split(separator: "?").first.map(String.init) ?? raw
+        let parts = noQuery.split(separator: "/").map(String.init)
+        guard let last = parts.last, !last.isEmpty, !last.lowercased().contains("venmo.com") else { return nil }
+        return last.hasPrefix("@") ? String(last.dropFirst()) : last
+    }
 
     func isWaitlisted(userId: String) -> Bool {
         waitlist.contains { $0.userId == userId }

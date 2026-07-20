@@ -11,6 +11,7 @@ struct CreateSignupEventView: View {
     @State private var repeatsWeekly = false
     @State private var feeText = ""
     @State private var paymentLink = ""
+    @State private var allowSelfReport = false
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -56,10 +57,11 @@ struct CreateSignupEventView: View {
                         TextField("Fee per player, e.g. 8", text: $feeText)
                             .keyboardType(.decimalPad)
                     }
-                    TextField("Payment link (Stripe, Venmo, PayPal…)", text: $paymentLink)
+                    TextField("Payment link or @venmo-handle", text: $paymentLink)
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
+                    Toggle("Players can mark themselves paid", isOn: $allowSelfReport)
                 }
             }
             .navigationTitle("New Event")
@@ -84,7 +86,8 @@ struct CreateSignupEventView: View {
                                 maxSignups: maxSignups,
                                 recurrence: repeatsWeekly ? "weekly" : nil,
                                 feeUSD: feeUSD,
-                                paymentLink: paymentLink.trimmingCharacters(in: .whitespacesAndNewlines)
+                                paymentLink: paymentLink.trimmingCharacters(in: .whitespacesAndNewlines),
+                                allowSelfReportPaid: allowSelfReport
                             ) { err in
                                 DispatchQueue.main.async {
                                     isSaving = false

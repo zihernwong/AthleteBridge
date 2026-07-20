@@ -1900,7 +1900,8 @@ class FirestoreManager: ObservableObject {
                                 signedUpAt = Date()
                             }
                             let paid = info["paid"] as? Bool ?? false
-                            signups.append(SignupEventSignup(id: key, name: name, email: email, userId: userId, signedUpAt: signedUpAt, paid: paid))
+                            let selfPaid = info["selfPaid"] as? Bool ?? false
+                            signups.append(SignupEventSignup(id: key, name: name, email: email, userId: userId, signedUpAt: signedUpAt, paid: paid, selfPaid: selfPaid))
                         }
                     }
                 }
@@ -1925,7 +1926,8 @@ class FirestoreManager: ObservableObject {
                 let recurrence = data["recurrence"] as? String
                 let feeUSD = (data["feeUSD"] as? NSNumber)?.doubleValue
                 let paymentLink = data["paymentLink"] as? String
-                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist, recurrence: recurrence, feeUSD: feeUSD, paymentLink: paymentLink))
+                let allowSelfReportPaid = data["allowSelfReportPaid"] as? Bool ?? false
+                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist, recurrence: recurrence, feeUSD: feeUSD, paymentLink: paymentLink, allowSelfReportPaid: allowSelfReportPaid))
             }
             DispatchQueue.main.async {
                 self.signupEvents = results
@@ -1933,7 +1935,7 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, recurrence: String? = nil, feeUSD: Double? = nil, paymentLink: String? = nil, completion: @escaping (Error?) -> Void) {
+    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, recurrence: String? = nil, feeUSD: Double? = nil, paymentLink: String? = nil, allowSelfReportPaid: Bool = false, completion: @escaping (Error?) -> Void) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -1954,6 +1956,7 @@ class FirestoreManager: ObservableObject {
         if let recurrence = recurrence { data["recurrence"] = recurrence }
         if let feeUSD = feeUSD, feeUSD > 0 { data["feeUSD"] = feeUSD }
         if let paymentLink = paymentLink, !paymentLink.isEmpty { data["paymentLink"] = paymentLink }
+        if allowSelfReportPaid { data["allowSelfReportPaid"] = true }
         self.db.collection("signupEvents").addDocument(data: data) { err in
             if let err = err {
                 print("createSignupEvent error: \(err)")
@@ -1990,6 +1993,7 @@ class FirestoreManager: ObservableObject {
             recurrence: event.recurrence,
             feeUSD: event.feeUSD,
             paymentLink: event.paymentLink,
+            allowSelfReportPaid: event.allowSelfReportPaid,
             completion: completion
         )
     }
@@ -2172,6 +2176,38 @@ class FirestoreManager: ObservableObject {
                 }
                 DispatchQueue.main.async { self.fetchSignupEvents() }
             }
+        }
+    }
+
+    /// Player marks their own signup as paid — pending organizer confirmation.
+    func selfReportEventPaid(eventId: String, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid,
+              let event = signupEvents.first(where: { $0.id == eventId }),
+              let mine = event.signups.first(where: { $0.userId == uid }) else {
+            completion?(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Signup not found"]))
+            return
+        }
+        let ref = self.db.collection("signupEvents").document(eventId)
+        ref.updateData(["signups.\(mine.id).selfPaid": true]) { [weak self] err in
+            if let err = err {
+                print("selfReportEventPaid error: \(err)")
+                completion?(err)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion?(nil)
+        }
+    }
+
+    /// Organizer setting: whether players may mark themselves paid.
+    func setEventAllowSelfReport(eventId: String, allowed: Bool) {
+        let ref = self.db.collection("signupEvents").document(eventId)
+        ref.updateData(["allowSelfReportPaid": allowed]) { [weak self] err in
+            if let err = err {
+                print("setEventAllowSelfReport error: \(err)")
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
         }
     }
 
