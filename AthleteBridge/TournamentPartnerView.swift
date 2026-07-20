@@ -3,10 +3,18 @@ import SwiftUI
 struct TournamentPartnerView: View {
     @EnvironmentObject var firestore: FirestoreManager
     @EnvironmentObject var auth: AuthViewModel
-    @State private var tournamentFilter: String = ""
-    @State private var selectedTournament: Tournament? = nil
+    @State private var tournamentFilter: String
+    @State private var selectedTournament: Tournament?
     @State private var presentedChat: ChatSheetId? = nil
     @State private var showTournamentInput: Bool = false
+
+    init(initialTournament: Tournament? = nil) {
+        _tournamentFilter = State(initialValue: initialTournament?.name ?? "")
+        _selectedTournament = State(initialValue: initialTournament)
+    }
+
+    // Names resolved with targeted reads; see resolveMissingNames()
+    @State private var resolvedNames: [String: String] = [:]
 
     // Partner search preferences
     @State private var selectedGender: String = "Male"
@@ -37,29 +45,29 @@ struct TournamentPartnerView: View {
         let participantIds = Set(tournament.participants.keys).subtracting([currentUid])
         let myGender = selectedGender
         let myEvents = selectedEvents
-        return firestore.clients.filter { client in
-            guard participantIds.contains(client.id),
-                  let info = tournament.participants[client.id] else { return false }
-            let partnerGender = info.gender
-            // Check if at least one overlapping event passes the gender rules
-            let sharedEvents = myEvents.intersection(Set(info.events))
-            if sharedEvents.isEmpty { return false }
-            for event in sharedEvents {
-                switch event {
-                case "Men's Doubles":
-                    // Both must be Male
-                    if myGender == "Male" && partnerGender == "Male" { return true }
-                case "Women's Doubles":
-                    // Both must be Female
-                    if myGender == "Female" && partnerGender == "Female" { return true }
-                case "Mixed Doubles":
-                    // Must be opposite genders
-                    if myGender != partnerGender { return true }
-                default:
-                    return true
-                }
+        let mySkillLevels = selectedSkillLevels
+        // Resolve each compatible participant to a profile: clients first, then
+        // individually resolved names (coaches can join partner search too)
+        return participantIds.compactMap { id -> FirestoreManager.UserSummary? in
+            guard let info = tournament.participants[id],
+                  FirestoreManager.partnersCompatible(gender: myGender, events: myEvents, skillLevels: mySkillLevels, with: info) else { return nil }
+            // Placeholder client docs are named by their document id — treat
+            // those as unresolved and fall back to the individually fetched name
+            if let client = firestore.clients.first(where: { $0.id == id }), client.name != client.id {
+                return client
             }
-            return false
+            return FirestoreManager.UserSummary(id: id, name: resolvedNames[id] ?? "Player", photoURL: firestore.coachPhotoURLs[id] ?? nil)
+        }
+        .sorted { $0.name < $1.name }
+    }
+
+    private func resolveMissingNames() {
+        guard let tournament = selectedTournament else { return }
+        for uid in tournament.participants.keys where uid != currentUid && resolvedNames[uid] == nil
+            && !firestore.clients.contains(where: { $0.id == uid && $0.name != uid }) {
+            firestore.fetchUserDisplayName(uid: uid) { name in
+                if let name = name { resolvedNames[uid] = name }
+            }
         }
     }
 
@@ -267,13 +275,23 @@ struct TournamentPartnerView: View {
                 .environmentObject(firestore)
         }
         .onAppear {
-            firestore.fetchClients()
+            // Don't fetch the global clients list here: its incremental
+            // publishes rebuild the home screen and pop this pushed view.
+            // Participant names resolve individually instead.
             firestore.fetchTournaments()
+            resolveMissingNames()
+            // Pre-fill saved preferences when arriving with a pre-selected tournament
+            if selectedEvents.isEmpty, let info = selectedTournament?.participants[currentUid] {
+                selectedGender = info.gender.isEmpty ? "Male" : info.gender
+                selectedEvents = Set(info.events)
+                selectedSkillLevels = Set(info.skillLevels)
+            }
         }
         .onChange(of: firestore.tournaments) { _, updated in
             if let selected = selectedTournament {
                 selectedTournament = updated.first(where: { $0.id == selected.id })
             }
+            resolveMissingNames()
         }
     }
 }
