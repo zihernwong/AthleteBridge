@@ -124,6 +124,20 @@ struct AuthScreen: View {
                 }
                 .disabled(auth.isLoading || email.isEmpty || password.isEmpty)
 
+                if isLogin {
+                    Button("Forgot your password?") {
+                        auth.errorMessage = nil
+                        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmedEmail.contains("@") && trimmedEmail.contains(".") else {
+                            auth.errorMessage = "Enter your email above, then tap Forgot your password."
+                            return
+                        }
+                        Task { await auth.sendPasswordReset(email: trimmedEmail) }
+                    }
+                    .font(.subheadline)
+                    .disabled(auth.isLoading)
+                }
+
                 Button(isLogin ? "Need an account? Sign up" : "Have an account? Login") {
                     isLogin.toggle()
                 }
@@ -143,6 +157,11 @@ struct AuthScreen: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(.systemBackground)))
                     .shadow(radius: 6)
             }
+        }
+        .alert("Password Reset Email Sent", isPresented: $auth.resetEmailSent) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check \(email.trimmingCharacters(in: .whitespacesAndNewlines)) for a link to reset your password.")
         }
     }
 }

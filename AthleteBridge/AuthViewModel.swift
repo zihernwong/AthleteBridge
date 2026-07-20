@@ -66,6 +66,22 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Password Reset
+    @Published var resetEmailSent = false
+
+    func sendPasswordReset(email: String) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: email)
+            resetEmailSent = true
+        } catch {
+            errorMessage = handleAuthError(error)
+        }
+    }
+
     // MARK: - Logout
     func logout() {
         // Remove device token first to prevent receiving notifications for this account
