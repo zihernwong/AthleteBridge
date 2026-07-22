@@ -367,9 +367,11 @@ struct ChatView: View {
     }
 
     private func startListening() {
-        // Attach listener ordered by createdAt asc (server timestamps may be nil initially)
+        // No server-side orderBy: Firestore's orderBy silently excludes documents that
+        // are missing the field, which would drop messages written by older Android
+        // builds that used "timestamp" instead of "createdAt". We sort client-side.
         stopListening()
-        let q = messagesColl.order(by: "createdAt", descending: false)
+        let q = messagesColl
         listener = q.addSnapshotListener { snap, err in
             if let err = err {
                 print("ChatView: messages listener error: \(err)")
@@ -392,6 +394,7 @@ struct ChatView: View {
                 let text = data["text"] as? String ?? ""
                 var createdAt: Date? = nil
                 if let ts = data["createdAt"] as? Timestamp { createdAt = ts.dateValue() }
+                else if let ts = data["timestamp"] as? Timestamp { createdAt = ts.dateValue() }
                 var readByMap: [String: Date]? = nil
                 if let rb = data["readBy"] as? [String: Timestamp] {
                     var tmp: [String: Date] = [:]

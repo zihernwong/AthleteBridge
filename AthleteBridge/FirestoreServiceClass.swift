@@ -3882,25 +3882,25 @@ class FirestoreManager: ObservableObject {
                                     }
                                 }
                                 // build item now
-                                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                                let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                                let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                                 let location = data["Location"] as? String
                                 let notes = data["Notes"] as? String
                                 let coachNote = data["CoachNote"] as? String
-                                let status = data["Status"] as? String
+                                let status = (data["Status"] ?? data["status"]) as? String
                                 let paymentStatus = data["PaymentStatus"] as? String
-                                let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                                let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                                 // Group booking fields
-                                let clientIDs = data["ClientIDs"] as? [String]
+                                let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
                                 let clientNamesArr = data["ClientNames"] as? [String]
-                                let coachIDs = data["CoachIDs"] as? [String]
+                                let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
                                 let coachNamesArr = data["CoachNames"] as? [String]
                                 let isGroupBooking = data["isGroupBooking"] as? Bool
                                 let creatorID = data["creatorID"] as? String
                                 let creatorType = data["creatorType"] as? String
-                                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                                let coachRates = data["CoachRates"] as? [String: Double]
+                                let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                                let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                                let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                                 let rejectionReason = data["rejectionReason"] as? String
                                 let rejectedBy = data["rejectedBy"] as? String
                                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -3912,25 +3912,25 @@ class FirestoreManager: ObservableObject {
                         } else {
                             // coach might be string
                             if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachID }
-                            let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                            let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                            let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                            let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                             let location = data["Location"] as? String
                             let notes = data["Notes"] as? String
                             let coachNote = data["CoachNote"] as? String
-                            let status = data["Status"] as? String
+                            let status = (data["Status"] ?? data["status"]) as? String
                             let paymentStatus = data["PaymentStatus"] as? String
-                            let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                            let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                             // Group booking fields
-                            let clientIDs = data["ClientIDs"] as? [String]
+                            let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
                             let clientNamesArr = data["ClientNames"] as? [String]
-                            let coachIDs = data["CoachIDs"] as? [String]
+                            let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
                             let coachNamesArr = data["CoachNames"] as? [String]
                             let isGroupBooking = data["isGroupBooking"] as? Bool
                             let creatorID = data["creatorID"] as? String
                             let creatorType = data["creatorType"] as? String
-                            let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                            let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                            let coachRates = data["CoachRates"] as? [String: Double]
+                            let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                            let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                            let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                             let rejectionReason = data["rejectionReason"] as? String
                             let rejectedBy = data["rejectedBy"] as? String
                             let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -3956,25 +3956,25 @@ class FirestoreManager: ObservableObject {
                                     coachName = ((coachName ?? "") + " " + last).trimmingCharacters(in: .whitespaces)
                                 }
                             }
-                            let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                            let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                            let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                            let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                             let location = data["Location"] as? String
                             let notes = data["Notes"] as? String
                             let coachNote = data["CoachNote"] as? String
-                            let status = data["Status"] as? String
+                            let status = (data["Status"] ?? data["status"]) as? String
                             let paymentStatus = data["PaymentStatus"] as? String
-                            let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                            let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                             // Group booking fields
-                            let clientIDs = data["ClientIDs"] as? [String]
+                            let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
                             let clientNamesArr = data["ClientNames"] as? [String]
-                            let coachIDs = data["CoachIDs"] as? [String]
+                            let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
                             let coachNamesArr = data["CoachNames"] as? [String]
                             let isGroupBooking = data["isGroupBooking"] as? Bool
                             let creatorID = data["creatorID"] as? String
                             let creatorType = data["creatorType"] as? String
-                            let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                            let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                            let coachRates = data["CoachRates"] as? [String: Double]
+                            let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                            let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                            let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                             let rejectionReason = data["rejectionReason"] as? String
                             let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -3986,25 +3986,25 @@ class FirestoreManager: ObservableObject {
                     } else {
                         // neither client nor coach are references; just collect fields
                         if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachStr }
-                        let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                        let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
+                        let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                        let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                         let location = data["Location"] as? String
                         let notes = data["Notes"] as? String
                         let coachNote = data["CoachNote"] as? String
-                        let status = data["Status"] as? String
+                        let status = (data["Status"] ?? data["status"]) as? String
                         let paymentStatus = data["PaymentStatus"] as? String
-                        let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                        let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                         // Group booking fields
-                        let clientIDs = data["ClientIDs"] as? [String]
+                        let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
                         let clientNamesArr = data["ClientNames"] as? [String]
-                        let coachIDs = data["CoachIDs"] as? [String]
+                        let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
                         let coachNamesArr = data["CoachNames"] as? [String]
                         let isGroupBooking = data["isGroupBooking"] as? Bool
                         let creatorID = data["creatorID"] as? String
                         let creatorType = data["creatorType"] as? String
-                        let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                        let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                        let coachRates = data["CoachRates"] as? [String: Double]
+                        let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                        let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                        let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                         let rejectionReason = data["rejectionReason"] as? String
                         let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -4126,14 +4126,14 @@ class FirestoreManager: ObservableObject {
                 let data = d.data()
                 let id = d.documentID
                 let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
-                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
-                let status = data["Status"] as? String
+                let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
+                let status = (data["Status"] ?? data["status"]) as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let coachNote = data["CoachNote"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Prefer denormalized coach name stored on booking doc
                 let coachName = (data["CoachName"] as? String)
                     ?? (data["coachName"] as? String)
@@ -4143,16 +4143,16 @@ class FirestoreManager: ObservableObject {
                     ?? (data["clientName"] as? String)
                     ?? (data["client_name"] as? String)
                 // Group booking fields
-                let clientIDs = data["ClientIDs"] as? [String]
-                let clientNames = data["ClientNames"] as? [String]
-                let coachIDs = data["CoachIDs"] as? [String]
-                let coachNames = data["CoachNames"] as? [String]
+                let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
+                let clientNames = (data["ClientNames"] ?? data["clientNames"]) as? [String]
+                let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
+                let coachNames = (data["CoachNames"] ?? data["coachNames"]) as? [String]
                 let isGroupBooking = data["isGroupBooking"] as? Bool
                 let creatorID = data["creatorID"] as? String
                 let creatorType = data["creatorType"] as? String
-                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                let coachRates = data["CoachRates"] as? [String: Double]
+                let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                 let rejectionReason = data["rejectionReason"] as? String
                 let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -4173,14 +4173,14 @@ class FirestoreManager: ObservableObject {
                 let data = d.data()
                 let id = d.documentID
                 let coachID = (data["CoachID"] as? DocumentReference)?.documentID ?? (data["CoachID"] as? String ?? "")
-                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
-                let status = data["Status"] as? String
+                let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
+                let status = (data["Status"] ?? data["status"]) as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let coachNote = data["CoachNote"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Prefer denormalized coach name stored on booking doc
                 let coachName = (data["CoachName"] as? String)
                     ?? (data["coachName"] as? String)
@@ -4190,16 +4190,16 @@ class FirestoreManager: ObservableObject {
                     ?? (data["clientName"] as? String)
                     ?? (data["client_name"] as? String)
                 // Group booking fields
-                let clientIDs = data["ClientIDs"] as? [String]
-                let clientNames = data["ClientNames"] as? [String]
-                let coachIDs = data["CoachIDs"] as? [String]
-                let coachNames = data["CoachNames"] as? [String]
+                let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
+                let clientNames = (data["ClientNames"] ?? data["clientNames"]) as? [String]
+                let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
+                let coachNames = (data["CoachNames"] ?? data["coachNames"]) as? [String]
                 let isGroupBooking = data["isGroupBooking"] as? Bool
                 let creatorID = data["creatorID"] as? String
                 let creatorType = data["creatorType"] as? String
-                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                let coachRates = data["CoachRates"] as? [String: Double]
+                let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                 let rejectionReason = data["rejectionReason"] as? String
                 let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -4749,6 +4749,11 @@ class FirestoreManager: ObservableObject {
                 "Location": location ?? "",
                 "Notes": notes ?? "",
                 "Status": status,
+                "status": status,
+                "startAt": Timestamp(date: startAt),
+                "endAt": Timestamp(date: endAt),
+                "clientID": clientRef.documentID,
+                "coachID": coachRef.documentID,
                 "createdAt": FieldValue.serverTimestamp()
             ]
             if let name = coachName { data["CoachName"] = name }
@@ -4945,12 +4950,16 @@ class FirestoreManager: ObservableObject {
                 "Location": location ?? "",
                 "Notes": notes ?? "",
                 "Status": status,
+                "status": status,
                 "PaymentStatus": "unpaid",
                 "isGroupBooking": isGroupBooking,
                 "creatorID": creatorID,
                 "creatorType": creatorType,
                 "CoachAcceptances": coachAcceptances,
                 "ClientConfirmations": clientConfirmations,
+                // camelCase mirrors so Android (which prefers camelCase group fields) reads these
+                "coachAcceptances": coachAcceptances,
+                "clientConfirmations": clientConfirmations,
                 "createdAt": FieldValue.serverTimestamp()
             ]
             if let extra = extra { for (k, v) in extra { data[k] = v } }
@@ -5154,8 +5163,20 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Fetch bookings stored under clients/{clientId}/bookings and set published `bookings`.
+    private var clientBookingsListener: ListenerRegistration? = nil
+
     func fetchBookingsFromClientSubcollection(clientId: String) {
         DispatchQueue.main.async { self.bookingsDebug = "Starting fetchBookingsFromClientSubcollection for \(clientId)..." }
+        // Live listener: re-populate whenever the subcollection changes (e.g. a booking
+        // accepted from the Android app), so status changes appear without a manual refresh.
+        clientBookingsListener?.remove()
+        clientBookingsListener = db.collection("clients").document(clientId).collection("bookings")
+            .addSnapshotListener { [weak self] _, _ in
+                self?.populateClientBookings(clientId: clientId)
+            }
+    }
+
+    private func populateClientBookings(clientId: String) {
         fetchBookingsForClient(clientId: clientId) { [weak self] items in
             guard let self = self else { return }
             DispatchQueue.main.async {
@@ -5262,9 +5283,9 @@ class FirestoreManager: ObservableObject {
                         let data = d.data()
                         let id = d.documentID
                         let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
-                        let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                        let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
-                        let status = data["Status"] as? String
+                        let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                        let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
+                        let status = (data["Status"] ?? data["status"]) as? String
                         let location = data["Location"] as? String
                         let notes = data["Notes"] as? String
                         let coachNote = data["CoachNote"] as? String
@@ -5285,16 +5306,16 @@ class FirestoreManager: ObservableObject {
                         }
 
                         // Group booking fields
-                        let clientIDs = data["ClientIDs"] as? [String]
-                        let clientNames = data["ClientNames"] as? [String]
-                        let coachIDs = data["CoachIDs"] as? [String]
-                        let coachNames = data["CoachNames"] as? [String]
+                        let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
+                        let clientNames = (data["ClientNames"] ?? data["clientNames"]) as? [String]
+                        let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
+                        let coachNames = (data["CoachNames"] ?? data["coachNames"]) as? [String]
                         let isGroupBooking = data["isGroupBooking"] as? Bool
                         let creatorID = data["creatorID"] as? String
                         let creatorType = data["creatorType"] as? String
-                        let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                        let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                        let coachRates = data["CoachRates"] as? [String: Double]
+                        let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                        let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                        let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                         let rejectionReason = data["rejectionReason"] as? String
                         let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String
@@ -5318,8 +5339,21 @@ class FirestoreManager: ObservableObject {
     }
 
     /// Fetch bookings for a specific coach's bookings subcollection and populate `coachBookings`.
+    private var coachBookingsListener: ListenerRegistration? = nil
+
     func fetchBookingsForCoachSubcollection(coachId: String) {
         DispatchQueue.main.async { self.coachBookingsDebug = "Starting fetchBookingsForCoachSubcollection for \(coachId)..." }
+        // Live listener: re-populate whenever the subcollection changes (e.g. a booking
+        // accepted or confirmed from the Android app). The listener fires immediately
+        // with current data, so this also performs the initial fetch.
+        coachBookingsListener?.remove()
+        coachBookingsListener = db.collection("coaches").document(coachId).collection("bookings")
+            .addSnapshotListener { [weak self] _, _ in
+                self?.populateCoachBookings(coachId: coachId)
+            }
+    }
+
+    private func populateCoachBookings(coachId: String) {
         fetchBookingsForCoach(coachId: coachId) { [weak self] items in
             guard let self = self else { return }
             DispatchQueue.main.async {
@@ -5582,18 +5616,18 @@ class FirestoreManager: ObservableObject {
             let batch = self.db.batch()
 
             // Update root booking
-            batch.updateData(["Status": status], forDocument: bookingRef)
+            batch.updateData(["Status": status, "status": status], forDocument:bookingRef)
 
             // Update coach mirror if possible
             if let cId = coachId {
                 let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status], forDocument: coachBookingRef)
+                batch.updateData(["Status": status, "status": status], forDocument:coachBookingRef)
             }
 
             // Update client mirror if possible
             if let clId = clientId {
                 let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status], forDocument: clientBookingRef)
+                batch.updateData(["Status": status, "status": status], forDocument:clientBookingRef)
             }
 
             batch.commit { err in
@@ -5668,11 +5702,16 @@ class FirestoreManager: ObservableObject {
             var updateData: [String: Any] = [
                 "CoachAcceptances": acceptances,
                 "CoachRates": coachRates,
-                "Status": newStatus
+                // camelCase mirrors read by Android
+                "coachAcceptances": acceptances,
+                "coachRates": coachRates,
+                "Status": newStatus,
+                "status": newStatus
             ]
             // Also store in RateUSD for backwards compatibility (will be last coach's rate)
             if let rate = rateUSD {
                 updateData["RateUSD"] = rate
+                updateData["rateUSD"] = rate
             }
             if let note = coachNote, !note.isEmpty {
                 updateData["CoachNote"] = note
@@ -5796,7 +5835,10 @@ class FirestoreManager: ObservableObject {
 
             var updateData: [String: Any] = [
                 "ClientConfirmations": confirmations,
-                "Status": newStatus
+                // camelCase mirror read by Android
+                "clientConfirmations": confirmations,
+                "Status": newStatus,
+                "status": newStatus
             ]
 
             // Only set confirmedAt when fully confirmed
@@ -5929,18 +5971,18 @@ class FirestoreManager: ObservableObject {
             let batch = self.db.batch()
 
             // Update root booking
-            batch.updateData(["Status": status], forDocument: bookingRef)
+            batch.updateData(["Status": status, "status": status], forDocument:bookingRef)
 
             // Update ALL coach mirrors
             for cId in allCoachIds {
                 let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status], forDocument: coachBookingRef)
+                batch.updateData(["Status": status, "status": status], forDocument:coachBookingRef)
             }
 
             // Update ALL client mirrors
             for clId in allClientIds {
                 let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status], forDocument: clientBookingRef)
+                batch.updateData(["Status": status, "status": status], forDocument:clientBookingRef)
             }
 
             batch.commit { [weak self] err in
@@ -6000,7 +6042,12 @@ class FirestoreManager: ObservableObject {
             let updateFields: [String: Any] = [
                 "StartAt": Timestamp(date: newStart),
                 "EndAt": Timestamp(date: newEnd),
-                "Status": newStatus
+                // camelCase mirrors: Android prefers startAt/endAt, so without these an
+                // iOS reschedule of an Android-created booking keeps the old time there
+                "startAt": Timestamp(date: newStart),
+                "endAt": Timestamp(date: newEnd),
+                "Status": newStatus,
+                "status": newStatus
             ]
 
             batch.updateData(updateFields, forDocument: bookingRef)
@@ -6104,8 +6151,8 @@ class FirestoreManager: ObservableObject {
             }
 
             // Get all coach and client IDs for group booking
-            let coachIDs = data["CoachIDs"] as? [String] ?? []
-            let clientIDs = data["ClientIDs"] as? [String] ?? []
+            let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String] ?? []
+            let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String] ?? []
 
             // Fallback to single coach/client if arrays are empty
             var allCoachIds = coachIDs
@@ -6175,14 +6222,14 @@ class FirestoreManager: ObservableObject {
                 if docCoachId != coachId { continue }
                 let id = d.documentID
                 let clientID = (data["ClientID"] as? DocumentReference)?.documentID ?? (data["ClientID"] as? String ?? "")
-                let startAt = (data["StartAt"] as? Timestamp)?.dateValue()
-                let endAt = (data["EndAt"] as? Timestamp)?.dateValue()
-                let status = data["Status"] as? String
+                let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
+                let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
+                let status = (data["Status"] ?? data["status"]) as? String
                 let location = data["Location"] as? String
                 let notes = data["Notes"] as? String
                 let coachNote = data["CoachNote"] as? String
                 let paymentStatus = data["PaymentStatus"] as? String
-                let rate = (data["RateUSD"] as? Double) ?? ((data["RateUSD"] as? Int).map { Double($0) })
+                let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Extract client and coach names from booking doc
                 let clientName = (data["ClientName"] as? String)
                     ?? (data["clientName"] as? String)
@@ -6191,16 +6238,16 @@ class FirestoreManager: ObservableObject {
                     ?? (data["coachName"] as? String)
                     ?? (data["coach_name"] as? String)
                 // Group booking fields
-                let clientIDs = data["ClientIDs"] as? [String]
-                let clientNames = data["ClientNames"] as? [String]
-                let coachIDs = data["CoachIDs"] as? [String]
-                let coachNames = data["CoachNames"] as? [String]
+                let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
+                let clientNames = (data["ClientNames"] ?? data["clientNames"]) as? [String]
+                let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String]
+                let coachNames = (data["CoachNames"] ?? data["coachNames"]) as? [String]
                 let isGroupBooking = data["isGroupBooking"] as? Bool
                 let creatorID = data["creatorID"] as? String
                 let creatorType = data["creatorType"] as? String
-                let coachAcceptances = data["CoachAcceptances"] as? [String: Bool]
-                let clientConfirmations = data["ClientConfirmations"] as? [String: Bool]
-                let coachRates = data["CoachRates"] as? [String: Double]
+                let coachAcceptances = (data["CoachAcceptances"] ?? data["coachAcceptances"]) as? [String: Bool]
+                let clientConfirmations = (data["ClientConfirmations"] ?? data["clientConfirmations"]) as? [String: Bool]
+                let coachRates = (data["CoachRates"] ?? data["coachRates"]) as? [String: Double]
                 let rejectionReason = data["rejectionReason"] as? String
                 let rejectedBy = data["rejectedBy"] as? String
                 let clientDeclineReason = data["clientDeclineReason"] as? String

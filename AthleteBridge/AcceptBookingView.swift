@@ -428,7 +428,9 @@ struct AcceptBookingView: View {
 
         var updatePayload: [String: Any] = [
             "Status": newStatus,
+            "status": newStatus,
             "RateUSD": rate,
+            "rateUSD": rate,
             "confirmedVia": "agreed_rate"
         ]
         if isPro {
@@ -517,6 +519,7 @@ struct AcceptBookingView: View {
 
         var updatePayload: [String: Any] = [
             "Status": "rejected",
+            "status": "rejected",
             "rejectedBy": currentUserId,
             "rejectionReason": selectedRejectReason,
             "rejectedAt": FieldValue.serverTimestamp()
@@ -525,6 +528,7 @@ struct AcceptBookingView: View {
         // For group bookings, also update the CoachAcceptances map so the rejecting coach shows as rejected
         if isGroupBooking {
             updatePayload["CoachAcceptances.\(currentUserId)"] = false
+            updatePayload["coachAcceptances.\(currentUserId)"] = false
         }
 
         let batch = Firestore.firestore().batch()
@@ -624,8 +628,8 @@ struct AcceptBookingView: View {
         let isPro = firestore.currentCoach?.subscriptionTier == .pro
         let newStatus = isPro ? "pending_payment" : "Pending Acceptance"
 
-        var updatePayload: [String: Any] = ["Status": newStatus]
-        if let r = rateVal { updatePayload["RateUSD"] = r }
+        var updatePayload: [String: Any] = ["Status": newStatus, "status": newStatus]
+        if let r = rateVal { updatePayload["RateUSD"] = r; updatePayload["rateUSD"] = r }
         if !note.isEmpty { updatePayload["CoachNote"] = note }
         updatePayload["pendingAt"] = FieldValue.serverTimestamp()
         if isPro { updatePayload["requiresPaymentUpfront"] = true }
