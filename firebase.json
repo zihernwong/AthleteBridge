@@ -11,7 +11,7 @@
       "public": "public",
       "ignore": [
         "firebase.json",
-        "**/.*",
+        "**/.DS_Store",
         "**/node_modules/**",
         "public/moneymogging101/**"
       ],

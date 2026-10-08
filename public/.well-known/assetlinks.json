@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.AthleteBridge",
+      "sha256_cert_fingerprints": [
+        "AA:D2:60:78:E5:AE:9B:06:E5:62:67:7D:43:97:B1:21:1E:60:56:1F:6A:81:62:57:57:E6:9D:D4:1C:0F:30:4D",
+        "83:0C:DA:0B:58:B3:88:FE:59:D0:4E:30:A7:BE:D8:60:11:BF:BE:43:0A:51:D3:E6:FC:17:19:47:E7:57:B8:90"
+      ]
+    }
+  }
+]
