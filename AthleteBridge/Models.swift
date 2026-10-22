@@ -559,5 +559,5 @@ struct SignupEvent: Identifiable, Hashable {
     }
     var spotsRemaining: Int { max(0, maxSignups - signupCount) }
     var isFull: Bool { signupCount >= maxSignups }
-    var shareURL: URL? { URL(string: "https://athletebridge-63176.web.app/signup/?event=\(id)") }
+    var shareURL: URL? { URL(string: "https://athletesbridge.com/signup/?event=\(id)") }
 }

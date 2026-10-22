@@ -40,9 +40,9 @@ struct ManageSubscriptionView: View {
 
                     // Privacy Policy and Terms of Use — required by App Store guideline 3.1.2(c)
                     HStack(spacing: 16) {
-                        Link("Privacy Policy", destination: URL(string: "https://athletebridge-63176.web.app/privacy/")!)
+                        Link("Privacy Policy", destination: URL(string: "https://athletesbridge.com/privacy/")!)
                         Text("·").foregroundColor(.secondary)
-                        Link("Terms of Use", destination: URL(string: "https://athletebridge-63176.web.app/terms/")!)
+                        Link("Terms of Use", destination: URL(string: "https://athletesbridge.com/terms/")!)
                     }
                     .font(.footnote)
                     .foregroundColor(.secondary)
@@ -178,9 +178,9 @@ struct ManageSubscriptionView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                     HStack(spacing: 4) {
-                        Link("Terms of Use", destination: URL(string: "https://athletebridge-63176.web.app/terms/")!)
+                        Link("Terms of Use", destination: URL(string: "https://athletesbridge.com/terms/")!)
                         Text("·").foregroundColor(.secondary)
-                        Link("Privacy Policy", destination: URL(string: "https://athletebridge-63176.web.app/privacy/")!)
+                        Link("Privacy Policy", destination: URL(string: "https://athletesbridge.com/privacy/")!)
                     }
                     .font(.caption2)
                 }

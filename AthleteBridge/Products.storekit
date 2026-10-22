@@ -1,11 +1,11 @@
 {
   "appPolicies" : {
-    "eula" : "https://athletebridge-63176.web.app/terms/",
+    "eula" : "https://athletesbridge.com/terms/",
     "policies" : [
       {
         "locale" : "en_US",
         "policyText" : "",
-        "policyURL" : "https://athletebridge-63176.web.app/privacy/"
+        "policyURL" : "https://athletesbridge.com/privacy/"
       }
     ]
   },

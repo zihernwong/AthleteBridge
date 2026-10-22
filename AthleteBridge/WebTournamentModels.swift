@@ -252,7 +252,7 @@ struct WebTournament: Identifiable, Hashable {
         return df.date(from: date)
     }
 
-    static let managerBaseURL = "https://athletebridge-63176.web.app/tournament/"
+    static let managerBaseURL = "https://athletesbridge.com/tournament/"
 
     var webURL: URL? { URL(string: "\(Self.managerBaseURL)?id=\(id)") }
     var registerURL: URL? { URL(string: "\(Self.managerBaseURL)?id=\(id)&register=1") }

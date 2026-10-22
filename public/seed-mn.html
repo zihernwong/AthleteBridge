@@ -1094,7 +1094,7 @@ async function runSeed() {
       await ref.set(built.doc);
       log(`  ✓ Tournament created: ${ref.id}`, 'ok');
     }
-    log(`  → https://athletebridge-63176.web.app/tournament/?id=${ref.id}`, 'ok');
+    log(`  → https://athletesbridge.com/tournament/?id=${ref.id}`, 'ok');
   } catch(e) {
     log(`  ✗ Tournament: ${e.message}`, 'err');
   }

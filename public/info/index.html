@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AthletesBridge — Features</title>
+  <meta name="description" content="AthletesBridge connects athletes with coaches, clubs, tournaments, stringers and places to play. Book sessions, run events, and track progress in one app." />
+  <meta property="og:title" content="AthletesBridge — Connect. Train. Achieve." />
+  <meta property="og:description" content="Book coaches, join clubs, run tournaments and track progress — all in one app." />
+  <meta property="og:image" content="https://athletesbridge.com/info/logo-lockup.jpg" />
+  <link rel="icon" type="image/png" href="logo-mark.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #8DC63F;
+      --green-dark: #5f8f22;
+      --green-tint: #f0f7e6;
+      --blue:  #2D5A7B;
+      --blue-dark: #1f4560;
+      --blue-tint: #eaf1f6;
+      --bg:    #f5f7fa;
+      --card:  #ffffff;
+      --text:  #1a1a2e;
+      --muted: #6b7280;
+      --border:#e5e7eb;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Top bar ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--blue-dark);
+      color: #fff;
+    }
+    .topbar-inner {
+      max-width: 1040px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; }
+    .brand:hover { text-decoration: none; }
+    .brand img {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #fff; display: block;
+    }
+    .brand span b { color: var(--green); font-weight: 700; }
+    .topbar nav { display: flex; gap: 18px; font-size: 0.9rem; }
+    .topbar nav a { color: rgba(255,255,255,0.85); }
+    .topbar nav a:hover { color: #fff; text-decoration: none; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(160deg, var(--blue) 0%, var(--blue-dark) 100%);
+      color: #fff;
+      padding: 56px 20px 64px;
+      text-align: center;
+    }
+    .logo-card {
+      display: inline-block;
+      background: #fff;
+      border-radius: 24px;
+      padding: 20px 28px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+      margin-bottom: 28px;
+    }
+    .logo-card img { display: block; width: 240px; max-width: 60vw; height: auto; }
+    .hero h1 {
+      font-size: clamp(1.7rem, 4.5vw, 2.5rem);
+      font-weight: 800; letter-spacing: -0.5px; line-height: 1.2;
+      max-width: 720px; margin: 0 auto;
+    }
+    .hero h1 em { font-style: normal; color: var(--green); }
+    .hero p.lede {
+      font-size: 1.08rem; opacity: 0.88;
+      max-width: 620px; margin: 14px auto 0;
+    }
+    .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+    .btn {
+      display: inline-block; padding: 12px 22px; border-radius: 10px;
+      font-weight: 700; font-size: 0.95rem;
+    }
+    .btn:hover { text-decoration: none; filter: brightness(1.05); }
+    .btn-green { background: var(--green); color: #1a2e05; }
+    .btn-ghost { border: 1.5px solid rgba(255,255,255,0.55); color: #fff; }
+    .platforms { margin-top: 18px; font-size: 0.85rem; opacity: 0.75; }
+
+    /* ── Layout ── */
+    main { max-width: 1040px; margin: 0 auto; padding: 0 20px 72px; }
+    .section { padding-top: 56px; }
+    .section-head { margin-bottom: 22px; }
+    .eyebrow {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--green-dark);
+    }
+    .section-head h2 {
+      font-size: 1.6rem; font-weight: 800; color: var(--blue);
+      letter-spacing: -0.3px; margin-top: 4px;
+    }
+    .section-head p { color: var(--muted); margin-top: 6px; max-width: 640px; }
+
+    /* ── New features ── */
+    .new-wrap {
+      margin-top: -32px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-top: 5px solid var(--green);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(45,90,123,0.08);
+    }
+    .new-wrap .section-head { margin-bottom: 18px; }
+    .badge {
+      display: inline-block; background: var(--green); color: #1a2e05;
+      font-size: 0.72rem; font-weight: 800; letter-spacing: 0.06em;
+      padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+      vertical-align: middle; margin-left: 8px;
+    }
+    .new-grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+    .new-item {
+      display: flex; gap: 14px; align-items: flex-start;
+      background: var(--green-tint);
+      border-radius: 12px; padding: 16px;
+    }
+    .new-item .ico {
+      flex: none; width: 40px; height: 40px; border-radius: 10px;
+      background: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .new-item h3 { font-size: 0.98rem; color: var(--blue-dark); margin-bottom: 2px; }
+    .new-item p { font-size: 0.88rem; color: #3d4a3a; }
+
+    /* ── Feature cards ── */
+    .grid {
+      display: grid; gap: 18px;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .card-top .ico {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--blue-tint);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex: none;
+    }
+    .card h3 { font-size: 1.08rem; color: var(--blue); }
+    .card p.sub { font-size: 0.9rem; color: var(--muted); margin-bottom: 10px; }
+    .card ul { list-style: none; font-size: 0.92rem; }
+    .card li { position: relative; padding-left: 22px; margin-bottom: 7px; }
+    .card li::before {
+      content: ""; position: absolute; left: 4px; top: 0.55em;
+      width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    }
+
+    /* ── Who it's for ── */
+    .audience { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .aud {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px; border-left: 4px solid var(--blue);
+    }
+    .aud:nth-child(even) { border-left-color: var(--green); }
+    .aud h3 { font-size: 1rem; color: var(--blue); margin-bottom: 4px; }
+    .aud p { font-size: 0.9rem; color: var(--muted); }
+
+    /* ── Plans ── */
+    .plans { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+    .plan {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px; display: flex; flex-direction: column;
+    }
+    .plan.featured { border: 2px solid var(--green); box-shadow: 0 8px 24px rgba(141,198,63,0.18); }
+    .plan h3 { color: var(--blue); font-size: 1.1rem; }
+    .price { font-size: 1.9rem; font-weight: 800; color: var(--text); margin: 6px 0 2px; }
+    .price small { font-size: 0.9rem; font-weight: 600; color: var(--muted); }
+    .plan .note { font-size: 0.85rem; color: var(--muted); margin-bottom: 14px; }
+    .plan ul { list-style: none; font-size: 0.92rem; }
+    .plan li { padding-left: 24px; position: relative; margin-bottom: 7px; }
+    .plan li::before { content: "✓"; position: absolute; left: 2px; color: var(--green-dark); font-weight: 800; }
+    .fine { font-size: 0.82rem; color: var(--muted); margin-top: 14px; }
+
+    /* ── Team ── */
+    .team { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+    .member {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px 20px; text-align: center;
+    }
+    .avatar {
+      width: 84px; height: 84px; border-radius: 50%; margin: 0 auto 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; font-weight: 800; color: #fff; letter-spacing: 0.5px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+      box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--green);
+      overflow: hidden;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .member:nth-child(even) .avatar {
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+      box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--blue);
+    }
+    .member h3 { font-size: 1.05rem; color: var(--text); }
+    .role {
+      display: inline-block; margin-top: 6px; font-size: 0.8rem; font-weight: 700;
+      color: var(--blue); background: var(--blue-tint); padding: 3px 10px; border-radius: 999px;
+    }
+    .bio { margin-top: 12px; font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+    .bio strong { color: var(--text); font-weight: 600; }
+
+    /* ── Closing CTA ── */
+    .closing {
+      margin-top: 56px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 70%);
+      color: #fff; border-radius: 18px; padding: 36px 28px; text-align: center;
+    }
+    .closing h2 { font-size: 1.5rem; font-weight: 800; }
+    .closing h2 em { font-style: normal; color: var(--green); }
+    .closing p { opacity: 0.85; margin-top: 6px; }
+
+    footer {
+      text-align: center; color: var(--muted); font-size: 0.85rem;
+      padding: 0 20px 40px;
+    }
+    footer nav { display: flex; gap: 18px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap; }
+
+    @media (max-width: 640px) {
+      .topbar nav { display: none; }
+      .hero { padding: 40px 16px 56px; }
+      main { padding: 0 16px 56px; }
+      .new-wrap { padding: 20px; }
+      .card { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/info/">
+      <img src="logo-mark.png" alt="" />
+      <span>Athletes<b>Bridge</b></span>
+    </a>
+    <nav>
+      <a href="#new">What's new</a>
+      <a href="#features">Features</a>
+      <a href="#plans">Coach plans</a>
+      <a href="#team">Team</a>
+      <a href="/support/">Support</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="logo-card">
+    <img src="logo-lockup.jpg" alt="AthletesBridge — Connect. Train. Achieve." width="480" height="455" />
+  </div>
+  <h1>Everything your sport needs, <em>in one place.</em></h1>
+  <p class="lede">Find and book coaches, join clubs and events, run tournaments, get your racket strung, and track your progress, all in one app for athletes, coaches and organizers.</p>
+  <div class="cta">
+    <a class="btn btn-green" href="#features">Explore features</a>
+    <a class="btn btn-ghost" href="/tournament/">Open Tournament Manager</a>
+  </div>
+  <p class="platforms">Available on iPhone · Android app in testing · Tournament Manager on the web</p>
+</header>
+
+<main>
+
+  <!-- ── New features ── -->
+  <section class="new-wrap" id="new">
+    <div class="section-head">
+      <div class="eyebrow">Version 2.3</div>
+      <h2>New features <span class="badge">New</span></h2>
+      <p>The latest additions to AthletesBridge.</p>
+    </div>
+    <div class="new-grid">
+      <div class="new-item">
+        <div class="ico">🏆</div>
+        <div><h3>Tournament detail &amp; live brackets</h3><p>Full tournament pages with native, in-app brackets that stay in sync with the web Tournament Manager.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">🤝</div>
+        <div><h3>Smarter partner search</h3><p>Find a doubles or mixed partner for an upcoming tournament, with better matching.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">🔁</div>
+        <div><h3>Recurring &amp; paid club events</h3><p>Clubs can schedule repeating sessions and charge an entry fee, with a waitlist when spots fill up.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">💸</div>
+        <div><h3>One-tap Venmo payments</h3><p>Prefilled Venmo links for the right amount and note. Organizers confirm self-reported payments.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">📈</div>
+        <div><h3>Earnings &amp; spending forecaster</h3><p>Coaches see projected earnings and athletes see projected spending, weekly or monthly.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">⏱️</div>
+        <div><h3>Session timer</h3><p>Time a session live, keep it running while you use other apps, and log it when you finish.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">📝</div>
+        <div><h3>Shared session logs</h3><p>Coaches log what was covered and track metrics over time, and clients can see their progress.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">🗓️</div>
+        <div><h3>Weekly calendar view</h3><p>A detailed week grid with availability chips for each day, so open slots are easy to spot.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">🔄</div>
+        <div><h3>Recurring bookings</h3><p>Book the same weekly lesson once, with coach-agreed rates and a clear cancellation policy.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">📍</div>
+        <div><h3>Explore map &amp; venue photos</h3><p>Browse courts, coaches and venues on a map. Every booking now has a confirmed location.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">📷</div>
+        <div><h3>Photos in chat</h3><p>Share photos in conversations, and hide chats you no longer need.</p></div>
+      </div>
+      <div class="new-item">
+        <div class="ico">🤖</div>
+        <div><h3>Android app</h3><p>A full Android version that works seamlessly with iPhone users. Now in testing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Who it's for ── -->
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Who it's for</div>
+      <h2>Built for every side of the court</h2>
+    </div>
+    <div class="audience">
+      <div class="aud"><h3>Athletes</h3><p>Find a coach, book lessons, join events and find people to play with.</p></div>
+      <div class="aud"><h3>Coaches</h3><p>Fill your calendar, manage clients, get paid and track client progress.</p></div>
+      <div class="aud"><h3>Clubs &amp; organizers</h3><p>Run sign-ups, announcements, paid events and full tournaments.</p></div>
+      <div class="aud"><h3>Stringers</h3><p>Take racket stringing orders and keep customers updated at each step.</p></div>
+    </div>
+  </section>
+
+  <!-- ── All features ── -->
+  <section class="section" id="features">
+    <div class="section-head">
+      <div class="eyebrow">Features</div>
+      <h2>Everything AthletesBridge can do</h2>
+      <p>Badminton, tennis, pickleball, basketball and more.</p>
+    </div>
+
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><div class="ico">🔎</div><h3>Find &amp; book coaches</h3></div>
+        <p class="sub">Search the coach directory and book in a few taps.</p>
+        <ul>
+          <li>Filter coaches by sport, goals, availability and rate</li>
+          <li>Coach profiles with bio, experience, rate range and reviews</li>
+          <li>Request one-on-one or group lessons</li>
+          <li>Hourly and total cost shown up front</li>
+          <li>Reschedule, cancel and book recurring sessions</li>
+          <li>Add confirmed bookings to your calendar</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">📋</div><h3>Coach tools</h3></div>
+        <p class="sub">Run your coaching business from your phone.</p>
+        <ul>
+          <li>Set weekly availability and away time</li>
+          <li>Accept, decline or edit booking requests</li>
+          <li>Automatic overlap checks to prevent double booking</li>
+          <li>Client roster with notes and booking history</li>
+          <li>Session logs with metric progress tracking</li>
+          <li>Coach home dashboard for the day ahead</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">💳</div><h3>Payments &amp; insights</h3></div>
+        <p class="sub">Know who has paid and what's coming in.</p>
+        <ul>
+          <li>Track paid and unpaid status for each booking</li>
+          <li>Save Venmo and PayPal handles</li>
+          <li>Prefilled Venmo payment links</li>
+          <li>Revenue summaries and earnings forecasts</li>
+          <li>Spending forecasts for athletes</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">🏆</div><h3>Tournaments</h3></div>
+        <p class="sub">From local events to season-long series.</p>
+        <ul>
+          <li>Browse upcoming tournaments</li>
+          <li>Find a tournament partner for doubles or mixed</li>
+          <li>Web Tournament Manager: round robin, single and double elimination</li>
+          <li>Singles, doubles and mixed brackets with live scores</li>
+          <li>Share brackets with a QR code or link</li>
+          <li>Season series standings and player rankings</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">👥</div><h3>Clubs &amp; events</h3></div>
+        <p class="sub">Keep your club organized and engaged.</p>
+        <ul>
+          <li>Create clubs and manage members and admins</li>
+          <li>Club announcements with push notifications</li>
+          <li>Sign-up events with capacity and waitlists</li>
+          <li>Recurring and paid events</li>
+          <li>Shareable sign-up links that work without the app</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">🏸</div><h3>Racket stringing</h3></div>
+        <p class="sub">Book your restring with a local stringer.</p>
+        <ul>
+          <li>Browse stringers and their services</li>
+          <li>Place orders with string type and tension</li>
+          <li>Order timeline from drop-off to ready</li>
+          <li>Stringer dashboard for incoming orders</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">📍</div><h3>Places &amp; players</h3></div>
+        <p class="sub">Find where to play and who to play with.</p>
+        <ul>
+          <li>Places to play with photos, details and distance</li>
+          <li>Explore map of venues and coaches</li>
+          <li>Find players at your level to play with</li>
+          <li>Location autocomplete when booking</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">💬</div><h3>Messaging &amp; alerts</h3></div>
+        <p class="sub">Stay in touch with your coach, club and partners.</p>
+        <ul>
+          <li>In-app chat with photo sharing</li>
+          <li>Push notifications for bookings, messages and clubs</li>
+          <li>Tap a notification to jump straight to the right screen</li>
+          <li>Leave and read reviews after each session</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><div class="ico">🎯</div><h3>Goals &amp; progress</h3></div>
+        <p class="sub">Train with a plan and see how you're improving.</p>
+        <ul>
+          <li>Set training goals on your profile</li>
+          <li>See session logs shared by your coach</li>
+          <li>Metric history charts over time</li>
+          <li>Live session timer</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Coach plans ── -->
+  <section class="section" id="plans">
+    <div class="section-head">
+      <div class="eyebrow">For coaches</div>
+      <h2>Coach plans</h2>
+      <p>Athletes use AthletesBridge for free. Coaches can upgrade for business insights and more visibility.</p>
+    </div>
+    <div class="plans">
+      <div class="plan">
+        <h3>Free</h3>
+        <div class="price">$0</div>
+        <div class="note">Get started</div>
+        <ul>
+          <li>Coaching profile</li>
+          <li>Bookings, messaging and payments tracking</li>
+        </ul>
+      </div>
+      <div class="plan">
+        <h3>Coach Plus</h3>
+        <div class="price">$9.99<small>/mo</small></div>
+        <div class="note">Grow with data</div>
+        <ul>
+          <li>Revenue insights</li>
+          <li>Earnings forecaster</li>
+          <li>Session metric history</li>
+          <li>Tournament recommendations</li>
+        </ul>
+      </div>
+      <div class="plan featured">
+        <h3>Coach Pro</h3>
+        <div class="price">$14.99<small>/mo</small></div>
+        <div class="note">Everything in Plus, and</div>
+        <ul>
+          <li>Listed in the coach search engine</li>
+          <li>Revenue insights &amp; forecaster</li>
+          <li>Session metric history</li>
+          <li>Tournament recommendations</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine">Subscriptions renew monthly and can be cancelled anytime. See our <a href="/terms/">Terms of Use</a>.</p>
+  </section>
+
+  <!-- ── Team ── -->
+  <section class="section" id="team">
+    <div class="section-head">
+      <div class="eyebrow">Meet the team</div>
+      <h2>The people behind AthletesBridge</h2>
+    </div>
+    <div class="team">
+      <div class="member">
+        <div class="avatar"><img src="team-hern.jpg" alt="Hern Wong" width="84" height="84" loading="lazy" /></div>
+        <h3>Hern Wong</h3>
+        <span class="role">Founder</span>
+        <p class="bio"><strong>Software Engineer @ Optum</strong><br />MS Management, University of Illinois Urbana-Champaign<br />BS Computer Science, University of Wisconsin–Madison</p>
+      </div>
+      <div class="member">
+        <div class="avatar"><img src="team-ben.jpg" alt="Ben Chua" width="84" height="84" loading="lazy" /></div>
+        <h3>Ben Chua</h3>
+        <span class="role">Co-Founder</span>
+        <p class="bio"><strong>Business Analyst @ Kingsbay Group</strong><br />Former Sales Engineer @ Keyence<br />BS Marketing, University of Minnesota</p>
+      </div>
+      <div class="member">
+        <div class="avatar"><img src="team-cindy.jpg" alt="Cindy Li" width="84" height="84" loading="lazy" /></div>
+        <h3>Cindy Li</h3>
+        <span class="role">Co-Founder</span>
+        <p class="bio"><strong>Custody Operations Manager, User Experience &amp; Platform Readiness @ U.S. Bank</strong><br />MS Analytics, Georgia Institute of Technology<br />BS, Carlson School of Management, University of Minnesota</p>
+      </div>
+      <div class="member">
+        <div class="avatar"><img src="team-xiaoyi.jpg" alt="Xiaoyi Xiao" width="84" height="84" loading="lazy" /></div>
+        <h3>Xiaoyi Xiao</h3>
+        <span class="role">Tech Lead</span>
+        <p class="bio"><strong>Former Software Engineer @ Star Tribune</strong><br />MS Computer Science, Johns Hopkins University<br />BS Computer Science, University of Minnesota</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="closing">
+    <h2>Connect. Train. <em>Achieve.</em></h2>
+    <p>Questions or feedback? We'd love to hear from you.</p>
+    <div class="cta">
+      <a class="btn btn-green" href="/support/">Contact support</a>
+      <a class="btn btn-ghost" href="/tournament/">Tournament Manager</a>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <nav>
+    <a href="/support/">Support</a>
+    <a href="/privacy/">Privacy Policy</a>
+    <a href="/terms/">Terms of Use</a>
+  </nav>
+  © 2026 AthletesBridge
+</footer>
+
+</body>
+</html>
