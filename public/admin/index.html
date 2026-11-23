@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Event Admin — AthleteBridge</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <style>
+    :root {
+      --green: #34C759; --green-dark: #2db84d; --green-soft: #f0faf3;
+      --blue: #007AFF; --orange: #ff9500; --orange-soft: #fff6e8;
+      --red: #ff3b30; --red-soft: #fff0ef;
+      --text: #111; --muted: #666; --faint: #999; --line: #eee;
+      --bg: #f5f5f5; --card: #fff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--text); background: var(--bg); min-height: 100vh; font-size: 15px;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    a { color: var(--blue); }
+    .hidden { display: none !important; }
+
+    /* Header */
+    .topbar {
+      background: var(--card); border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-inner {
+      max-width: 1000px; margin: 0 auto; padding: 12px 16px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .topbar img { width: 34px; height: 34px; border-radius: 8px; }
+    .topbar .title { font-weight: 700; font-size: 17px; }
+    .topbar .title small { display: block; font-weight: 400; color: var(--faint); font-size: 12px; }
+    .topbar .spacer { flex: 1; }
+    .topbar .who { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 14px; border-radius: 9px; border: 1px solid transparent;
+      font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap;
+      background: var(--green); color: #fff; text-decoration: none;
+    }
+    .btn:hover:not(:disabled) { background: var(--green-dark); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary { background: #fff; color: var(--text); border-color: #ddd; }
+    .btn.secondary:hover:not(:disabled) { background: #fafafa; }
+    .btn.danger { background: #fff; color: var(--red); border-color: #f3c2bf; }
+    .btn.danger:hover:not(:disabled) { background: var(--red-soft); }
+    .btn.small { padding: 6px 10px; font-size: 13px; border-radius: 7px; }
+    .btn.block { width: 100%; padding: 13px; font-size: 16px; }
+    .linkbtn { background: none; border: none; color: var(--blue); cursor: pointer; font-size: 14px; padding: 0; }
+
+    /* Cards */
+    .card { background: var(--card); border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 20px; }
+    .card + .card { margin-top: 16px; }
+    .card h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .card h2 .count { color: var(--faint); font-weight: 500; }
+
+    /* Login */
+    .login { max-width: 400px; margin: 60px auto; text-align: center; }
+    .login img { width: 64px; height: 64px; border-radius: 14px; margin-bottom: 12px; }
+    .login h1 { font-size: 22px; margin-bottom: 4px; }
+    .login p.sub { color: var(--muted); margin-bottom: 22px; font-size: 14px; }
+    .login form { text-align: left; }
+    .login .foot { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+    /* Forms */
+    label.field { display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 14px; }
+    label.field span.hint { font-weight: 400; color: var(--faint); }
+    label.field input, label.field select, label.field textarea {
+      display: block; width: 100%; margin-top: 5px; padding: 10px 12px; font-size: 15px;
+      border: 1px solid #ddd; border-radius: 8px; background: #fff; font-weight: 400;
+    }
+    label.field textarea { resize: vertical; min-height: 70px; line-height: 1.45; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(52,199,89,0.2); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label.check { display: flex; gap: 10px; align-items: center; font-size: 14px; margin-bottom: 14px; cursor: pointer; }
+    label.check input { width: 18px; height: 18px; accent-color: var(--green); }
+    .form-section { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px; }
+    .form-section:first-child { margin-top: 0; }
+    .error-msg { color: var(--red); font-size: 14px; margin-top: 10px; }
+
+    /* Toolbar + tabs */
+    .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .toolbar .spacer { flex: 1; }
+    .tabs { display: inline-flex; background: #e9e9eb; border-radius: 9px; padding: 2px; }
+    .tabs button { border: none; background: none; padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--muted); }
+    .tabs button.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    /* Event list */
+    .event-list { display: grid; gap: 12px; }
+    .event-item {
+      display: flex; gap: 16px; align-items: center; cursor: pointer;
+      background: var(--card); border-radius: 14px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      border: 1px solid transparent; transition: border-color 0.15s;
+    }
+    .event-item:hover { border-color: #cfeed8; }
+    .datebox { width: 56px; flex-shrink: 0; text-align: center; border-radius: 10px; background: var(--green-soft); padding: 6px 0; }
+    .datebox .dow { font-size: 11px; font-weight: 700; color: var(--green); text-transform: uppercase; }
+    .datebox .day { font-size: 22px; font-weight: 700; line-height: 1.1; }
+    .datebox .mon { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+    .event-item .info { flex: 1; min-width: 0; }
+    .event-item .name { font-weight: 700; font-size: 16px; margin-bottom: 3px; }
+    .event-item .meta { color: var(--muted); font-size: 13px; }
+    .event-item .stats { text-align: right; flex-shrink: 0; }
+    .event-item .stats .big { font-size: 18px; font-weight: 700; }
+    .event-item .stats .small { font-size: 12px; color: var(--faint); }
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+    .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px; background: #f0f0f0; color: var(--muted); }
+    .badge.green { background: var(--green-soft); color: #1f8a3b; }
+    .badge.orange { background: var(--orange-soft); color: #b25d00; }
+    .badge.red { background: var(--red-soft); color: var(--red); }
+    .badge.blue { background: #eaf3ff; color: var(--blue); }
+    .empty { text-align: center; color: var(--muted); padding: 50px 20px; }
+    .empty b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
+
+    /* Detail */
+    .back { margin-bottom: 14px; }
+    .detail-head { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .detail-head .info { flex: 1; min-width: 240px; }
+    .detail-head h1 { font-size: 22px; margin-bottom: 6px; }
+    .detail-head .meta { color: var(--muted); font-size: 14px; margin: 3px 0; }
+    .detail-head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+    .stat { background: #fafafa; border-radius: 10px; padding: 12px; }
+    .stat .v { font-size: 22px; font-weight: 700; }
+    .stat .l { font-size: 12px; color: var(--muted); }
+    .bar { height: 6px; border-radius: 99px; background: #eee; margin-top: 8px; overflow: hidden; }
+    .bar > div { height: 100%; background: var(--green); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .grid2 .card + .card { margin-top: 0; }
+    .copyrow { display: flex; gap: 8px; margin-bottom: 10px; }
+    .copyrow input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; background: #fafafa; }
+    .caption { white-space: pre-wrap; font-size: 13px; background: #fafafa; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.5; color: #333; }
+    .pre { white-space: pre-wrap; font-size: 14px; line-height: 1.5; color: #333; }
+    .kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #f3f3f3; font-size: 14px; }
+    .kv:last-child { border-bottom: none; }
+    .kv .k { color: var(--muted); }
+    .kv .v { text-align: right; }
+
+    /* Table */
+    .table-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .table-tools input { flex: 1; min-width: 160px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: 0.4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    td { padding: 9px 8px; border-bottom: 1px solid #f3f3f3; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    td.num { color: var(--faint); width: 34px; }
+    td .sub { color: var(--faint); font-size: 12px; }
+    td.right, th.right { text-align: right; }
+    .paybtn { border: 1px solid #ddd; background: #fff; border-radius: 99px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--muted); }
+    .paybtn.paid { background: var(--green-soft); border-color: #bfe8cb; color: #1f8a3b; }
+    .paybtn.reported { background: var(--orange-soft); border-color: #f5d9a8; color: #b25d00; }
+    .paybtn.noshow { background: var(--red-soft); border-color: #f3c2bf; color: var(--red); }
+    tr.noshow td { background: #fffafa; }
+    .iconbtn { border: none; background: none; cursor: pointer; color: var(--faint); font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+    .iconbtn:hover { color: var(--red); background: var(--red-soft); }
+
+    /* Modal */
+    .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+    .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 560px; padding: 22px; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+    .modal.narrow { max-width: 400px; }
+    .modal h3 { font-size: 18px; margin-bottom: 16px; }
+    .modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .qr { text-align: center; }
+    .qr img { width: 260px; height: 260px; image-rendering: pixelated; margin: 8px auto 12px; display: block; }
+    .qr .url { font-size: 12px; color: var(--muted); word-break: break-all; margin-bottom: 14px; }
+
+    .toasts { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    .toast { background: #222; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+    .loading { text-align: center; color: var(--faint); padding: 80px 0; }
+
+    @media (max-width: 720px) {
+      .statgrid { grid-template-columns: repeat(2, 1fr); }
+      .grid2 { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; gap: 0; }
+      .hide-sm { display: none; }
+      .topbar .who { display: none; }
+      .event-item { gap: 12px; padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar hidden" id="topbar">
+    <div class="topbar-inner">
+      <img src="../stripe/AthleteBridgeLogo.png" alt="" />
+      <div class="title">Event Admin<small>AthleteBridge</small></div>
+      <div class="spacer"></div>
+      <div class="who" id="who"></div>
+      <button class="btn secondary small" id="signOutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <div class="loading">Loading…</div>
+  </main>
+
+  <div id="modalRoot"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBxn8JJE3KFzJ06VgqM3yAyZFW5CgiVEF8",
+      authDomain: "athletebridge-63176.firebaseapp.com",
+      projectId: "athletebridge-63176",
+      storageBucket: "athletebridge-63176.firebasestorage.app",
+      messagingSenderId: "107606691152"
+    });
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const FV = firebase.firestore.FieldValue;
+    const Timestamp = firebase.firestore.Timestamp;
+    const events = () => db.collection('signupEvents');
+
+    const SITE = 'https://athletesbridge.com';
+    const NO_SHOW_LIMIT = 5;   // keep in sync with functions/src/index.ts
+    const CUSTOM_OPEN = -1;
+    const OPEN_OPTIONS = [[0, 'Right away'], [24, '1 day before'], [48, '2 days before'], [72, '3 days before'], [168, '1 week before'], [CUSTOM_OPEN, 'Custom date & time…']];
+
+    // Default custom opening time: 8:30 PM the evening before the event
+    function dayBeforeAt830(eventDate) {
+      const d = new Date(eventDate);
+      d.setDate(d.getDate() - 1);
+      d.setHours(20, 30, 0, 0);
+      return d;
+    }
+
+    const state = {
+      user: null,
+      places: {},        // id -> place
+      events: [],        // parsed signupEvents
+      loaded: { places: false, events: false },
+      tab: 'upcoming',
+      openId: null,      // event shown in detail view
+      search: '',
+      noShows: {},       // noShowRecords docs for the open event's club + year, by doc id
+      noShowScope: null  // "placeId__year" currently subscribed
+    };
+    let unsubs = [];
+    let noShowUnsub = null;
+
+    // ─────────────────────────────── Helpers
+
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
+    function toast(msg) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      document.getElementById('toasts').appendChild(el);
+      setTimeout(() => el.remove(), 2200);
+    }
+
+    async function copy(text, msg) {
+      try { await navigator.clipboard.writeText(text); toast(msg || 'Copied'); }
+      catch { toast('Copy failed — select and copy manually'); }
+    }
+
+    const fmt = {
+      full: d => d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      short: d => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+        + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      time: d => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      money: n => '$' + Number(n).toFixed(2)
+    };
+
+    // <input type="datetime-local"> value in the browser's local time
+    function toLocalInput(d) {
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+
+    function tsDate(v) { return v && v.toDate ? v.toDate() : null; }
+
+    function parseEvent(doc) {
+      const d = doc.data();
+      const toList = (raw, dateKey) => Object.entries(raw || {}).map(([id, s]) => ({
+        id,
+        name: s.name || '',
+        email: s.email || '',
+        userId: s.userId || null,
+        at: tsDate(s[dateKey]) || new Date(),  // pending serverTimestamp reads as null
+        paid: !!s.paid,
+        selfPaid: !!s.selfPaid,
+        waiver: !!s.waiverAcceptedAt,
+        noShow: !!s.noShow,
+        addedByAdmin: !!s.addedByAdmin
+      })).sort((a, b) => a.at - b.at);
+      const ev = {
+        id: doc.id,
+        raw: d,
+        title: d.title || '',
+        description: d.description || '',
+        eventDate: tsDate(d.eventDate) || new Date(),
+        location: d.location || '',
+        placeId: d.placeId || '',
+        placeName: d.placeName || '',
+        maxSignups: d.maxSignups || 0,
+        signupCount: d.signupCount || 0,
+        createdBy: d.createdBy || '',
+        recurrence: d.recurrence || null,
+        feeUSD: d.feeUSD || null,
+        paymentLink: d.paymentLink || '',
+        allowSelfReportPaid: !!d.allowSelfReportPaid,
+        opensHoursBefore: d.opensHoursBefore || 0,
+        customOpensAt: tsDate(d.opensAt),
+        notes: d.notes || '',
+        waiverText: d.waiverText || '',
+        nextOccurrenceId: d.nextOccurrenceId || null,
+        signups: toList(d.signups, 'signedUpAt'),
+        waitlist: toList(d.waitlist, 'joinedAt')
+      };
+      ev.opensAt = ev.customOpensAt || (ev.opensHoursBefore ? new Date(ev.eventDate.getTime() - ev.opensHoursBefore * 3600e3) : null);
+      ev.paidCount = ev.signups.filter(s => s.paid).length;
+      ev.reportedCount = ev.signups.filter(s => s.selfPaid && !s.paid).length;
+      ev.shareURL = `${SITE}/signup/?event=${ev.id}`;
+      return ev;
+    }
+
+    function isPlaceAdmin(place, uid) {
+      if (!place || !uid) return false;
+      const admins = place.admins || {};
+      if (Object.keys(admins).length) return !!admins[uid];
+      return place.contactUid === uid;
+    }
+
+    function canManage(ev) {
+      const uid = state.user && state.user.uid;
+      return ev.createdBy === uid || isPlaceAdmin(state.places[ev.placeId], uid);
+    }
+
+    // Same caption the iOS share sheet uses
+    function shareCaption(ev) {
+      const d = ev.eventDate;
+      const dow = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+      const lines = [`${ev.title} sign-up for ${dow} ${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()} · ${fmt.time(d)}`];
+      if (ev.placeName) lines.push(ev.placeName);
+      if (ev.feeUSD) lines.push(`${fmt.money(ev.feeUSD)} per player`);
+      if (ev.opensAt && Date.now() < ev.opensAt) {
+        lines.push(`Sign-ups open ${ev.opensAt.toLocaleDateString('en-US', { weekday: 'short' })} ${fmt.time(ev.opensAt)}`);
+      }
+      lines.push(`${Math.max(0, ev.maxSignups - ev.signupCount)} of ${ev.maxSignups} spots left`);
+      lines.push(ev.shareURL);
+      return lines.join('\n');
+    }
+
+    function defaultWaiver(placeName) {
+      const host = placeName
+        ? `${placeName}, its organizers, employees and volunteers`
+        : 'the organizers, venue, employees and volunteers';
+      return `By signing up, you release, discharge, and agree to hold ${host} harmless from and against any liability for injury or loss arising from participation.`;
+    }
+
+    // ─────────────────────────────── No-shows
+    // Same player keys and year rule as the signupApi function, so the web block matches.
+
+    function noShowKeys(s) {
+      const keys = [];
+      if (s.userId) keys.push('u_' + s.userId);
+      const email = (s.email || '').trim().toLowerCase();
+      if (email) keys.push('e_' + email);
+      if (!keys.length && s.name) keys.push('n_' + s.name.trim().toLowerCase());
+      return keys.map(k => k.replace(/\//g, '_'));
+    }
+
+    function eventYear(ev) {
+      try {
+        return Number(new Intl.DateTimeFormat('en-US', { timeZone: ev.raw.timeZone || 'America/Chicago', year: 'numeric' }).format(ev.eventDate));
+      } catch { return ev.eventDate.getFullYear(); }
+    }
+
+    const noShowDocId = (ev, key) => `${ev.placeId || 'none'}__${eventYear(ev)}__${key}`;
+
+    // Distinct events this player was a no-show for, at this club this year
+    function noShowCount(ev, s) {
+      const ids = new Set();
+      noShowKeys(s).forEach(k => Object.keys((state.noShows[noShowDocId(ev, k)] || {}).events || {}).forEach(id => ids.add(id)));
+      return ids.size;
+    }
+
+    function watchNoShows(ev) {
+      const scope = `${ev.placeId}__${eventYear(ev)}`;
+      if (state.noShowScope === scope) return;
+      if (noShowUnsub) noShowUnsub();
+      state.noShowScope = scope;
+      state.noShows = {};
+      noShowUnsub = db.collection('noShowRecords')
+        .where('placeId', '==', ev.placeId).where('year', '==', eventYear(ev))
+        .onSnapshot(snap => {
+          state.noShows = {};
+          snap.forEach(d => { state.noShows[d.id] = d.data(); });
+          render();
+        }, err => console.error('noShowRecords', err));
+    }
+
+    async function setNoShow(ev, s, on) {
+      const batch = db.batch();
+      batch.update(events().doc(ev.id), { [`signups.${s.id}.noShow`]: on ? true : FV.delete() });
+      for (const key of noShowKeys(s)) {
+        const ref = db.collection('noShowRecords').doc(noShowDocId(ev, key));
+        batch.set(ref, {
+          placeId: ev.placeId, placeName: ev.placeName, year: eventYear(ev), key,
+          name: s.name, email: s.email || '', userId: s.userId || null,
+          updatedAt: FV.serverTimestamp(),
+          events: { [ev.id]: on
+            ? { title: ev.title, eventDate: Timestamp.fromDate(ev.eventDate), markedBy: state.user.uid, markedAt: Timestamp.now() }
+            : FV.delete() }
+        }, { merge: true });
+      }
+      await batch.commit();
+      if (on && s.userId) {
+        // Count after this mark: existing distinct events plus this one
+        const ids = new Set([ev.id]);
+        noShowKeys(s).forEach(k => Object.keys((state.noShows[noShowDocId(ev, k)] || {}).events || {}).forEach(id => ids.add(id)));
+        const n = ids.size;
+        db.collection('pendingNotifications').doc(s.userId).collection('notifications').add({
+          title: n >= NO_SHOW_LIMIT ? 'Sign-ups paused for this year' : `No-show warning ${n} of ${NO_SHOW_LIMIT}`,
+          body: n >= NO_SHOW_LIMIT
+            ? `You missed "${ev.title}" without cancelling. That's ${NO_SHOW_LIMIT} no-shows this year at ${ev.placeName || 'this club'}, so you can't sign up for its events until next year.`
+            : `You were marked as a no-show for "${ev.title}". Please cancel if you can't make it — after ${NO_SHOW_LIMIT} no-shows you can't sign up for the rest of the year.`,
+          type: 'event_no_show',
+          eventId: ev.id,
+          placeId: ev.placeId,
+          createdAt: FV.serverTimestamp(),
+          delivered: false
+        }).catch(console.error);
+      }
+      toast(on ? `${s.name} marked as a no-show` : `No-show removed for ${s.name}`);
+    }
+
+    // ─────────────────────────────── Auth
+
+    auth.onAuthStateChanged(user => {
+      unsubs.forEach(u => u());
+      unsubs = [];
+      state.user = user;
+      state.events = [];
+      state.places = {};
+      state.loaded = { places: false, events: false };
+      state.openId = null;
+      if (!user) {
+        document.getElementById('topbar').classList.add('hidden');
+        renderLogin();
+        return;
+      }
+      document.getElementById('topbar').classList.remove('hidden');
+      document.getElementById('who').textContent = user.email || '';
+      render();
+      unsubs.push(db.collection('placesToPlay').onSnapshot(snap => {
+        state.places = {};
+        snap.forEach(doc => { state.places[doc.id] = { id: doc.id, ...doc.data() }; });
+        state.loaded.places = true;
+        render();
+      }, err => showLoadError(err)));
+      unsubs.push(events().orderBy('eventDate').onSnapshot(snap => {
+        state.events = snap.docs.map(parseEvent);
+        state.loaded.events = true;
+        render();
+      }, err => showLoadError(err)));
+    });
+
+    document.getElementById('signOutBtn').onclick = () => auth.signOut();
+
+    function showLoadError(err) {
+      console.error(err);
+      document.getElementById('main').innerHTML =
+        `<div class="empty"><b>Couldn't load your events</b>${esc(err.message)}</div>`;
+    }
+
+    function renderLogin(message) {
+      document.getElementById('main').innerHTML = `
+        <div class="login">
+          <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" />
+          <h1>Event Admin</h1>
+          <p class="sub">Sign in with your AthleteBridge account to manage sign-up events.</p>
+          <form class="card" id="loginForm">
+            <label class="field">Email
+              <input type="email" id="loginEmail" required autocomplete="email" />
+            </label>
+            <label class="field">Password
+              <input type="password" id="loginPassword" required autocomplete="current-password" />
+            </label>
+            <button class="btn block" type="submit" id="loginBtn">Sign In</button>
+            <div class="error-msg ${message ? '' : 'hidden'}" id="loginError">${esc(message || '')}</div>
+            <div class="foot"><button type="button" class="linkbtn" id="resetBtn">Forgot password?</button></div>
+          </form>
+          <p class="foot">No account yet? Sign up in the AthleteBridge app, then come back here.</p>
+        </div>`;
+      const errEl = document.getElementById('loginError');
+      const showErr = m => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+      document.getElementById('loginForm').onsubmit = async e => {
+        e.preventDefault();
+        const btn = document.getElementById('loginBtn');
+        btn.disabled = true; btn.textContent = 'Signing in…';
+        try {
+          await auth.signInWithEmailAndPassword(
+            document.getElementById('loginEmail').value.trim(),
+            document.getElementById('loginPassword').value);
+        } catch (err) {
+          const bad = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'];
+          showErr(bad.includes(err.code) ? 'Email or password is incorrect.' : err.message);
+          btn.disabled = false; btn.textContent = 'Sign In';
+        }
+      };
+      document.getElementById('resetBtn').onclick = async () => {
+        const email = document.getElementById('loginEmail').value.trim();
+        if (!email) { showErr('Enter your email above, then tap "Forgot password?" again.'); return; }
+        try { await auth.sendPasswordResetEmail(email); toast('Password reset email sent'); }
+        catch (err) { showErr(err.message); }
+      };
+    }
+
+    // ─────────────────────────────── Views
+
+    function render() {
+      if (!state.user) return;
+      const main = document.getElementById('main');
+      if (!state.loaded.events || !state.loaded.places) {
+        main.innerHTML = '<div class="loading">Loading your events…</div>';
+        return;
+      }
+      const ev = state.openId && state.events.find(e => e.id === state.openId);
+      if (state.openId && !ev) state.openId = null;
+      if (ev) watchNoShows(ev);
+      main.innerHTML = ev ? detailHTML(ev) : listHTML();
+    }
+
+    function listHTML() {
+      const mine = state.events.filter(canManage);
+      const now = Date.now();
+      // An event stays "upcoming" until 3 hours after it starts so it's easy to find during check-in
+      const upcoming = mine.filter(e => e.eventDate.getTime() + 3 * 3600e3 >= now);
+      const past = mine.filter(e => e.eventDate.getTime() + 3 * 3600e3 < now).reverse();
+      const list = state.tab === 'upcoming' ? upcoming : past;
+
+      const items = list.map(e => {
+        const d = e.eventDate;
+        const full = e.signupCount >= e.maxSignups;
+        const notOpen = e.opensAt && now < e.opensAt;
+        const badges = [
+          e.recurrence === 'weekly' ? '<span class="badge blue">Weekly</span>' : '',
+          notOpen ? `<span class="badge orange">Opens ${esc(fmt.short(e.opensAt))}</span>` : '',
+          full ? '<span class="badge red">Full</span>' : '',
+          e.waitlist.length ? `<span class="badge orange">${e.waitlist.length} waitlisted</span>` : '',
+          e.feeUSD ? `<span class="badge green">${e.paidCount}/${e.signups.length} paid</span>` : '',
+          e.reportedCount ? `<span class="badge orange">${e.reportedCount} to confirm</span>` : ''
+        ].join('');
+        return `
+          <div class="event-item" data-action="open" data-id="${e.id}">
+            <div class="datebox">
+              <div class="dow">${d.toLocaleDateString(undefined, { weekday: 'short' })}</div>
+              <div class="day">${d.getDate()}</div>
+              <div class="mon">${d.toLocaleDateString(undefined, { month: 'short' })}</div>
+            </div>
+            <div class="info">
+              <div class="name">${esc(e.title)}</div>
+              <div class="meta">${esc(fmt.time(d))}${e.placeName ? ' · ' + esc(e.placeName) : ''}</div>
+              <div class="badges">${badges}</div>
+            </div>
+            <div class="stats">
+              <div class="big">${e.signupCount}<span style="color:var(--faint);font-weight:500">/${e.maxSignups}</span></div>
+              <div class="small">signed up</div>
+            </div>
+          </div>`;
+      }).join('');
+
+      const empty = state.tab === 'upcoming'
+        ? `<div class="empty"><b>No upcoming events</b>Create one and share the link with your players.</div>`
+        : `<div class="empty"><b>No past events</b></div>`;
+
+      return `
+        <div class="toolbar">
+          <div class="tabs">
+            <button data-action="tab" data-tab="upcoming" class="${state.tab === 'upcoming' ? 'active' : ''}">Upcoming (${upcoming.length})</button>
+            <button data-action="tab" data-tab="past" class="${state.tab === 'past' ? 'active' : ''}">Past (${past.length})</button>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn" data-action="new">+ New Event</button>
+        </div>
+        <div class="event-list">${items || empty}</div>`;
+    }
+
+    function detailHTML(ev) {
+      const now = Date.now();
+      const notOpen = ev.opensAt && now < ev.opensAt;
+      const pct = ev.maxSignups ? Math.min(100, Math.round(ev.signupCount / ev.maxSignups * 100)) : 0;
+      const hasFee = !!ev.feeUSD;
+      const started = now >= ev.eventDate.getTime();
+      const noShowTotal = ev.signups.filter(s => s.noShow).length;
+      const q = state.search.trim().toLowerCase();
+      const rows = ev.signups
+        .map((s, i) => ({ s, i }))
+        .filter(({ s }) => !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q))
+        .map(({ s, i }) => {
+          const payState = s.paid ? 'paid' : (s.selfPaid ? 'reported' : '');
+          const payLabel = s.paid ? '✓ Paid' : (s.selfPaid ? 'Says paid — confirm' : 'Unpaid');
+          const source = s.addedByAdmin ? 'Added by admin' : (s.userId ? 'App' : 'Web');
+          const warnings = noShowCount(ev, s);
+          const warnBadge = warnings
+            ? ` <span class="badge ${warnings >= NO_SHOW_LIMIT ? 'red' : 'orange'}" title="No-shows this year at this club">⚠ ${warnings}/${NO_SHOW_LIMIT}</span>` : '';
+          return `
+            <tr class="${s.noShow ? 'noshow' : ''}">
+              <td class="num">${i + 1}</td>
+              <td>${esc(s.name)}${warnBadge}<div class="sub">${esc(s.email || '—')}</div></td>
+              <td class="hide-sm">${esc(fmt.short(s.at))}<div class="sub">${source}${ev.waiverText ? (s.waiver ? ' · waiver ✓' : ' · no waiver') : ''}</div></td>
+              ${hasFee ? `<td><button class="paybtn ${payState}" data-action="paid" data-sid="${s.id}" data-paid="${s.paid ? '0' : '1'}">${payLabel}</button></td>` : ''}
+              ${started ? `<td><button class="paybtn ${s.noShow ? 'noshow' : ''}" data-action="noShow" data-sid="${s.id}" data-on="${s.noShow ? '0' : '1'}">${s.noShow ? '✗ No-show' : 'Mark no-show'}</button></td>` : ''}
+              <td class="right"><button class="iconbtn" title="Remove" data-action="remove" data-sid="${s.id}" data-name="${esc(s.name)}">×</button></td>
+            </tr>`;
+        }).join('');
+
+      const waitRows = ev.waitlist.map((w, i) => `
+        <tr>
+          <td class="num">#${i + 1}</td>
+          <td>${esc(w.name)}<div class="sub">${esc(w.email || '—')}</div></td>
+          <td class="hide-sm">${esc(fmt.short(w.at))}</td>
+          <td class="right"><button class="iconbtn" title="Remove from waitlist" data-action="removeWait" data-sid="${w.id}" data-name="${esc(w.name)}">×</button></td>
+        </tr>`).join('');
+
+      const weekly = ev.recurrence === 'weekly';
+      const nextEv = ev.nextOccurrenceId && state.events.find(e => e.id === ev.nextOccurrenceId);
+
+      return `
+        <div class="back"><button class="linkbtn" data-action="back">← All events</button></div>
+
+        <div class="card">
+          <div class="detail-head">
+            <div class="info">
+              <h1>${esc(ev.title)}</h1>
+              <div class="meta">📅 ${esc(fmt.full(ev.eventDate))}</div>
+              ${ev.placeName ? `<div class="meta">📍 ${esc(ev.placeName)}${ev.location ? ' — ' + esc(ev.location) : ''}</div>` : ''}
+              <div class="badges">
+                ${weekly ? '<span class="badge blue">Repeats weekly</span>' : ''}
+                ${notOpen ? `<span class="badge orange">Sign-ups open ${esc(fmt.short(ev.opensAt))}</span>`
+                          : '<span class="badge green">Sign-ups open</span>'}
+                ${ev.waiverText ? '<span class="badge">Waiver required</span>' : ''}
+              </div>
+            </div>
+            <div class="actions">
+              <a class="btn secondary small" href="${ev.shareURL}" target="_blank" rel="noopener">View public page ↗</a>
+              <button class="btn secondary small" data-action="edit">Edit</button>
+            </div>
+          </div>
+          <div class="statgrid">
+            <div class="stat"><div class="v">${ev.signupCount}/${ev.maxSignups}</div><div class="l">Signed up</div><div class="bar"><div style="width:${pct}%"></div></div></div>
+            <div class="stat"><div class="v">${Math.max(0, ev.maxSignups - ev.signupCount)}</div><div class="l">Spots left</div></div>
+            <div class="stat"><div class="v">${ev.waitlist.length}</div><div class="l">Waitlist</div></div>
+            <div class="stat"><div class="v">${hasFee ? `${ev.paidCount}/${ev.signups.length}` : '—'}</div><div class="l">${hasFee ? `Paid · ${fmt.money(ev.paidCount * ev.feeUSD)} collected` : 'No fee'}</div></div>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <h2>Share</h2>
+            <div class="copyrow">
+              <input readonly value="${esc(ev.shareURL)}" onclick="this.select()" />
+              <button class="btn small" data-action="copyLink">Copy link</button>
+            </div>
+            <div class="caption">${esc(shareCaption(ev))}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn small" data-action="copyCaption">Copy post text</button>
+              <button class="btn secondary small" data-action="qr">QR code</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Settings</h2>
+            <div class="kv"><span class="k">Capacity</span><span class="v">${ev.maxSignups} <button class="linkbtn" data-action="capacity" style="margin-left:6px">Change</button></span></div>
+            <div class="kv"><span class="k">Fee</span><span class="v">${hasFee ? fmt.money(ev.feeUSD) + ' per player' : 'None'}</span></div>
+            ${hasFee ? `<div class="kv"><span class="k">Players can mark themselves paid</span><span class="v"><input type="checkbox" data-action="selfReport" ${ev.allowSelfReportPaid ? 'checked' : ''} style="accent-color:var(--green);width:18px;height:18px"></span></div>` : ''}
+            <div class="kv"><span class="k">Sign-ups open</span><span class="v">${ev.opensAt ? esc(fmt.short(ev.opensAt)) : 'Right away'}</span></div>
+            ${weekly ? `<div class="kv"><span class="k">Next week</span><span class="v">${
+              nextEv ? `<button class="linkbtn" data-action="open" data-id="${nextEv.id}">${esc(fmt.short(nextEv.eventDate))} →</button>`
+                     : ev.nextOccurrenceId ? 'Scheduled'
+                     : `Auto-created when this starts · <button class="linkbtn" data-action="next">Create now</button>`
+            }</span></div>` : ''}
+          </div>
+        </div>
+
+        ${ev.notes || ev.waiverText ? `
+        <div class="grid2">
+          ${ev.notes ? `<div class="card"><h2>Important notes</h2><div class="pre">${esc(ev.notes)}</div></div>` : ''}
+          ${ev.waiverText ? `<div class="card"><h2>Waiver</h2><div class="pre">${esc(ev.waiverText)}</div></div>` : ''}
+        </div>` : ''}
+
+        <div class="card" style="margin-top:16px">
+          <h2>Signed up <span class="count">(${ev.signups.length})</span></h2>
+          ${started ? `<p style="color:var(--muted);font-size:13px;margin:-4px 0 12px">Mark anyone who didn't show up and didn't cancel${noShowTotal ? ` · ${noShowTotal} marked` : ''}. Each no-show is a warning; at ${NO_SHOW_LIMIT} in a year, the player can't sign up for this club's events until next year.</p>` : ''}
+          <div class="table-tools">
+            <input type="search" placeholder="Search name or email" value="${esc(state.search)}" data-action="search" />
+            <button class="btn small" data-action="addPlayer">+ Add player</button>
+            <button class="btn secondary small" data-action="csv" ${ev.signups.length ? '' : 'disabled'}>Export CSV</button>
+          </div>
+          ${ev.signups.length ? `
+            <table>
+              <thead><tr><th></th><th>Player</th><th class="hide-sm">Signed up</th>${hasFee ? '<th>Payment</th>' : ''}${started ? '<th>Attendance</th>' : ''}<th></th></tr></thead>
+              <tbody>${rows || `<tr><td colspan="6" style="color:var(--faint)">No matches</td></tr>`}</tbody>
+            </table>` : '<div class="empty" style="padding:24px">No one has signed up yet.</div>'}
+        </div>
+
+        ${ev.waitlist.length ? `
+        <div class="card" style="margin-top:16px">
+          <h2>Waitlist <span class="count">(${ev.waitlist.length})</span></h2>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:10px">The first person moves up automatically when a spot opens.</p>
+          <table><tbody>${waitRows}</tbody></table>
+        </div>` : ''}
+
+        <div style="margin-top:24px;text-align:right">
+          <button class="btn danger small" data-action="delete">Delete event</button>
+        </div>`;
+    }
+
+    // ─────────────────────────────── Modals
+
+    function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+
+    function openModal(html, narrow) {
+      const root = document.getElementById('modalRoot');
+      root.innerHTML = `<div class="backdrop" id="backdrop"><div class="modal ${narrow ? 'narrow' : ''}">${html}</div></div>`;
+      document.getElementById('backdrop').addEventListener('mousedown', e => { if (e.target.id === 'backdrop') closeModal(); });
+      root.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+      return root;
+    }
+
+    // Promise-based confirm in a page modal (native confirm() blocks the tab)
+    function confirmModal(title, body, okLabel) {
+      return new Promise(resolve => {
+        const root = openModal(`
+          <h3>${esc(title)}</h3>
+          <p style="color:var(--muted);line-height:1.5">${esc(body)}</p>
+          <div class="foot">
+            <button class="btn secondary" data-close>Cancel</button>
+            <button class="btn danger" id="okBtn">${esc(okLabel)}</button>
+          </div>`, true);
+        root.querySelector('[data-close]').onclick = () => { closeModal(); resolve(false); };
+        root.querySelector('#okBtn').onclick = () => { closeModal(); resolve(true); };
+      });
+    }
+
+    function eventFormModal(ev) {
+      const editing = !!ev;
+      const uid = state.user.uid;
+      const places = Object.values(state.places).sort((a, b) => {
+        const aa = isPlaceAdmin(a, uid), bb = isPlaceAdmin(b, uid);
+        return aa === bb ? (a.name || '').localeCompare(b.name || '') : (aa ? -1 : 1);
+      });
+      const myPlaces = places.filter(p => isPlaceAdmin(p, uid));
+      const otherPlaces = places.filter(p => !isPlaceAdmin(p, uid));
+      const selectedPlace = ev ? ev.placeId : (myPlaces[0] && myPlaces[0].id) || '';
+      const opt = p => `<option value="${p.id}" ${p.id === selectedPlace ? 'selected' : ''}>${esc(p.name)}</option>`;
+
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 1);
+      defaultDate.setHours(18, 30, 0, 0);
+      const date = ev ? ev.eventDate : defaultDate;
+      const opens = ev ? (ev.customOpensAt ? CUSTOM_OPEN : ev.opensHoursBefore) : 24;
+      const customOpens = ev && ev.customOpensAt ? ev.customOpensAt : dayBeforeAt830(date);
+      const waiverOn = ev ? !!ev.waiverText : false;
+      const placeName = ev ? ev.placeName : ((state.places[selectedPlace] || {}).name || '');
+
+      const root = openModal(`
+        <h3>${editing ? 'Edit event' : 'New event'}</h3>
+        <form id="eventForm">
+          <div class="form-section">Event</div>
+          <label class="field">Title
+            <input id="f_title" required maxlength="120" placeholder="Tuesday Badminton" value="${esc(ev ? ev.title : '')}" />
+          </label>
+          <label class="field">Description <span class="hint">(optional)</span>
+            <textarea id="f_desc" rows="3" placeholder="All skill levels welcome!">${esc(ev ? ev.description : '')}</textarea>
+          </label>
+          <div class="row">
+            <label class="field">Date & time
+              <input type="datetime-local" id="f_date" required value="${toLocalInput(date)}" />
+            </label>
+            <label class="field">Capacity
+              <input type="number" id="f_max" required min="1" max="500" value="${ev ? ev.maxSignups : 20}" />
+            </label>
+          </div>
+          <label class="field">Venue
+            <select id="f_place" required ${editing ? 'disabled' : ''}>
+              ${places.length ? '' : '<option value="">No venues found</option>'}
+              ${myPlaces.length ? `<optgroup label="Clubs you admin">${myPlaces.map(opt).join('')}</optgroup>` : ''}
+              ${otherPlaces.length ? `<optgroup label="All venues">${otherPlaces.map(opt).join('')}</optgroup>` : ''}
+            </select>
+          </label>
+
+          <div class="form-section">Schedule</div>
+          <label class="check"><input type="checkbox" id="f_weekly" ${ev && ev.recurrence === 'weekly' ? 'checked' : ''} /> Repeats weekly — next week's event is created automatically</label>
+          <label class="field">Sign-ups open
+            <select id="f_opens">
+              ${OPEN_OPTIONS.map(([v, l]) => `<option value="${v}" ${v === opens ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field ${opens === CUSTOM_OPEN ? '' : 'hidden'}" id="customOpensField">Opens at
+            <span class="hint">— weekly events move this forward a week each time</span>
+            <input type="datetime-local" id="f_opensAt" value="${toLocalInput(customOpens)}" />
+          </label>
+
+          <div class="form-section">Payment <span style="text-transform:none;font-weight:400">(optional)</span></div>
+          <div class="row">
+            <label class="field">Fee per player ($)
+              <input type="number" id="f_fee" min="0" step="0.01" placeholder="e.g. 2" value="${ev && ev.feeUSD ? ev.feeUSD : ''}" />
+            </label>
+            <label class="field">Payment link or @venmo
+              <input id="f_pay" placeholder="@Hillside_Badminton" value="${esc(ev ? ev.paymentLink : '')}" />
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" id="f_self" ${ev && ev.allowSelfReportPaid ? 'checked' : ''} /> Players can mark themselves paid</label>
+
+          <div class="form-section">Rules</div>
+          <label class="field">Important notes <span class="hint">(optional — check-in, queue system, what to bring)</span>
+            <textarea id="f_notes" rows="4" placeholder="Each player must sign up individually…">${esc(ev ? ev.notes : '')}</textarea>
+          </label>
+          <label class="check"><input type="checkbox" id="f_waiverOn" ${waiverOn ? 'checked' : ''} /> Require waiver to sign up</label>
+          <label class="field ${waiverOn ? '' : 'hidden'}" id="waiverField">Waiver text
+            <textarea id="f_waiver" rows="4">${esc(ev && ev.waiverText ? ev.waiverText : defaultWaiver(placeName))}</textarea>
+          </label>
+
+          <div class="error-msg hidden" id="formError"></div>
+          <div class="foot">
+            <button type="button" class="btn secondary" data-close>Cancel</button>
+            <button type="submit" class="btn" id="saveBtn">${editing ? 'Save changes' : 'Create event'}</button>
+          </div>
+        </form>`);
+
+      // Picking "Custom" starts from 8:30 PM the day before whatever event date is entered
+      let customTouched = !!(ev && ev.customOpensAt);
+      root.querySelector('#f_opensAt').oninput = () => { customTouched = true; };
+      const syncCustomOpen = () => {
+        const isCustom = parseInt(root.querySelector('#f_opens').value, 10) === CUSTOM_OPEN;
+        root.querySelector('#customOpensField').classList.toggle('hidden', !isCustom);
+        const evDate = new Date(root.querySelector('#f_date').value);
+        if (isCustom && !customTouched && !isNaN(evDate)) root.querySelector('#f_opensAt').value = toLocalInput(dayBeforeAt830(evDate));
+      };
+      root.querySelector('#f_opens').onchange = syncCustomOpen;
+      root.querySelector('#f_date').addEventListener('change', syncCustomOpen);
+
+      root.querySelector('#f_waiverOn').onchange = e =>
+        root.querySelector('#waiverField').classList.toggle('hidden', !e.target.checked);
+      // Keep the starter waiver's venue name in sync until the admin edits it
+      let waiverEdited = editing && waiverOn;
+      root.querySelector('#f_waiver').oninput = () => { waiverEdited = true; };
+      root.querySelector('#f_place').onchange = e => {
+        if (!waiverEdited) root.querySelector('#f_waiver').value = defaultWaiver((state.places[e.target.value] || {}).name || '');
+      };
+
+      root.querySelector('#eventForm').onsubmit = async e => {
+        e.preventDefault();
+        const errEl = root.querySelector('#formError');
+        const btn = root.querySelector('#saveBtn');
+        const val = id => root.querySelector(id).value.trim();
+        const date = new Date(val('#f_date'));
+        const max = parseInt(val('#f_max'), 10);
+        const fee = parseFloat(val('#f_fee').replace('$', ''));
+        const placeId = editing ? ev.placeId : val('#f_place');
+        const place = state.places[placeId];
+        const fail = m => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+
+        if (isNaN(date)) return fail('Pick a date and time.');
+        if (!max || max < 1) return fail('Capacity must be at least 1.');
+        if (!editing && !place) return fail('Pick a venue.');
+        if (editing && max < ev.signupCount) return fail(`${ev.signupCount} people are already signed up — capacity can't go below that.`);
+
+        const opensChoice = parseInt(val('#f_opens'), 10) || 0;
+        const customOpen = opensChoice === CUSTOM_OPEN ? new Date(val('#f_opensAt')) : null;
+        if (customOpen && isNaN(customOpen)) return fail('Pick when sign-ups open.');
+        if (customOpen && customOpen >= date) return fail('Sign-ups must open before the event starts.');
+        const notes = val('#f_notes');
+        const waiver = root.querySelector('#f_waiverOn').checked ? val('#f_waiver') : '';
+        const payLink = val('#f_pay');
+        // Same field names and casing the iOS app writes (FirestoreManager.createSignupEvent)
+        const fields = {
+          title: val('#f_title'),
+          description: val('#f_desc'),
+          eventDate: Timestamp.fromDate(date),
+          maxSignups: max,
+          recurrence: root.querySelector('#f_weekly').checked ? 'weekly' : null,
+          opensHoursBefore: opensChoice > 0 ? opensChoice : null,
+          opensAt: customOpen ? Timestamp.fromDate(customOpen) : null,
+          feeUSD: fee > 0 ? fee : null,
+          paymentLink: payLink || null,
+          allowSelfReportPaid: root.querySelector('#f_self').checked || null,
+          notes: notes || null,
+          waiverText: waiver || null
+        };
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          if (editing) {
+            const update = {};
+            for (const [k, v] of Object.entries(fields)) update[k] = v === null ? FV.delete() : v;
+            await events().doc(ev.id).update(update);
+            if (max > ev.maxSignups) await promoteFromWaitlist(ev.id);
+            toast('Event updated');
+          } else {
+            const data = {
+              location: place.address || '',
+              placeId: place.id,
+              placeName: place.name || '',
+              signupCount: 0,
+              createdBy: state.user.uid,
+              createdAt: FV.serverTimestamp(),
+              signups: {},
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            };
+            for (const [k, v] of Object.entries(fields)) if (v !== null) data[k] = v;
+            const ref = await events().add(data);
+            state.openId = ref.id;
+            state.tab = 'upcoming';
+            toast('Event created');
+          }
+          closeModal();
+          render();
+        } catch (err) {
+          console.error(err);
+          fail(err.message);
+          btn.disabled = false; btn.textContent = editing ? 'Save changes' : 'Create event';
+        }
+      };
+    }
+
+    function qrModal(ev) {
+      const qr = qrcode(0, 'M');
+      qr.addData(ev.shareURL);
+      qr.make();
+      const src = qr.createDataURL(10, 2);
+      openModal(`
+        <div class="qr">
+          <h3>${esc(ev.title)}</h3>
+          <img src="${src}" alt="QR code for the sign-up link" />
+          <div class="url">${esc(ev.shareURL)}</div>
+          <div class="foot" style="justify-content:center">
+            <a class="btn" href="${src}" download="${esc(ev.title.replace(/[^\w-]+/g, '-'))}-signup-qr.gif">Download</a>
+            <button class="btn secondary" data-close>Done</button>
+          </div>
+        </div>`, true);
+    }
+
+    function addPlayerModal(ev) {
+      const root = openModal(`
+        <h3>Add player</h3>
+        <p style="color:var(--muted);font-size:14px;margin-bottom:14px">For walk-ins or people who messaged you. They skip the waiver and opening-time checks.</p>
+        <form id="addForm">
+          <label class="field">Name <input id="a_name" required /></label>
+          <label class="field">Email <span class="hint">(optional)</span> <input type="email" id="a_email" /></label>
+          ${ev.feeUSD ? '<label class="check"><input type="checkbox" id="a_paid" /> Already paid</label>' : ''}
+          ${ev.signupCount >= ev.maxSignups ? `<p style="color:#b25d00;font-size:13px">The event is full — this adds them over capacity (${ev.signupCount + 1}/${ev.maxSignups}).</p>` : ''}
+          <div class="error-msg hidden" id="addError"></div>
+          <div class="foot">
+            <button type="button" class="btn secondary" data-close>Cancel</button>
+            <button type="submit" class="btn">Add</button>
+          </div>
+        </form>`, true);
+      root.querySelector('#addForm').onsubmit = async e => {
+        e.preventDefault();
+        const name = root.querySelector('#a_name').value.trim();
+        const email = root.querySelector('#a_email').value.trim().toLowerCase();
+        const paidBox = root.querySelector('#a_paid');
+        if (!name) return;
+        if (email && ev.signups.some(s => s.email.toLowerCase() === email)) {
+          const el = root.querySelector('#addError');
+          el.textContent = 'Someone with that email is already signed up.';
+          el.classList.remove('hidden');
+          return;
+        }
+        const id = events().doc().id;
+        await events().doc(ev.id).update({
+          [`signups.${id}`]: {
+            name, email, userId: null,
+            signedUpAt: FV.serverTimestamp(),
+            paid: !!(paidBox && paidBox.checked),
+            addedByAdmin: true
+          },
+          signupCount: FV.increment(1)
+        });
+        closeModal();
+        toast(`${name} added`);
+      };
+    }
+
+    function capacityModal(ev) {
+      const root = openModal(`
+        <h3>Change capacity</h3>
+        <form id="capForm">
+          <label class="field">Max players
+            <input type="number" id="c_max" min="${Math.max(1, ev.signupCount)}" max="500" value="${ev.maxSignups}" required />
+          </label>
+          ${ev.waitlist.length ? `<p style="color:var(--muted);font-size:13px">Raising it moves people up from the waitlist (${ev.waitlist.length} waiting).</p>` : ''}
+          <div class="foot">
+            <button type="button" class="btn secondary" data-close>Cancel</button>
+            <button type="submit" class="btn">Save</button>
+          </div>
+        </form>`, true);
+      root.querySelector('#capForm').onsubmit = async e => {
+        e.preventDefault();
+        const max = parseInt(root.querySelector('#c_max').value, 10);
+        if (!max || max < ev.signupCount) return;
+        await events().doc(ev.id).update({ maxSignups: max });
+        if (max > ev.maxSignups) await promoteFromWaitlist(ev.id);
+        closeModal();
+        toast('Capacity updated');
+      };
+    }
+
+    // ─────────────────────────────── Data actions
+
+    // Fill open spots from the waitlist, earliest first, and notify each promoted app user
+    // (same notification the iOS app sends).
+    async function promoteFromWaitlist(eventId) {
+      const ref = events().doc(eventId);
+      const promoted = await db.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const d = snap.data() || {};
+        let count = d.signupCount || 0;
+        const max = d.maxSignups || 0;
+        const queue = Object.entries(d.waitlist || {})
+          .sort(([, a], [, b]) => ((tsDate(a.joinedAt) || 0) - (tsDate(b.joinedAt) || 0)));
+        const update = {};
+        const moved = [];
+        for (const [key, w] of queue) {
+          if (count >= max) break;
+          update[`waitlist.${key}`] = FV.delete();
+          update[`signups.${key}`] = {
+            name: w.name || '', email: w.email || '', userId: w.userId || '',
+            signedUpAt: Timestamp.now(), paid: false,
+            ...(w.waiverAcceptedAt ? { waiverAcceptedAt: w.waiverAcceptedAt } : {})
+          };
+          count++;
+          moved.push(w);
+        }
+        if (moved.length) {
+          update.signupCount = FV.increment(moved.length);
+          tx.update(ref, update);
+        }
+        return { moved, title: d.title || 'an event', placeId: d.placeId || '' };
+      });
+      for (const w of promoted.moved) {
+        if (!w.userId) continue;
+        db.collection('pendingNotifications').doc(w.userId).collection('notifications').add({
+          title: "You're in!",
+          body: `A spot opened up in "${promoted.title}" — you've been moved off the waitlist.`,
+          type: 'event_waitlist_promoted',
+          eventId,
+          placeId: promoted.placeId,
+          createdAt: FV.serverTimestamp(),
+          delivered: false
+        }).catch(console.error);
+      }
+      if (promoted.moved.length) toast(`${promoted.moved.length} moved up from the waitlist`);
+    }
+
+    async function createNextWeek(ev) {
+      const next = new Date(ev.eventDate);
+      next.setDate(next.getDate() + 7);   // same local time, even across DST
+      const dup = state.events.find(e => e.id !== ev.id && e.placeId === ev.placeId && e.title === ev.title
+        && Math.abs(e.eventDate - next) < 24 * 3600e3);
+      if (dup) {
+        await events().doc(ev.id).update({ nextOccurrenceId: dup.id });
+        toast("Next week's event already exists");
+        return;
+      }
+      const r = ev.raw;
+      const data = {
+        eventDate: Timestamp.fromDate(next),
+        signupCount: 0,
+        signups: {},
+        createdAt: FV.serverTimestamp(),
+        previousOccurrenceId: ev.id
+      };
+      for (const key of ['title', 'description', 'location', 'placeId', 'placeName', 'maxSignups', 'createdBy',
+        'recurrence', 'feeUSD', 'paymentLink', 'allowSelfReportPaid', 'opensHoursBefore', 'notes', 'waiverText', 'timeZone']) {
+        if (r[key] !== undefined) data[key] = r[key];
+      }
+      if (ev.customOpensAt) {
+        const opens = new Date(ev.customOpensAt);
+        opens.setDate(opens.getDate() + 7);
+        data.opensAt = Timestamp.fromDate(opens);
+      }
+      const ref = events().doc();
+      const batch = db.batch();
+      batch.set(ref, data);
+      batch.update(events().doc(ev.id), { nextOccurrenceId: ref.id });
+      await batch.commit();
+      toast("Next week's event created");
+    }
+
+    function exportCSV(ev) {
+      const cell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+      const head = ['#', 'Name', 'Email', 'Signed up', 'Source'];
+      if (ev.feeUSD) head.push('Paid');
+      if (ev.waiverText) head.push('Waiver accepted');
+      const lines = [head.map(cell).join(',')];
+      ev.signups.forEach((s, i) => {
+        const row = [i + 1, s.name, s.email, s.at.toLocaleString(), s.addedByAdmin ? 'Admin' : (s.userId ? 'App' : 'Web')];
+        if (ev.feeUSD) row.push(s.paid ? 'Yes' : (s.selfPaid ? 'Reported' : 'No'));
+        if (ev.waiverText) row.push(s.waiver ? 'Yes' : 'No');
+        lines.push(row.map(cell).join(','));
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const d = ev.eventDate;
+      a.download = `${ev.title.replace(/[^\w-]+/g, '-')}-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    // ─────────────────────────────── Event delegation
+
+    const main = document.getElementById('main');
+
+    main.addEventListener('click', async e => {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const action = el.dataset.action;
+      const ev = state.openId && state.events.find(x => x.id === state.openId);
+      try {
+        switch (action) {
+          case 'tab': state.tab = el.dataset.tab; render(); break;
+          case 'new': eventFormModal(null); break;
+          case 'open': state.openId = el.dataset.id; state.search = ''; render(); window.scrollTo(0, 0); break;
+          case 'back': state.openId = null; render(); break;
+          case 'edit': eventFormModal(ev); break;
+          case 'copyLink': copy(ev.shareURL, 'Link copied'); break;
+          case 'copyCaption': copy(shareCaption(ev), 'Post text copied'); break;
+          case 'qr': qrModal(ev); break;
+          case 'capacity': capacityModal(ev); break;
+          case 'addPlayer': addPlayerModal(ev); break;
+          case 'csv': exportCSV(ev); break;
+          case 'next': el.disabled = true; await createNextWeek(ev); break;
+          case 'noShow': {
+            const s = ev.signups.find(x => x.id === el.dataset.sid);
+            const on = el.dataset.on === '1';
+            const after = noShowCount(ev, s) + (on ? 1 : 0);
+            if (on && after >= NO_SHOW_LIMIT && !(await confirmModal('Mark no-show?',
+                `That makes ${after} no-shows this year for ${s.name} — they won't be able to sign up for ${ev.placeName || 'this club'}'s events until next year.`, 'Mark no-show'))) break;
+            await setNoShow(ev, s, on);
+            break;
+          }
+          case 'paid':
+            await events().doc(ev.id).update({ [`signups.${el.dataset.sid}.paid`]: el.dataset.paid === '1' });
+            break;
+          case 'remove':
+            if (await confirmModal('Remove player?', `${el.dataset.name} will be removed from this event. If anyone is on the waitlist, the first person moves up.`, 'Remove')) {
+              await events().doc(ev.id).update({ [`signups.${el.dataset.sid}`]: FV.delete(), signupCount: FV.increment(-1) });
+              await promoteFromWaitlist(ev.id);
+              toast('Player removed');
+            }
+            break;
+          case 'removeWait':
+            if (await confirmModal('Remove from waitlist?', `${el.dataset.name} will be taken off the waitlist.`, 'Remove')) {
+              await events().doc(ev.id).update({ [`waitlist.${el.dataset.sid}`]: FV.delete() });
+            }
+            break;
+          case 'delete':
+            if (await confirmModal('Delete this event?', `"${ev.title}" and all ${ev.signups.length} sign-ups will be permanently removed.`, 'Delete event')) {
+              await events().doc(ev.id).delete();
+              state.openId = null;
+              render();
+              toast('Event deleted');
+            }
+            break;
+        }
+      } catch (err) {
+        console.error(err);
+        toast('Error: ' + err.message);
+      }
+    });
+
+    main.addEventListener('change', async e => {
+      if (e.target.dataset.action !== 'selfReport') return;
+      const ev = state.events.find(x => x.id === state.openId);
+      await events().doc(ev.id).update({ allowSelfReportPaid: e.target.checked });
+    });
+
+    // Search filters in place without losing focus on re-render
+    main.addEventListener('input', e => {
+      if (e.target.dataset.action !== 'search') return;
+      state.search = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const input = main.querySelector('[data-action="search"]');
+      input.focus();
+      input.setSelectionRange(pos, pos);
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  </script>
+</body>
+</html>

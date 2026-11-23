@@ -3,296 +3,379 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MoneyMogging101 — Simulator, Dividends & Education</title>
-  <meta name="description" content="Simulate stock investments, track dividends, and learn econ basics in Gen Z." />
+  <title>MoneyMogging101 — Simulator, Movers, Dividends & Education</title>
+  <meta name="description" content="Simulate stock investments, watch the day's most volatile movers, track dividends, and learn econ basics in Gen Z." />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --green:     #00e676;
-      --green-dim: rgba(0,230,118,.12);
-      --green-bdr: rgba(0,230,118,.28);
-      --red:       #ff5252;
-      --yellow:    #ffd740;
-      --blue:      #448aff;
-      --bg:        #0a0a0a;
-      --bg2:       #111;
-      --bg3:       #181818;
-      --border:    #222;
-      --text:      #f0f0f0;
-      --muted:     #666;
-      --radius:    14px;
+      color-scheme: light;
+      --bg:        #f6f4ed;   /* page: warm paper */
+      --bg2:       #fffdf8;   /* raised surface */
+      --bg3:       #ece9df;   /* wash / hover */
+      --border:    #d8d4c6;
+      --text:      #16150f;
+      --text2:     #45433b;
+      --muted:     #6f6c62;
+      --green:     #0a6a2c;
+      --red:       #b3261e;
+      --blue:      #2a78d6;   /* chart series 1 */
+      --orange:    #eb6834;   /* chart series 2 */
+      --yellow:    var(--text);
+      --green-dim: transparent;
+      --green-bdr: var(--border);
+      --bar-up:    #1d8a45;
+      --bar-down:  #cf4037;
+      --grid:      #e6e2d6;
+      --serif:     "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      --sans:      system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg:        #131311;
+        --bg2:       #1b1b18;
+        --bg3:       #262622;
+        --border:    #35342f;
+        --text:      #eceae3;
+        --text2:     #c4c1b6;
+        --muted:     #98958a;
+        --green:     #58c47a;
+        --red:       #f0766d;
+        --blue:      #3987e5;
+        --orange:    #d95926;
+        --bar-up:    #3fa862;
+        --bar-down:  #d9564d;
+        --grid:      #2a2a26;
+      }
+    }
+    html { -webkit-text-size-adjust: 100%; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 16px; line-height: 1.5; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-    /* ── NAV ── */
-    nav {
-      display: flex; align-items: center; gap: 0;
-      padding: 0 28px; border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; background: rgba(10,10,10,.95);
-      backdrop-filter: blur(16px); z-index: 200; height: 56px;
-    }
-    .logo { font-size: 1.05rem; font-weight: 900; letter-spacing: -.02em; margin-right: 28px; white-space: nowrap; }
-    .logo span { color: var(--green); }
-    .tabs { display: flex; gap: 4px; }
-    .tab-btn {
-      background: none; border: none; color: var(--muted);
-      padding: 8px 16px; font-size: 0.88rem; font-weight: 700;
-      cursor: pointer; border-radius: 8px; transition: color .15s, background .15s;
-      white-space: nowrap;
-    }
-    .tab-btn:hover { color: var(--text); background: var(--bg3); }
-    .tab-btn.active { color: var(--green); background: var(--green-dim); }
+    .wrap, .section-wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
 
-    /* ── SHARED ── */
-    .section-wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
-    .page { display: none; }
+    /* ── Masthead ── */
+    .masthead { padding-top: 22px; }
+    .masthead-top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .logo { font-family: var(--serif); font-size: 1.7rem; font-weight: 700; letter-spacing: -.015em; line-height: 1.1; }
+    .logo span { font-style: italic; font-weight: 400; }
+    .dateline { font-size: .82rem; color: var(--muted); }
+    nav { position: sticky; top: 0; z-index: 50; background: var(--bg); border-top: 1px solid var(--text); border-bottom: 3px double var(--text); margin-top: 14px; }
+    .tabs { display: flex; gap: 26px; overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab-btn { background: none; border: none; padding: 11px 0 9px; font-size: .92rem; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+
+    .page { display: none; padding-bottom: 72px; }
     .page.active { display: block; }
 
-    /* ══════════════════════════════════
-       SIMULATOR TAB
-    ══════════════════════════════════ */
-    .hero { text-align: center; padding: 56px 20px 40px; }
-    .hero h1 { font-size: clamp(2rem, 6vw, 3.4rem); font-weight: 900; letter-spacing: -.03em; line-height: 1.08; margin-bottom: 14px; }
-    .hero h1 .g { color: var(--green); }
-    .hero p { color: var(--muted); font-size: 1rem; max-width: 500px; margin: 0 auto 28px; line-height: 1.6; }
-    .presets { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px; }
-    .preset-btn {
-      background: var(--bg3); border: 1px solid var(--border); border-radius: 999px;
-      color: var(--text); padding: 7px 16px; font-size: 0.8rem; font-weight: 700;
-      cursor: pointer; transition: border-color .15s, background .15s, color .15s;
-    }
-    .preset-btn:hover { border-color: var(--green); background: var(--green-dim); color: var(--green); }
+    /* ── Page header ── */
+    .page-head { padding: 40px 0 26px; max-width: 660px; }
+    .page-head h1 { font-family: var(--serif); font-weight: 700; font-size: clamp(1.9rem, 4.6vw, 2.7rem); line-height: 1.12; letter-spacing: -.015em; text-wrap: balance; }
+    .page-head h1 em { font-weight: 400; }
+    .page-head p { margin-top: 12px; color: var(--text2); font-size: 1.04rem; line-height: 1.55; }
 
-    .form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 28px; margin-bottom: 16px; }
-    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .field label { display: block; font-size: 0.68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
-    .field input, .field select {
-      width: 100%; background: var(--bg3); border: 1px solid var(--border);
-      border-radius: 10px; color: var(--text); padding: 10px 13px;
-      font-size: 0.93rem; font-weight: 600; outline: none; transition: border-color .15s;
-    }
-    .field input:focus, .field select:focus { border-color: var(--green); }
-    .field input::placeholder { color: var(--muted); font-weight: 400; }
-    .field input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.45); }
+    /* ── Presets: a line of text links ── */
+    .presets { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin-bottom: 22px; font-size: .9rem; }
+    .presets-label { color: var(--muted); }
+    .preset-btn { background: none; border: none; padding: 2px 0; color: var(--text); text-decoration: underline; text-decoration-color: var(--border); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+    .preset-btn:hover { text-decoration-color: var(--text); }
+    .preset-btn:disabled { color: var(--muted); cursor: default; }
 
-    .toggle-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); margin-bottom: 16px; }
-    .toggle-label { font-size: 0.88rem; font-weight: 700; flex: 1; }
-    .toggle-sub { font-size: 0.75rem; color: var(--muted); display: block; margin-top: 2px; }
-    .switch { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+    /* ── Forms ── */
+    .form-card, .div-form-card { border-top: 1px solid var(--text); padding: 22px 0 6px; margin-bottom: 28px; }
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px 20px; margin-bottom: 16px; }
+    .field label { display: block; font-size: .82rem; color: var(--text2); margin-bottom: 5px; }
+    .field input, .field select { width: 100%; background: var(--bg2); border: 1px solid var(--border); border-radius: 3px; padding: 9px 11px; font-size: .97rem; outline: none; }
+    .field input:hover, .field select:hover { border-color: var(--muted); }
+    .field input:focus, .field select:focus { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+    .field input::placeholder { color: var(--muted); opacity: .75; }
+
+    .toggle-row, .drip-toggle-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--border); margin-bottom: 14px; }
+    .toggle-label, .drip-label { font-size: .95rem; font-weight: 600; flex: 1; }
+    .toggle-sub, .drip-sub { display: block; font-size: .84rem; font-weight: 400; color: var(--muted); margin-top: 1px; }
+    .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .2s; }
-    .slider::before { content: ''; position: absolute; width: 17px; height: 17px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform .2s; }
-    .switch input:checked + .slider { background: var(--green); }
-    .switch input:checked + .slider::before { transform: translateX(19px); }
+    .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--border); cursor: pointer; transition: background .15s; }
+    .slider::before { content: ''; position: absolute; width: 16px; height: 16px; background: var(--bg2); border-radius: 50%; top: 3px; left: 3px; transition: transform .15s; }
+    .switch input:checked + .slider { background: var(--text); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
+    .switch input:focus-visible + .slider { outline: 2px solid var(--blue); outline-offset: 2px; }
     #recurring-fields { display: none; }
     #recurring-fields.visible { display: grid; }
 
-    .sim-btn {
-      width: 100%; background: var(--green); color: #000; border: none;
-      border-radius: 12px; padding: 15px; font-size: 1rem; font-weight: 900;
-      cursor: pointer; transition: background .15s, transform .1s;
-    }
-    .sim-btn:hover { background: #00c853; transform: scale(1.01); }
-    .sim-btn:disabled { background: #1a3d28; color: #2a7a4a; cursor: not-allowed; transform: none; }
+    .sim-btn { background: var(--text); color: var(--bg); border: 1px solid var(--text); border-radius: 3px; padding: 10px 22px; font-size: .95rem; font-weight: 600; }
+    .sim-btn:hover { opacity: .86; }
+    .sim-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-    #results { display: none; margin-bottom: 60px; }
-    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-    .stat-card .s-label { font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
-    .stat-card .s-val { font-size: 1.5rem; font-weight: 900; letter-spacing: -.02em; }
-    .stat-card .s-sub { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+    /* ── Figures row ── */
+    #results, #div-results { display: none; }
+    .stats-row, .div-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); border-top: 2px solid var(--text); border-bottom: 1px solid var(--border); overflow: hidden; margin-bottom: 24px; }
+    .stat-card { padding: 14px 18px 15px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: 0 0 -1px -1px; min-width: 0; }
+    .stat-card .s-label { font-size: .82rem; color: var(--muted); margin-bottom: 3px; }
+    .stat-card .s-val { font-size: 1.55rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; overflow-wrap: anywhere; }
+    .stat-card .s-sub { font-size: .82rem; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .positive { color: var(--green); } .negative { color: var(--red); }
 
-    .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; }
-    .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
-    .chart-title { font-size: 0.95rem; font-weight: 800; }
+    /* ── Panels ── */
+    .chart-card, .div-chart-card, .annual-card, .payment-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 20px 22px; margin-bottom: 20px; }
+    .chart-header, .panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; flex-wrap: wrap; gap: 8px 16px; }
+    .chart-title, .annual-card h3, .payment-card h3 { font-size: 1rem; font-weight: 600; }
+    .annual-card h3 { margin-bottom: 14px; }
     .chart-legend { display: flex; gap: 16px; }
-    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
-    .chart-wrap { position: relative; height: 300px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--text2); }
+    .legend-dot { width: 14px; height: 0; border-top: 2px solid; }
+    .chart-wrap, .div-chart-wrap { position: relative; height: 320px; }
+    .annual-wrap { position: relative; height: 200px; }
 
-    .loading-state, .error-state { text-align: center; padding: 44px 20px; font-size: 0.9rem; color: var(--muted); }
-    .spinner { width: 26px; height: 26px; border: 2.5px solid rgba(0,230,118,.2); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 14px; }
+    .loading-state, .error-state { padding: 40px 8px; font-size: .95rem; color: var(--muted); }
+    .spinner { display: inline-block; vertical-align: -3px; width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%; animation: spin .7s linear infinite; margin-right: 9px; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .error-msg { color: var(--red); font-weight: 700; margin-bottom: 8px; }
+    .error-msg { color: var(--red); font-weight: 600; margin-bottom: 4px; }
 
-    /* ══════════════════════════════════
-       EDUCATION TAB
-    ══════════════════════════════════ */
-    .edu-hero { text-align: center; padding: 52px 20px 36px; }
-    .edu-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
-    .edu-hero h1 .g { color: var(--green); }
-    .edu-hero p { color: var(--muted); max-width: 480px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
-
-    .edu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px; padding: 0 20px 24px; max-width: 860px; margin: 0 auto; }
-    .edu-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; }
-    .edu-card-top { padding: 22px 22px 0; }
-    .edu-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
-    .edu-term { font-size: 0.68rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
-    .edu-title { font-size: 1.25rem; font-weight: 900; letter-spacing: -.02em; margin-bottom: 6px; }
-    .edu-tagline { font-size: 0.82rem; color: var(--green); font-weight: 700; margin-bottom: 14px; }
-    .edu-body { font-size: 0.88rem; color: #bbb; line-height: 1.68; margin-bottom: 16px; }
-    .edu-body strong { color: var(--text); font-weight: 700; }
-
-    .impact-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-    .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 5px 12px; font-size: 0.74rem; font-weight: 700; }
-    .pill-bull { background: rgba(0,230,118,.1); color: var(--green); border: 1px solid var(--green-bdr); }
-    .pill-bear { background: rgba(255,82,82,.1); color: var(--red); border: 1px solid rgba(255,82,82,.25); }
-    .pill-neutral { background: rgba(255,215,64,.1); color: var(--yellow); border: 1px solid rgba(255,215,64,.25); }
-
-    .edu-chart-wrap { padding: 0 16px 16px; height: 170px; position: relative; }
-
-    /* ── CONNECTIONS SECTION ── */
-    .connections { max-width: 860px; margin: 0 auto; padding: 0 20px 60px; }
-    .connections h2 { font-size: 1.5rem; font-weight: 900; letter-spacing: -.025em; margin-bottom: 6px; }
-    .connections .sub { font-size: 0.88rem; color: var(--muted); margin-bottom: 28px; }
-    .flow-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-    .flow-card {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 20px;
-    }
-    .flow-steps { display: flex; flex-direction: column; gap: 0; }
-    .flow-step { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
-    .flow-step + .flow-step { border-top: 1px solid var(--border); }
-    .flow-num { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
-    .flow-num.g { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); }
-    .flow-num.r { background: rgba(255,82,82,.1); color: var(--red); border: 1px solid rgba(255,82,82,.25); }
-    .flow-text { font-size: 0.83rem; line-height: 1.5; color: #ccc; }
-    .flow-text strong { color: var(--text); }
-    .flow-label { font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
-
-    footer { border-top: 1px solid var(--border); padding: 26px 20px; text-align: center; font-size: 0.78rem; color: var(--muted); }
-    footer a { color: var(--green); text-decoration: none; }
-
-    /* ══════════════════════════════════
-       DIVIDENDS TAB
-    ══════════════════════════════════ */
-    .div-hero { text-align: center; padding: 52px 20px 36px; }
-    .div-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
-    .div-hero h1 .g { color: var(--green); }
-    .div-hero p { color: var(--muted); max-width: 500px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
-
-    .div-form-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 28px; margin-bottom: 16px; }
-
-    .drip-toggle-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--border); margin: 4px 0 18px; }
-    .drip-label { font-size: 0.88rem; font-weight: 700; flex: 1; }
-    .drip-sub { font-size: 0.75rem; color: var(--muted); display: block; margin-top: 2px; }
-
-    #div-results { display: none; margin-bottom: 60px; }
-
-    .div-stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; margin-bottom: 20px; }
-
-    .div-chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
-    .div-chart-wrap { position: relative; height: 300px; }
-
-    /* Payment history table */
-    .payment-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
-    .payment-card h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 16px; }
-    .pay-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
-    .pay-table th { text-align: left; font-size: 0.66rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0 10px 10px; border-bottom: 1px solid var(--border); }
-    .pay-table td { padding: 10px; border-bottom: 1px solid #181818; color: #ccc; }
-    .pay-table td:first-child { color: var(--muted); }
-    .pay-table td.pos { color: var(--green); font-weight: 700; }
+    /* ── Tables ── */
+    .table-scroll { overflow-x: auto; }
+    .pay-table { width: 100%; border-collapse: collapse; font-size: .92rem; font-variant-numeric: tabular-nums; }
+    .pay-table th { text-align: right; font-size: .8rem; font-weight: 600; color: var(--text2); padding: 0 12px 8px; border-bottom: 1px solid var(--text); white-space: nowrap; }
+    .pay-table td { text-align: right; padding: 10px 12px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+    .pay-table th:first-child, .pay-table td:first-child { text-align: left; padding-left: 0; }
+    .pay-table th:last-child, .pay-table td:last-child { padding-right: 0; }
     .pay-table tr:last-child td { border-bottom: none; }
-    .pay-table .drip-badge { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-bdr); border-radius: 999px; padding: 2px 8px; font-size: 0.68rem; font-weight: 800; margin-left: 6px; }
-    .pay-table .proj-badge { background: rgba(68,138,255,.12); color: var(--blue); border: 1px solid rgba(68,138,255,.3); border-radius: 999px; padding: 2px 8px; font-size: 0.68rem; font-weight: 800; margin-left: 6px; }
+    .pay-table td.pos { color: var(--green); }
+    .pay-table .drip-badge, .pay-table .proj-badge { font-size: .74rem; color: var(--muted); margin-left: 8px; }
+    .port-btn-sm { background: none !important; border: none !important; padding: 2px 0; font-size: .86rem; color: var(--text) !important; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; margin-left: 12px; }
+    .port-btn-sm:hover { text-decoration-color: var(--text); }
+    .port-empty { border-top: 1px solid var(--border); padding: 28px 0; color: var(--muted); }
+    .port-empty-title { font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .note { font-size: .84rem; color: var(--muted); max-width: 70ch; }
 
-    /* Annual summary */
-    .annual-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 22px; margin-bottom: 16px; }
-    .annual-card h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 16px; }
-    .annual-wrap { position: relative; height: 180px; }
+    /* ── Movers ── */
+    .mv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 22px; }
+    .seg-group { display: flex; align-items: center; gap: 10px; }
+    .seg-label { font-size: .84rem; color: var(--muted); }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; background: var(--bg2); }
+    .seg button { background: none; border: none; border-left: 1px solid var(--border); padding: 6px 12px; font-size: .86rem; color: var(--text2); }
+    .seg button:first-child { border-left: none; }
+    .seg button:hover { background: var(--bg3); }
+    .seg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+    .mv-status { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: .84rem; color: var(--muted); }
+    #mv-body.stale { opacity: .5; }
+    .mv-table td, .mv-table th { padding-left: 10px; padding-right: 10px; }
+    .mv-table tbody tr:hover td { background: var(--bg3); }
+    .mv-table th.ranked { color: var(--text); }
+    .mv-table th.ranked::after { content: ' ↓'; }
+    .mv-rank { color: var(--muted); width: 2.2em; }
+    .mv-table th.mv-sym, .mv-table td.mv-sym { text-align: left; }
+    .mv-sym b { font-weight: 600; }
+    .mv-sym span { display: block; font-size: .8rem; color: var(--muted); max-width: 22ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mv-move { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+    .mv-track { position: relative; width: 132px; height: 12px; flex-shrink: 0; }
+    .mv-track::before { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 1px solid var(--muted); opacity: .6; }
+    .mv-fill { position: absolute; top: 1px; height: 10px; min-width: 2px; }
+    .mv-fill.up   { left: 50%;  background: var(--bar-up);   border-radius: 0 3px 3px 0; }
+    .mv-fill.down { right: 50%; background: var(--bar-down); border-radius: 3px 0 0 3px; }
+    .mv-pct { min-width: 4.6em; font-weight: 600; }
+    .link-btn { background: none; border: none; padding: 0; font-size: .86rem; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+    .link-btn:hover { text-decoration-color: var(--text); }
 
-    /* ══════════════════════════════════
-       PORTFOLIO TAB
-    ══════════════════════════════════ */
-    .port-hero { text-align: center; padding: 52px 20px 36px; }
-    .port-hero h1 { font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 900; letter-spacing: -.03em; margin-bottom: 12px; }
-    .port-hero h1 .g { color: var(--green); }
-    .port-hero p { color: var(--muted); max-width: 500px; margin: 0 auto; font-size: 1rem; line-height: 1.6; }
-    .port-empty { text-align: center; padding: 60px 20px; color: var(--muted); }
-    .port-empty .port-empty-icon { font-size: 2.5rem; margin-bottom: 14px; }
-    .port-empty .port-empty-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-    .port-btn-sm { border-radius: 8px; padding: 4px 9px; font-size: 0.75rem; font-weight: 700; cursor: pointer; border: 1px solid; }
+    /* ── Education ── */
+    .edu-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+    .edu-card { border-top: 1px solid var(--text); padding: 20px 0 36px; }
+    .edu-term { font-size: .82rem; color: var(--muted); }
+    .edu-title { font-family: var(--serif); font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+    .edu-tagline { font-family: var(--serif); font-style: italic; color: var(--text2); margin: 2px 0 12px; }
+    .edu-body { font-size: .97rem; color: var(--text2); line-height: 1.65; margin-bottom: 14px; }
+    .edu-body strong { color: var(--text); font-weight: 600; }
+    .impact-pills { list-style: none; font-size: .9rem; margin-bottom: 16px; }
+    .impact-pills li { padding: 5px 0 5px 22px; position: relative; border-top: 1px solid var(--grid); }
+    .impact-pills li::before { position: absolute; left: 0; top: 5px; font-size: .8rem; }
+    .pill-bull::before { content: '▲'; color: var(--green); }
+    .pill-bear::before { content: '▼'; color: var(--red); }
+    .pill-neutral::before { content: '●'; color: var(--muted); }
+    .edu-fig { font-size: .8rem; color: var(--muted); margin-bottom: 6px; }
+    .edu-chart-wrap { height: 180px; position: relative; }
+    .subnav { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin-bottom: 30px; overflow-x: auto; scrollbar-width: none; }
+    .subnav button { background: none; border: none; padding: 0 0 9px; margin-bottom: -1px; font-size: .95rem; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; }
+    .subnav button:hover { color: var(--text); }
+    .subnav button[aria-selected="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+    .edu-section { display: none; }
+    .edu-section.active { display: block; }
+    .acct-intro { max-width: 720px; margin-bottom: 26px; }
+    .acct-intro h2 { font-family: var(--serif); font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-bottom: 8px; }
+    .acct-intro p { color: var(--text2); line-height: 1.65; }
+    .acct-intro strong { color: var(--text); font-weight: 600; }
+    .acct-table { min-width: 760px; }
+    .acct-table th, .acct-table td { text-align: left; vertical-align: top; white-space: normal; line-height: 1.4; }
+    .acct-table td:first-child { white-space: nowrap; }
+    .acct-table td.free { color: var(--green); }
+    .acct-grid { margin-top: 34px; }
+    .acct-order { max-width: 720px; }
+    .lab { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: start; }
+    .lab-step { border-top: 1px solid var(--text); padding-top: 18px; }
+    .lab-step .edu-title { font-size: 1.45rem; margin-bottom: 10px; }
+    .lab-q { font-weight: 600; margin: 4px 0 10px; }
+    .lab-options { display: grid; gap: 8px; }
+    .lab-option { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; text-align: left; background: var(--bg2); border: 1px solid var(--border); border-radius: 3px; padding: 10px 14px; font-size: .95rem; }
+    .lab-option:hover:not(:disabled) { border-color: var(--text); }
+    .lab-option:disabled { cursor: default; color: var(--muted); }
+    .lab-option span { font-size: .8rem; white-space: nowrap; }
+    .lab-option.correct { border-color: var(--green); color: var(--text); box-shadow: inset 3px 0 0 var(--green); }
+    .lab-option.correct span { color: var(--green); }
+    .lab-option.wrong { border-color: var(--red); box-shadow: inset 3px 0 0 var(--red); }
+    .lab-option.wrong span { color: var(--red); }
+    .lab-explain, .lab-recap { margin-top: 16px; padding: 12px 14px; background: var(--bg3); border-left: 2px solid var(--text); font-size: .95rem; color: var(--text2); line-height: 1.6; }
+    .lab-explain strong, .lab-recap strong { color: var(--text); font-weight: 600; }
+    .lab-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .lab-row { padding: 10px 0 12px; border-top: 1px solid var(--grid); }
+    .lab-row:first-child { border-top: none; padding-top: 0; }
+    .lab-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .lab-name { font-weight: 600; font-size: .95rem; }
+    .lab-value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .lab-value em { font-style: normal; font-size: .76rem; font-weight: 600; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--text); border-radius: 2px; vertical-align: 2px; }
+    .lab-track { height: 12px; margin: 6px 0 5px; background: var(--bg3); }
+    .lab-fill { height: 100%; background: var(--blue); border-radius: 0 3px 3px 0; transition: width .25s ease; }
+    .lab-sub { font-size: .82rem; color: var(--muted); }
+    .lab-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--text); }
+    .lab-controls.locked { opacity: .5; }
+    .lab-slider span { display: flex; justify-content: space-between; gap: 10px; font-size: .84rem; color: var(--text2); }
+    .lab-slider b { color: var(--text); font-variant-numeric: tabular-nums; }
+    .lab-slider input { width: 100%; accent-color: var(--text); margin-top: 4px; }
+    @media (max-width: 860px) { .lab { grid-template-columns: 1fr; gap: 26px; } }
+    @media (max-width: 480px) { .lab-controls { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { .lab-fill { transition: none; } }
+    .vocab-steps { margin-bottom: 26px; max-width: 100%; overflow-x: auto; }
+    .vocab-steps button { white-space: nowrap; }
+    .vocab-head { max-width: 720px; margin-bottom: 22px; }
+    .vocab-head p { color: var(--text2); line-height: 1.65; margin-top: 8px; }
+    .vocab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; border-bottom: 1px solid var(--border); }
+    .vocab-term { border-top: 1px solid var(--border); padding: 14px 0 16px; }
+    .vocab-term dt { font-weight: 600; font-size: 1.02rem; margin-bottom: 3px; }
+    .vocab-term dd { color: var(--text2); font-size: .95rem; line-height: 1.55; }
+    .vocab-eg { display: block; margin-top: 5px; font-size: .88rem; color: var(--muted); font-style: italic; }
+    .vocab-quiz { max-width: 640px; }
+    .vocab-quiz .edu-title { font-size: 1.4rem; margin: 4px 0 16px; }
+    .vocab-review { max-width: 720px; border-top: 1px solid var(--text); padding-top: 16px; }
+    .vocab-review h3 { font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
+    .vocab-missed { padding: 12px 0 14px; border-bottom: 1px solid var(--grid); font-size: .95rem; color: var(--text2); line-height: 1.55; }
+    .vocab-missed strong { color: var(--text); font-weight: 600; }
+    .vocab-missed .link-btn { margin-top: 6px; }
+    @media (max-width: 760px) { .vocab-grid { grid-template-columns: 1fr; } }
+    .edu-try { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--grid); font-size: .92rem; }
+    .edu-try .presets-label { margin-right: 6px; }
+    .edu-try .preset-btn { text-align: left; }
+    .lesson-note { display: none; background: var(--bg3); border-left: 2px solid var(--text); padding: 10px 14px; margin-bottom: 20px; font-size: .92rem; color: var(--text2); }
+    .lesson-note.visible { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; flex-wrap: wrap; }
+    .chart-note { font-size: .82rem; color: var(--muted); margin-top: 12px; }
 
-    @media (max-width: 500px) {
-      nav { padding: 0 16px; }
-      .logo { margin-right: 12px; font-size: 0.95rem; }
-      .tab-btn { padding: 7px 12px; font-size: 0.82rem; }
-      .form-card { padding: 18px 14px; }
-      .edu-grid { grid-template-columns: 1fr; }
+    .connections { border-top: 3px double var(--text); padding-top: 26px; }
+    .connections h2 { font-family: var(--serif); font-size: 1.6rem; font-weight: 700; }
+    .connections .sub { color: var(--text2); margin: 4px 0 22px; max-width: 60ch; }
+    .flow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 48px; }
+    .flow-label { font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid var(--text); }
+    .flow-steps { list-style: none; counter-reset: step; }
+    .flow-steps li { counter-increment: step; display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--grid); font-size: .95rem; color: var(--text2); }
+    .flow-steps li::before { content: counter(step) '.'; color: var(--muted); min-width: 1.3em; font-variant-numeric: tabular-nums; }
+    .flow-steps li strong { color: var(--text); font-weight: 600; }
+    .flow-steps li.flow-result { font-weight: 600; border-bottom: none; }
+    .flow-steps li.flow-result::before { content: '→'; }
+
+    footer { border-top: 1px solid var(--text); }
+    footer p { padding: 18px 0 30px; font-size: .84rem; color: var(--muted); }
+
+    @media (max-width: 900px) { .mv-hide-sm { display: none; } }
+    @media (max-width: 760px) {
+      .edu-grid, .flow-grid { grid-template-columns: 1fr; }
+      .flow-card + .flow-card { margin-top: 28px; }
+    }
+    @media (max-width: 560px) {
+      .wrap, .section-wrap { padding: 0 16px; }
+      .logo { font-size: 1.4rem; }
+      .tabs { gap: 20px; }
+      .page-head { padding: 28px 0 20px; }
+      .chart-card, .div-chart-card, .annual-card, .payment-card { padding: 16px 14px; }
+      .chart-wrap, .div-chart-wrap { height: 260px; }
+      .mv-status { margin-left: 0; }
+      .mv-track { width: 72px; }
+      .mv-hide-sm { display: none; }
     }
   </style>
 </head>
 <body>
 
-<!-- ── NAV ── -->
-<nav>
-  <div class="logo">money<span>mogging</span>101</div>
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('simulator', this)">📈 Simulator</button>
-    <button class="tab-btn" onclick="switchTab('dividends', this)">💰 Dividends</button>
-    <button class="tab-btn" onclick="switchTab('education', this)">📚 Education</button>
-    <button class="tab-btn" onclick="switchTab('portfolio', this)">💼 Portfolio</button>
+<header class="masthead">
+  <div class="wrap masthead-top">
+    <div class="logo">Money<span>Mogging</span>101</div>
+    <div class="dateline" id="dateline"></div>
   </div>
-</nav>
-
-<!-- ══════════════════════════════════════
-     SIMULATOR TAB
-════════════════════════════════════════ -->
-<div id="page-simulator" class="page active">
-
-  <div class="hero">
-    <h1>What if you had<br>just <span class="g">invested</span>?</h1>
-    <p>Drop in any stock, pick a date, and see exactly how much you would have made. No cap.</p>
-    <div class="presets">
-      <button class="preset-btn" onclick="loadPreset('SPY','2015-01-01',10000,true,500,'monthly')">📈 S&P 500 since 2015</button>
-      <button class="preset-btn" onclick="loadPreset('AAPL','2020-03-23',5000,false,0,'monthly')">🍎 Apple — COVID low</button>
-      <button class="preset-btn" onclick="loadPreset('NVDA','2023-01-01',5000,true,200,'monthly')">🚀 NVIDIA since 2023</button>
-      <button class="preset-btn" onclick="loadPreset('BTC-USD','2020-01-01',1000,true,100,'monthly')">₿ Bitcoin since 2020</button>
-      <button class="preset-btn" onclick="loadPreset('TSLA','2019-01-01',5000,false,0,'monthly')">⚡ Tesla since 2019</button>
+  <nav>
+    <div class="wrap tabs">
+      <button class="tab-btn active" data-tab="simulator" onclick="switchTab('simulator', this)">Simulator</button>
+      <button class="tab-btn" data-tab="movers" onclick="switchTab('movers', this)">Movers</button>
+      <button class="tab-btn" data-tab="dividends" onclick="switchTab('dividends', this)">Dividends</button>
+      <button class="tab-btn" data-tab="portfolio" onclick="switchTab('portfolio', this)">Portfolio</button>
+      <button class="tab-btn" data-tab="education" onclick="switchTab('education', this)">Education</button>
     </div>
-  </div>
+  </nav>
+</header>
 
+<!-- ══════════ SIMULATOR ══════════ -->
+<div id="page-simulator" class="page active">
   <div class="section-wrap">
+    <div class="page-head">
+      <h1>What if you had just <em>invested?</em></h1>
+      <p>Drop in any stock, pick a date, and see exactly how much you would have made. No cap.</p>
+    </div>
+
+    <div class="presets">
+      <span class="presets-label">Try</span>
+      <button class="preset-btn" onclick="loadPreset('SPY','2015-01-01',10000,true,500,'monthly')">S&amp;P 500 since 2015</button>
+      <button class="preset-btn" onclick="loadPreset('AAPL','2020-03-23',5000,false,0,'monthly')">Apple from the COVID low</button>
+      <button class="preset-btn" onclick="loadPreset('NVDA','2023-01-01',5000,true,200,'monthly')">NVIDIA since 2023</button>
+      <button class="preset-btn" onclick="loadPreset('BTC-USD','2020-01-01',1000,true,100,'monthly')">Bitcoin since 2020</button>
+      <button class="preset-btn" onclick="loadPreset('TSLA','2019-01-01',5000,false,0,'monthly')">Tesla since 2019</button>
+    </div>
+
     <div class="form-card">
       <div class="form-row">
         <div class="field">
-          <label>Ticker Symbol</label>
-          <input id="ticker" type="text" placeholder="AAPL, SPY, TSLA…" maxlength="12" />
+          <label for="ticker">Ticker symbol</label>
+          <input id="ticker" type="text" placeholder="AAPL, SPY, TSLA" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
-          <label>Start Date</label>
+          <label for="start-date">Start date</label>
           <input id="start-date" type="date" />
         </div>
         <div class="field">
-          <label>End Date</label>
+          <label for="end-date">End date</label>
           <input id="end-date" type="date" />
         </div>
-      </div>
-      <div class="form-row">
         <div class="field">
-          <label>Initial Investment ($)</label>
-          <input id="initial-amount" type="number" placeholder="e.g. 1000" min="1" step="1" />
+          <label for="initial-amount">Initial investment ($)</label>
+          <input id="initial-amount" type="number" placeholder="1000" min="1" step="1" />
         </div>
       </div>
       <div class="toggle-row">
         <div class="toggle-label">
-          Recurring Investment
+          Recurring investment
           <span class="toggle-sub">Dollar-cost average on a schedule (DCA)</span>
         </div>
         <label class="switch">
-          <input type="checkbox" id="recurring-toggle" onchange="toggleRecurring(this.checked)" />
+          <input type="checkbox" id="recurring-toggle" aria-label="Recurring investment" onchange="toggleRecurring(this.checked)" />
           <span class="slider"></span>
         </label>
       </div>
       <div class="form-row" id="recurring-fields">
         <div class="field">
-          <label>Amount per Period ($)</label>
-          <input id="recurring-amount" type="number" placeholder="e.g. 100" min="1" step="1" />
+          <label for="recurring-amount">Amount per period ($)</label>
+          <input id="recurring-amount" type="number" placeholder="100" min="1" step="1" />
         </div>
         <div class="field">
-          <label>Frequency</label>
+          <label for="frequency">Frequency</label>
           <select id="frequency">
             <option value="weekly">Weekly</option>
             <option value="monthly" selected>Monthly</option>
@@ -300,77 +383,122 @@
           </select>
         </div>
       </div>
-      <button class="sim-btn" id="sim-btn" onclick="runSimulation()">Simulate →</button>
+      <button class="sim-btn" id="sim-btn" onclick="runSimulation()">Run simulation</button>
     </div>
 
     <div id="results">
+      <div class="lesson-note" id="lesson-note"><span id="lesson-note-text"></span><button class="link-btn" onclick="switchTab('education')">Back to the lesson</button></div>
       <div class="stats-row" id="stats-row"></div>
-      <div class="chart-card" id="sim-chart-card">
-        <div class="chart-header">
-          <div class="chart-title" id="chart-title">Portfolio Value Over Time</div>
-          <div class="chart-legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Portfolio</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#333;border:1.5px dashed #555"></div>Invested</div>
-          </div>
-        </div>
-        <div class="chart-wrap"><canvas id="sim-chart"></canvas></div>
-      </div>
+      <div class="chart-card" id="sim-chart-card"></div>
     </div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════
-     DIVIDENDS TAB
-════════════════════════════════════════ -->
-<div id="page-dividends" class="page">
-
-  <div class="div-hero">
-    <h1>Stack bags while you <span class="g">sleep 💸</span></h1>
-    <p>Enter any dividend-paying stock and see your real payout history — then watch DRIP turn it into a compounding money machine.</p>
-  </div>
-
+<!-- ══════════ MOVERS ══════════ -->
+<div id="page-movers" class="page">
   <div class="section-wrap">
-    <!-- PRESETS -->
-    <div class="presets" style="margin-bottom:28px">
-      <button class="preset-btn" onclick="loadDivPreset('SCHD',100,'2015-01-01')">📊 SCHD — 100 shares</button>
-      <button class="preset-btn" onclick="loadDivPreset('KO',50,'2010-01-01')">🥤 Coca-Cola — 50 shares</button>
-      <button class="preset-btn" onclick="loadDivPreset('AAPL',100,'2015-01-01')">🍎 Apple — 100 shares</button>
-      <button class="preset-btn" onclick="loadDivPreset('VYM',75,'2015-01-01')">📈 VYM ETF — 75 shares</button>
-      <button class="preset-btn" onclick="loadDivPreset('JNJ',30,'2010-01-01')">💊 J&J — 30 shares</button>
+    <div class="page-head">
+      <h1>Today's most volatile <em>movers</em></h1>
+      <p>The US stocks swinging hardest right now, up or down. Rank them by the size of the move, how wide the day's range is, or how far volume is running above normal.</p>
+    </div>
+
+    <div class="mv-bar">
+      <div class="seg-group">
+        <span class="seg-label" id="mv-show-label">Show</span>
+        <div class="seg" role="group" aria-labelledby="mv-show-label" id="mv-filter">
+          <button data-v="all" aria-pressed="true">All</button>
+          <button data-v="up" aria-pressed="false">Gainers</button>
+          <button data-v="down" aria-pressed="false">Losers</button>
+        </div>
+      </div>
+      <div class="seg-group">
+        <span class="seg-label" id="mv-rank-label">Rank by</span>
+        <div class="seg" role="group" aria-labelledby="mv-rank-label" id="mv-sort">
+          <button data-v="move" aria-pressed="true">Move</button>
+          <button data-v="range" aria-pressed="false">Day range</button>
+          <button data-v="relvol" aria-pressed="false">Relative volume</button>
+        </div>
+      </div>
+      <div class="mv-status">
+        <span id="mv-asof"></span>
+        <button class="link-btn" id="mv-refresh" onclick="loadMovers(true)">Refresh</button>
+      </div>
+    </div>
+
+    <div id="mv-body">
+      <div class="stats-row" id="mv-stats"></div>
+      <div class="chart-card">
+        <div class="table-scroll">
+          <table class="pay-table mv-table">
+            <thead><tr>
+              <th class="mv-rank">#</th>
+              <th class="mv-sym">Stock</th>
+              <th>Price</th>
+              <th data-col="move">Change today</th>
+              <th data-col="range">Day range</th>
+              <th data-col="relvol">Volume vs. normal</th>
+              <th class="mv-hide-sm">Volume</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="mv-tbody"></tbody>
+          </table>
+        </div>
+        <div id="mv-msg"></div>
+      </div>
+    </div>
+    <p class="note"><strong>How to read it.</strong> Day range is the gap between today's high and low as a share of yesterday's close. Volume vs. normal is today's volume divided by the three-month daily average, so 3.0× means three times the usual trading. The list comes from Yahoo Finance's gainers, losers and most-active screens, which leave out stocks under $5 and very small companies. Quotes may be delayed.</p>
+  </div>
+</div>
+
+<!-- ══════════ DIVIDENDS ══════════ -->
+<div id="page-dividends" class="page">
+  <div class="section-wrap">
+    <div class="page-head">
+      <h1>Stack bags while you <em>sleep</em></h1>
+      <p>Enter any dividend-paying stock and see your real payout history — then watch DRIP turn it into a compounding money machine.</p>
+    </div>
+
+    <div class="presets">
+      <span class="presets-label">Try</span>
+      <button class="preset-btn" onclick="loadDivPreset('SCHD',100,'2015-01-01')">SCHD, 100 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('KO',50,'2010-01-01')">Coca-Cola, 50 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('AAPL',100,'2015-01-01')">Apple, 100 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('VYM',75,'2015-01-01')">VYM, 75 shares</button>
+      <button class="preset-btn" onclick="loadDivPreset('JNJ',30,'2010-01-01')">J&amp;J, 30 shares</button>
     </div>
 
     <div class="div-form-card">
       <div class="form-row">
         <div class="field">
-          <label>Ticker Symbol</label>
-          <input id="div-ticker" type="text" placeholder="AAPL, SCHD, KO…" maxlength="12" />
+          <label for="div-ticker">Ticker symbol</label>
+          <input id="div-ticker" type="text" placeholder="AAPL, SCHD, KO" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
-          <label>Shares Owned</label>
-          <input id="div-shares" type="number" placeholder="e.g. 100" min="1" step="1" />
+          <label for="div-shares">Shares owned</label>
+          <input id="div-shares" type="number" placeholder="100" min="1" step="1" />
         </div>
         <div class="field">
-          <label>Start Date</label>
+          <label for="div-start">Start date</label>
           <input id="div-start" type="date" />
         </div>
         <div class="field">
-          <label>End Date</label>
+          <label for="div-end">End date</label>
           <input id="div-end" type="date" />
         </div>
       </div>
 
       <div class="drip-toggle-row">
         <div class="drip-label">
-          Reinvest Dividends (DRIP)
+          Reinvest dividends (DRIP)
           <span class="drip-sub">Automatically buy more shares with each payout — watch compounding go crazy</span>
         </div>
         <label class="switch">
-          <input type="checkbox" id="drip-toggle" checked />
+          <input type="checkbox" id="drip-toggle" aria-label="Reinvest dividends" checked />
           <span class="slider"></span>
         </label>
       </div>
 
-      <button class="sim-btn" id="div-btn" onclick="runDividendSim()">Simulate Dividends →</button>
+      <button class="sim-btn" id="div-btn" onclick="runDividendSim()">Run dividend simulation</button>
     </div>
 
     <div id="div-results">
@@ -378,26 +506,26 @@
 
       <div class="div-chart-card">
         <div class="chart-header">
-          <div class="chart-title" id="div-chart-title">Dividend Income Over Time</div>
+          <div class="chart-title" id="div-chart-title">Portfolio value over time</div>
           <div class="chart-legend" id="div-chart-legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>With DRIP</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#448aff;border:1.5px dashed #448aff"></div>Without DRIP</div>
+            <div class="legend-item"><div class="legend-dot" style="border-color:var(--blue)"></div>With DRIP</div>
+            <div class="legend-item"><div class="legend-dot" style="border-color:var(--orange)"></div>Without DRIP</div>
           </div>
         </div>
         <div class="div-chart-wrap"><canvas id="div-chart"></canvas></div>
       </div>
 
       <div class="annual-card">
-        <h3>Annual Dividend Income 📅</h3>
+        <h3>Annual dividend income</h3>
         <div class="annual-wrap"><canvas id="annual-chart"></canvas></div>
       </div>
 
       <div class="payment-card">
-        <h3 id="pay-table-title">Recent Dividend Payments</h3>
-        <div style="overflow-x:auto">
+        <div class="panel-head"><h3 id="pay-table-title">Recent dividend payments</h3></div>
+        <div class="table-scroll">
           <table class="pay-table" id="pay-table">
             <thead><tr>
-              <th>Date</th><th>$ / Share</th><th>Your Payout</th><th>Shares After</th><th>Cumulative</th>
+              <th>Date</th><th>$ / share</th><th>Your payout</th><th>Shares after</th><th>Cumulative</th>
             </tr></thead>
             <tbody id="pay-tbody"></tbody>
           </table>
@@ -405,201 +533,48 @@
       </div>
     </div>
   </div>
-</div><!-- end dividends page -->
+</div>
 
-<!-- ══════════════════════════════════════
-     EDUCATION TAB
-════════════════════════════════════════ -->
-<div id="page-education" class="page">
-
-  <div class="edu-hero">
-    <h1>Educate yo'self <span class="g">fr 📚</span></h1>
-    <p>The economic terms that lowkey control everything — your portfolio, your rent, your whole bag. Explained no cap.</p>
-  </div>
-
-  <div class="edu-grid">
-
-    <!-- GDP -->
-    <div class="edu-card">
-      <div class="edu-card-top">
-        <div class="edu-card-icon">📊</div>
-        <div class="edu-term">Term 01</div>
-        <div class="edu-title">GDP</div>
-        <div class="edu-tagline">The economy's report card, no cap</div>
-        <div class="edu-body">
-          <strong>Gross Domestic Product</strong> is the total value of everything a country produces in a year — goods, services, all of it. Think of it as the economy's GPA. <strong>When GDP grows</strong>, businesses are printing, people have jobs, and the market usually follows. <strong>When GDP goes negative two quarters in a row</strong>, that's a recession era and portfolios get cooked. The 2020 COVID crash dropped GDP by nearly <strong>3%</strong> — the worst since the Great Depression.
-        </div>
-        <div class="impact-pills">
-          <span class="pill pill-bull">📈 GDP rising → bull market energy</span>
-          <span class="pill pill-bear">📉 GDP negative → recession szn</span>
-        </div>
-      </div>
-      <div class="edu-chart-wrap"><canvas id="chart-gdp"></canvas></div>
-    </div>
-
-    <!-- INFLATION -->
-    <div class="edu-card">
-      <div class="edu-card-top">
-        <div class="edu-card-icon">🔥</div>
-        <div class="edu-term">Term 02</div>
-        <div class="edu-title">Inflation</div>
-        <div class="edu-tagline">Why your $20 hits different than it used to</div>
-        <div class="edu-body">
-          Inflation is prices going up over time across the whole economy. A little bit (<strong>~2%</strong>) is actually healthy and what the Fed targets. But when inflation goes <strong>8%+</strong> like in 2022? Everything gets expensive — groceries, rent, gas — and the Fed has to step in with rate hikes that tank growth stocks. <strong>Moderate inflation</strong> is fine for equities. <strong>Runaway inflation</strong> is the villain arc.
-        </div>
-        <div class="impact-pills">
-          <span class="pill pill-bull">📈 ~2% inflation → market slays</span>
-          <span class="pill pill-neutral">😐 3–5% → market gets nervous</span>
-          <span class="pill pill-bear">📉 8%+ → bear market szn</span>
-        </div>
-      </div>
-      <div class="edu-chart-wrap"><canvas id="chart-inflation"></canvas></div>
-    </div>
-
-    <!-- CPI -->
-    <div class="edu-card">
-      <div class="edu-card-top">
-        <div class="edu-card-icon">🧾</div>
-        <div class="edu-term">Term 03</div>
-        <div class="edu-title">CPI</div>
-        <div class="edu-tagline">The receipts on how expensive life is getting</div>
-        <div class="edu-body">
-          <strong>Consumer Price Index</strong> tracks the price of a fixed basket of everyday items — groceries, rent, gas, clothes. It's literally how the government measures inflation. Every month when CPI data drops, <strong>the whole market reacts</strong> in real time. CPI coming in <strong>hotter than expected</strong> = red day. CPI cooling down = green day. Wall Street watches this number like it's a Kendrick album drop.
-        </div>
-        <div class="impact-pills">
-          <span class="pill pill-bull">📈 CPI cooling → rally incoming</span>
-          <span class="pill pill-bear">📉 CPI hot → market dips on the news</span>
-        </div>
-      </div>
-      <div class="edu-chart-wrap"><canvas id="chart-cpi"></canvas></div>
-    </div>
-
-    <!-- INTEREST RATES -->
-    <div class="edu-card">
-      <div class="edu-card-top">
-        <div class="edu-card-icon">🏦</div>
-        <div class="edu-term">Term 04</div>
-        <div class="edu-title">Interest Rates</div>
-        <div class="edu-tagline">The Fed's main character energy that moves everything</div>
-        <div class="edu-body">
-          The <strong>Federal Reserve</strong> sets the benchmark interest rate to control inflation. When rates go up, <strong>borrowing gets expensive</strong> — mortgages, car loans, business credit all cost more. Tech and growth stocks especially hate high rates because their future profits get discounted hard. The Fed went from <strong>0.25% → 5.5%</strong> in under 2 years (2022–2023) — one of the fastest hike cycles ever, and the market felt it fr.
-        </div>
-        <div class="impact-pills">
-          <span class="pill pill-bull">📈 Rate cuts → market goes brr</span>
-          <span class="pill pill-bear">📉 Rate hikes → growth stocks cooked</span>
-        </div>
-      </div>
-      <div class="edu-chart-wrap"><canvas id="chart-rates"></canvas></div>
-    </div>
-
-  </div>
-
-  <!-- CONNECTIONS -->
-  <div class="connections">
-    <h2>How it all connects 🔗</h2>
-    <p class="sub">These four terms aren't separate — they're one big chain reaction. Here's how it plays out.</p>
-    <div class="flow-grid">
-
-      <div class="flow-card">
-        <div class="flow-label">🟢 Bull Scenario</div>
-        <div class="flow-steps">
-          <div class="flow-step">
-            <div class="flow-num g">1</div>
-            <div class="flow-text"><strong>GDP grows strong</strong> — economy is healthy, companies printing money</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num g">2</div>
-            <div class="flow-text"><strong>Inflation stays near 2%</strong> — prices rising but not crazy</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num g">3</div>
-            <div class="flow-text"><strong>Fed holds or cuts rates</strong> — borrowing stays cheap, business invests</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num g">4</div>
-            <div class="flow-text"><strong>CPI stays chill</strong> — consumers keep spending, confidence high</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num g">✓</div>
-            <div class="flow-text" style="color:var(--green);font-weight:700">Result: Stocks go up. Portfolio secured. 💰</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="flow-card">
-        <div class="flow-label">🔴 Bear Scenario</div>
-        <div class="flow-steps">
-          <div class="flow-step">
-            <div class="flow-num r">1</div>
-            <div class="flow-text"><strong>Inflation spikes</strong> — supply chain issues, too much money printed</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num r">2</div>
-            <div class="flow-text"><strong>CPI data comes in hot</strong> — everyday prices going up fast</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num r">3</div>
-            <div class="flow-text"><strong>Fed hikes interest rates</strong> aggressively to cool inflation down</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num r">4</div>
-            <div class="flow-text"><strong>GDP starts slowing</strong> — businesses borrow less, hiring freezes</div>
-          </div>
-          <div class="flow-step">
-            <div class="flow-num r">✗</div>
-            <div class="flow-text" style="color:var(--red);font-weight:700">Result: Stocks drop. Market in its villain era. 📉</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-</div><!-- end education page -->
-
-<!-- ══════════════════════════════════════
-     PORTFOLIO TAB
-════════════════════════════════════════ -->
+<!-- ══════════ PORTFOLIO ══════════ -->
 <div id="page-portfolio" class="page">
-
-  <div class="port-hero">
-    <h1>Track your bag <span class="g">💼</span></h1>
-    <p>Add your holdings, see real-time gains and losses, and jump straight into dividend projections for any position.</p>
-  </div>
-
   <div class="section-wrap">
+    <div class="page-head">
+      <h1>Track your <em>bag</em></h1>
+      <p>Add your holdings, see gains and losses at the latest price, and jump straight into dividend projections for any position. Saved in this browser only.</p>
+    </div>
+
     <div class="form-card">
       <div class="form-row">
         <div class="field">
-          <label>Ticker Symbol</label>
-          <input id="port-ticker" type="text" placeholder="AAPL, SCHD, KO…" maxlength="12" />
+          <label for="port-ticker">Ticker symbol</label>
+          <input id="port-ticker" type="text" placeholder="AAPL, SCHD, KO" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
-          <label>Shares</label>
-          <input id="port-shares" type="number" placeholder="e.g. 100" min="0.001" step="any" />
+          <label for="port-shares">Shares</label>
+          <input id="port-shares" type="number" placeholder="100" min="0.001" step="any" />
         </div>
         <div class="field">
-          <label>Avg Cost Per Share ($)</label>
-          <input id="port-cost" type="number" placeholder="e.g. 150.00" min="0" step="any" />
+          <label for="port-cost">Average cost per share ($)</label>
+          <input id="port-cost" type="number" placeholder="150.00" min="0" step="any" />
         </div>
       </div>
-      <button class="sim-btn" id="port-add-btn" onclick="addPosition()">+ Add to Portfolio</button>
+      <button class="sim-btn" id="port-add-btn" onclick="addPosition()">Add position</button>
     </div>
 
-    <div id="port-summary" style="display:none; margin-bottom:16px">
+    <div id="port-summary" style="display:none">
       <div class="stats-row" id="port-stats"></div>
     </div>
 
-    <div id="port-holdings-wrap" style="display:none; margin-bottom:60px">
+    <div id="port-holdings-wrap" style="display:none">
       <div class="payment-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-          <h3 id="port-holdings-title">Your Holdings</h3>
-          <button class="preset-btn" id="port-refresh-btn" onclick="refreshPortfolio()">🔄 Refresh Prices</button>
+        <div class="panel-head">
+          <h3 id="port-holdings-title">Your holdings</h3>
+          <button class="link-btn" id="port-refresh-btn" onclick="refreshPortfolio()">Refresh prices</button>
         </div>
-        <div style="overflow-x:auto">
+        <div class="table-scroll">
           <table class="pay-table" id="port-table">
             <thead><tr>
-              <th>Ticker</th><th>Shares</th><th>Avg Cost</th><th>Current</th><th>Day Chg</th><th>Value</th><th>P&amp;L</th><th></th>
+              <th>Ticker</th><th>Shares</th><th>Avg cost</th><th>Current</th><th>Day chg</th><th>Value</th><th>P&amp;L</th><th></th>
             </tr></thead>
             <tbody id="port-tbody"></tbody>
           </table>
@@ -608,15 +583,321 @@
     </div>
 
     <div id="port-empty" class="port-empty">
-      <div class="port-empty-icon">💼</div>
       <div class="port-empty-title">No holdings yet</div>
-      <div>Add your first stock above to start tracking your portfolio</div>
+      <div>Add your first stock above to start tracking your portfolio.</div>
     </div>
   </div>
-</div><!-- end portfolio page -->
+</div>
+
+<!-- ══════════ EDUCATION ══════════ -->
+<div id="page-education" class="page">
+  <div class="section-wrap">
+    <div class="page-head">
+      <h1>Educate yo'self, <em>fr</em></h1>
+      <p>The stuff that lowkey controls your money — how the economy moves markets, and which accounts let you keep more of what you make. Explained no cap.</p>
+    </div>
+
+    <div class="subnav" role="tablist" aria-label="Education topics">
+      <button role="tab" aria-selected="true" data-edu="economy" onclick="switchEdu('economy', this)">The economy</button>
+      <button role="tab" aria-selected="false" data-edu="vocab" onclick="switchEdu('vocab', this)">Stock vocab</button>
+      <button role="tab" aria-selected="false" data-edu="accounts" onclick="switchEdu('accounts', this)">Account types &amp; taxes</button>
+      <button role="tab" aria-selected="false" data-edu="lab" onclick="switchEdu('lab', this)">Interactive: the tax race</button>
+    </div>
+
+    <div id="edu-economy" class="edu-section active" role="tabpanel">
+    <div class="edu-grid">
+
+      <article class="edu-card">
+        <div class="edu-term">Term 1 of 4</div>
+        <h2 class="edu-title">GDP</h2>
+        <div class="edu-tagline">The economy's report card, no cap</div>
+        <div class="edu-body">
+          <strong>Gross Domestic Product</strong> is the total value of everything a country produces in a year — goods, services, all of it. Think of it as the economy's GPA. <strong>When GDP grows</strong>, businesses are printing, people have jobs, and the market usually follows. <strong>When GDP goes negative two quarters in a row</strong>, that's a recession era and portfolios get cooked. The 2020 COVID crash dropped GDP by nearly <strong>3%</strong> — the worst since the Great Depression.
+        </div>
+        <ul class="impact-pills">
+          <li class="pill-bull">GDP rising → bull market energy</li>
+          <li class="pill-bear">GDP negative → recession szn</li>
+        </ul>
+        <div class="edu-fig">US real GDP growth, % per year</div>
+        <div class="edu-chart-wrap"><canvas id="chart-gdp"></canvas></div>
+        <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" onclick="runLesson('gdp')">$10,000 in the S&amp;P 500 through the 2020 crash and rebound</button></div>
+      </article>
+
+      <article class="edu-card">
+        <div class="edu-term">Term 2 of 4</div>
+        <h2 class="edu-title">Inflation</h2>
+        <div class="edu-tagline">Why your $20 hits different than it used to</div>
+        <div class="edu-body">
+          Inflation is prices going up over time across the whole economy. A little bit (<strong>~2%</strong>) is actually healthy and what the Fed targets. But when inflation goes <strong>8%+</strong> like in 2022? Everything gets expensive — groceries, rent, gas — and the Fed has to step in with rate hikes that tank growth stocks. <strong>Moderate inflation</strong> is fine for equities. <strong>Runaway inflation</strong> is the villain arc.
+        </div>
+        <ul class="impact-pills">
+          <li class="pill-bull">~2% inflation → market slays</li>
+          <li class="pill-neutral">3–5% → market gets nervous</li>
+          <li class="pill-bear">8%+ → bear market szn</li>
+        </ul>
+        <div class="edu-fig">US inflation rate, % per year (gray line: the Fed's 2% target)</div>
+        <div class="edu-chart-wrap"><canvas id="chart-inflation"></canvas></div>
+        <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" onclick="runLesson('inflation')">$10,000 in the S&amp;P 500 during 2022, the 8% inflation year</button></div>
+      </article>
+
+      <article class="edu-card">
+        <div class="edu-term">Term 3 of 4</div>
+        <h2 class="edu-title">CPI</h2>
+        <div class="edu-tagline">The receipts on how expensive life is getting</div>
+        <div class="edu-body">
+          <strong>Consumer Price Index</strong> tracks the price of a fixed basket of everyday items — groceries, rent, gas, clothes. It's literally how the government measures inflation. Every month when CPI data drops, <strong>the whole market reacts</strong> in real time. CPI coming in <strong>hotter than expected</strong> = red day. CPI cooling down = green day. Wall Street watches this number like it's a Kendrick album drop.
+        </div>
+        <ul class="impact-pills">
+          <li class="pill-bull">CPI cooling → rally incoming</li>
+          <li class="pill-bear">CPI hot → market dips on the news</li>
+        </ul>
+        <div class="edu-fig">US CPI index level</div>
+        <div class="edu-chart-wrap"><canvas id="chart-cpi"></canvas></div>
+        <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" onclick="runLesson('cpi')">$10,000 in the S&amp;P 500 from the June 2022 CPI peak through 2023</button></div>
+      </article>
+
+      <article class="edu-card">
+        <div class="edu-term">Term 4 of 4</div>
+        <h2 class="edu-title">Interest Rates</h2>
+        <div class="edu-tagline">The Fed's main character energy that moves everything</div>
+        <div class="edu-body">
+          The <strong>Federal Reserve</strong> sets the benchmark interest rate to control inflation. When rates go up, <strong>borrowing gets expensive</strong> — mortgages, car loans, business credit all cost more. Tech and growth stocks especially hate high rates because their future profits get discounted hard. The Fed went from <strong>0.25% → 5.5%</strong> in under 2 years (2022–2023) — one of the fastest hike cycles ever, and the market felt it fr.
+        </div>
+        <ul class="impact-pills">
+          <li class="pill-bull">Rate cuts → market goes brr</li>
+          <li class="pill-bear">Rate hikes → growth stocks cooked</li>
+        </ul>
+        <div class="edu-fig">Fed funds rate, % at year end</div>
+        <div class="edu-chart-wrap"><canvas id="chart-rates"></canvas></div>
+        <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" onclick="runLesson('rates')">$10,000 in a growth-stock fund (ARKK) during the 2022 rate hikes</button></div>
+      </article>
+
+    </div>
+
+    <div class="connections">
+      <h2>How it all connects</h2>
+      <p class="sub">These four terms aren't separate — they're one big chain reaction. Here's how it plays out.</p>
+      <div class="flow-grid">
+
+        <div class="flow-card">
+          <div class="flow-label"><span class="positive">▲</span> Bull scenario</div>
+          <ol class="flow-steps">
+            <li><span><strong>GDP grows strong</strong> — economy is healthy, companies printing money</span></li>
+            <li><span><strong>Inflation stays near 2%</strong> — prices rising but not crazy</span></li>
+            <li><span><strong>Fed holds or cuts rates</strong> — borrowing stays cheap, business invests</span></li>
+            <li><span><strong>CPI stays chill</strong> — consumers keep spending, confidence high</span></li>
+            <li class="flow-result"><span class="positive">Stocks go up. Portfolio secured.</span></li>
+          </ol>
+        </div>
+
+        <div class="flow-card">
+          <div class="flow-label"><span class="negative">▼</span> Bear scenario</div>
+          <ol class="flow-steps">
+            <li><span><strong>Inflation spikes</strong> — supply chain issues, too much money printed</span></li>
+            <li><span><strong>CPI data comes in hot</strong> — everyday prices going up fast</span></li>
+            <li><span><strong>Fed hikes interest rates</strong> aggressively to cool inflation down</span></li>
+            <li><span><strong>GDP starts slowing</strong> — businesses borrow less, hiring freezes</span></li>
+            <li class="flow-result"><span class="negative">Stocks drop. Market in its villain era.</span></li>
+          </ol>
+        </div>
+
+      </div>
+    </div>
+    </div>
+
+    <div id="edu-accounts" class="edu-section" role="tabpanel">
+      <div class="acct-intro">
+        <h2>Same investments, different tax bill</h2>
+        <p>An account is just a wrapper around your investments. You can hold the exact same S&amp;P 500 fund in every one of these — what changes is <strong>when the IRS takes its cut</strong>. There are three moments it can: when money goes in, while it grows, and when it comes out. A regular brokerage account gets taxed along the way. The others are "tax-advantaged": each one skips at least one of those moments, in exchange for rules about limits and withdrawals.</p>
+      </div>
+
+      <div class="payment-card">
+        <div class="panel-head"><h3>When each account gets taxed</h3><span class="note">Limits are for the 2026 tax year</span></div>
+        <div class="table-scroll">
+          <table class="pay-table acct-table">
+            <thead><tr>
+              <th>Account</th><th>Money going in</th><th>While it grows</th><th>Money coming out</th><th>Yearly limit (2026)</th>
+            </tr></thead>
+            <tbody>
+              <tr><td><strong>Taxable brokerage</strong></td><td>Already-taxed money</td><td>Dividends and interest taxed every year</td><td>Gains taxed when you sell</td><td>None</td></tr>
+              <tr><td><strong>Traditional 401(k)</strong></td><td class="free">Not taxed (comes out of your paycheck pre-tax)</td><td class="free">Not taxed</td><td>Taxed as regular income</td><td>$24,500</td></tr>
+              <tr><td><strong>Roth 401(k)</strong></td><td>Already-taxed money</td><td class="free">Not taxed</td><td class="free">Tax-free*</td><td>$24,500, shared with the traditional 401(k)</td></tr>
+              <tr><td><strong>Traditional IRA</strong></td><td class="free">Usually deductible</td><td class="free">Not taxed</td><td>Taxed as regular income</td><td>$7,500</td></tr>
+              <tr><td><strong>Roth IRA</strong></td><td>Already-taxed money</td><td class="free">Not taxed</td><td class="free">Tax-free*</td><td>$7,500, shared with the traditional IRA</td></tr>
+              <tr><td><strong>HSA</strong></td><td class="free">Not taxed</td><td class="free">Not taxed</td><td class="free">Tax-free for medical costs</td><td>$4,400 solo, $8,750 family</td></tr>
+              <tr><td><strong>529 plan</strong></td><td>Already-taxed money</td><td class="free">Not taxed</td><td class="free">Tax-free for education</td><td>No yearly federal limit</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="chart-note">*Once you're 59½ and the account has been open five years. Older savers get extra room: from age 50, $8,000 more in a 401(k) ($11,250 at ages 60–63) and $1,100 more in an IRA; from 55, $1,000 more in an HSA.</p>
+      </div>
+
+      <div class="edu-grid acct-grid">
+
+        <article class="edu-card">
+          <div class="edu-term">The flexible one</div>
+          <h2 class="edu-title">Taxable brokerage</h2>
+          <div class="edu-tagline">No rules, no perks, taxes as you go</div>
+          <div class="edu-body">
+            This is the plain account you open on Robinhood, Fidelity or Schwab. You put in money you've already paid income tax on, and anyone can open one. Dividends and interest get taxed <strong>the year you receive them</strong>. When you sell for a profit you owe <strong>capital gains tax</strong>: hold for more than a year and it's the long-term rate (0%, 15% or 20% depending on income); sell sooner and it's taxed like your paycheck. Sell at a loss and you can use it to cancel out gains.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">No limits, no income rules, take money out whenever</li>
+            <li class="pill-bear">The only one here with no tax break at all</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The work one</div>
+          <h2 class="edu-title">Traditional 401(k)</h2>
+          <div class="edu-tagline">Tax break now, tax bill later</div>
+          <div class="edu-body">
+            Offered through your job. Contributions come out of your paycheck <strong>before income tax</strong>, so putting in $5,000 lowers your taxable pay by $5,000 this year. It grows untaxed, then every dollar you take out in retirement is taxed as regular income. Many employers add a <strong>match</strong> — free money on top of what you put in. Take money out before 59½ and you usually owe a 10% penalty plus the tax. From age 73 the IRS makes you start withdrawing.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Employer match is the closest thing to free money</li>
+            <li class="pill-bull">Highest limit of the bunch: $24,500 in 2026</li>
+            <li class="pill-bear">Locked up until 59½, and withdrawals are fully taxed</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The work one, flipped</div>
+          <h2 class="edu-title">Roth 401(k)</h2>
+          <div class="edu-tagline">Pay the tax now, never again</div>
+          <div class="edu-body">
+            Same workplace plan, opposite tax deal. You contribute money that's <strong>already been taxed</strong>, so there's no break today — but the growth and the withdrawals in retirement are <strong>completely tax-free</strong>. It shares the $24,500 limit with the traditional 401(k), so you can split between them but not double up. Unlike a Roth IRA there's no income cap, so high earners can use it. Not every employer offers one.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Decades of growth come out tax-free</li>
+            <li class="pill-bull">No income limit</li>
+            <li class="pill-bear">No tax break this year, and still locked until 59½</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The do-it-yourself one</div>
+          <h2 class="edu-title">Traditional IRA</h2>
+          <div class="edu-tagline">A 401(k)-style deal you open yourself</div>
+          <div class="edu-body">
+            An Individual Retirement Account isn't tied to a job — you open it at any brokerage, as long as you have earned income. Contributions are usually <strong>tax-deductible</strong>, growth isn't taxed, and withdrawals are taxed as income. The catch: if you also have a retirement plan at work, the deduction fades out as your income rises (between $81,000 and $91,000 for a single filer in 2026). Same 10% early-withdrawal penalty before 59½, same forced withdrawals from 73.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Works even if your job has no retirement plan</li>
+            <li class="pill-bear">Low limit: $7,500, shared with the Roth IRA</li>
+            <li class="pill-bear">Deduction can shrink or vanish if you have a plan at work</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The fan favorite</div>
+          <h2 class="edu-title">Roth IRA</h2>
+          <div class="edu-tagline">Tax-free forever, if you get in while you can</div>
+          <div class="edu-body">
+            You put in already-taxed money, and everything it earns comes out <strong>tax-free in retirement</strong>. It's the most flexible retirement account: you can take back what you <strong>contributed</strong> (not the earnings) at any time with no tax or penalty, and you're never forced to withdraw. The trade-off is an income cap — in 2026 the amount you can contribute shrinks between $153,000 and $168,000 of income for single filers ($242,000–$252,000 for married couples), then hits zero.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Tax-free growth, and no forced withdrawals ever</li>
+            <li class="pill-bull">Your contributions stay reachable in an emergency</li>
+            <li class="pill-bear">Income limits, and only $7,500 a year</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The sleeper</div>
+          <h2 class="edu-title">HSA</h2>
+          <div class="edu-tagline">The only account that skips tax all three times</div>
+          <div class="edu-body">
+            A Health Savings Account is meant for medical bills, but you can invest the balance like any other account. Money goes in <strong>untaxed</strong>, grows <strong>untaxed</strong>, and comes out <strong>untaxed</strong> when spent on qualified medical costs — no other account does all three. You can only contribute while you're on a <strong>high-deductible health plan</strong>. Spend it on non-medical stuff before 65 and you owe income tax plus a 20% penalty; after 65 the penalty goes away and it works like a traditional IRA.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Triple tax break, and the money rolls over every year</li>
+            <li class="pill-bear">Only available with a high-deductible health plan</li>
+            <li class="pill-bear">Steep 20% penalty for non-medical spending before 65</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The school one</div>
+          <h2 class="edu-title">529 plan</h2>
+          <div class="edu-tagline">Tax-free growth for tuition</div>
+          <div class="edu-body">
+            A state-run investment account for education. You contribute already-taxed money (some states give you a deduction for it), it grows untaxed, and withdrawals are <strong>tax-free when spent on education</strong> — tuition, housing, books. Use it on something else and the earnings get taxed plus a 10% penalty. There's no yearly federal cap, though big gifts can run into gift-tax rules above $19,000 per person. If the money isn't needed, up to <strong>$35,000</strong> over a lifetime can move into the student's Roth IRA once the account is 15 years old.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Tax-free growth, and anyone can contribute for a kid</li>
+            <li class="pill-bear">Earnings are penalized if not used for education</li>
+          </ul>
+        </article>
+
+        <article class="edu-card">
+          <div class="edu-term">The big question</div>
+          <h2 class="edu-title">Traditional or Roth?</h2>
+          <div class="edu-tagline">It comes down to when your tax rate is lower</div>
+          <div class="edu-body">
+            Both end up taxing your money once — the question is <strong>when</strong>. Traditional gives you the break today and taxes you in retirement. Roth taxes you today and never again. If you expect to be in a <strong>higher bracket later</strong> (early in your career, income still climbing), paying now with a Roth tends to win. If you're in a <strong>high bracket now</strong> and expect a lower one in retirement, the traditional deduction is worth more. Nobody knows future tax rates, which is why plenty of people split between the two.
+          </div>
+          <ul class="impact-pills">
+            <li class="pill-bull">Lower income now → Roth usually looks better</li>
+            <li class="pill-bull">Higher income now → traditional usually looks better</li>
+            <li class="pill-neutral">Not sure → some of each covers both outcomes</li>
+          </ul>
+          <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" onclick="switchEdu('lab'); document.querySelector('.subnav').scrollIntoView()">Run the tax race yourself</button></div>
+        </article>
+
+      </div>
+
+      <div class="connections">
+        <h2>A common order to fill them in</h2>
+        <p class="sub">A rule of thumb a lot of people follow once they have an emergency fund and no high-interest debt. It's a starting point, not personal advice — your job's plan, income and goals change the answer.</p>
+        <ol class="flow-steps acct-order">
+          <li><span><strong>401(k) up to the employer match</strong> — skipping the match is turning down part of your pay</span></li>
+          <li><span><strong>HSA, if you have a high-deductible health plan</strong> — the only triple tax break</span></li>
+          <li><span><strong>Roth or traditional IRA</strong> — more investment choices than most work plans</span></li>
+          <li><span><strong>The rest of your 401(k)</strong> — back to the big limit</span></li>
+          <li><span><strong>Taxable brokerage</strong> — for everything beyond the limits, or money you need before retirement</span></li>
+        </ol>
+        <p class="note" style="margin-top:18px">Limits and income ranges are the IRS figures for the 2026 tax year and change most years. This covers US accounts and federal tax only; states have their own rules.</p>
+      </div>
+    </div>
+
+    <div id="edu-vocab" class="edu-section" role="tabpanel">
+      <div class="acct-intro">
+        <h2>Speak stock market</h2>
+        <p>Every word you'll hear in a market headline or see in a trading app, in four parts. Each term comes with a plain definition and an example. Finish with a 12-question quiz.</p>
+      </div>
+      <div class="seg vocab-steps" id="vocab-steps" role="group" aria-label="Lesson parts"></div>
+      <div id="vocab-body"></div>
+    </div>
+
+    <div id="edu-lab" class="edu-section" role="tabpanel">
+      <div class="acct-intro">
+        <h2>The tax race</h2>
+        <p>Three accounts, the same paycheck money, the same investment. Call each result before you see it, then take the controls yourself. Four steps, about three minutes.</p>
+      </div>
+
+      <div class="lab">
+        <div class="lab-step" id="lab-step" aria-live="polite"></div>
+
+        <div class="payment-card lab-panel">
+          <div class="panel-head"><h3>What you can actually spend at the end</h3><span class="note" id="lab-caption"></span></div>
+          <div id="lab-bars"></div>
+          <div class="lab-controls" id="lab-controls">
+            <label class="lab-slider"><span>Set aside from your paycheck each year <b id="lab-v-amount"></b></span><input type="range" id="lab-amount" min="1000" max="20000" step="500"></label>
+            <label class="lab-slider"><span>Years invested <b id="lab-v-years"></b></span><input type="range" id="lab-years" min="5" max="45" step="1"></label>
+            <label class="lab-slider"><span>Your tax rate now <b id="lab-v-taxNow"></b></span><input type="range" id="lab-taxNow" min="0" max="40" step="1"></label>
+            <label class="lab-slider"><span>Your tax rate in retirement <b id="lab-v-taxLater"></b></span><input type="range" id="lab-taxLater" min="0" max="40" step="1"></label>
+            <label class="lab-slider"><span>Yearly investment return <b id="lab-v-ret"></b></span><input type="range" id="lab-ret" min="2" max="12" step="0.5"></label>
+          </div>
+          <p class="chart-note">A simplified model: steady returns and flat tax rates. The brokerage account pays 15% tax on a 1.5% yearly dividend and 15% on its gains when sold. It ignores contribution limits, employer matches, state taxes and inflation.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <footer>
-  <p>© 2026 MoneyMogging101 · Data via Yahoo Finance & US BLS · <a href="#">Past returns ≠ future results</a></p>
+  <p class="wrap">© 2026 MoneyMogging101 · Data via Yahoo Finance and US BLS · Past returns don't predict future results. Not financial advice.</p>
 </footer>
 
 <script>
@@ -629,14 +910,51 @@ function switchTab(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  btn.classList.add('active');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  (btn || document.querySelector(`.tab-btn[data-tab="${name}"]`)).classList.add('active');
+  window.scrollTo(0, 0);
   if (name === 'education' && !eduChartsInit) {
     eduChartsInit = true;
     requestAnimationFrame(initEduCharts);
   }
   if (name === 'portfolio') renderPortfolioUI();
+  if (name === 'movers') loadMovers(false);
 }
+
+function switchEdu(name, btn) {
+  btn = btn || document.querySelector(`.subnav button[data-edu="${name}"]`);
+  document.querySelectorAll('.edu-section').forEach(el => el.classList.toggle('active', el.id === 'edu-' + name));
+  document.querySelectorAll('.subnav button').forEach(b => b.setAttribute('aria-selected', b === btn));
+  if (name === 'lab' && !lab.started) { lab.started = true; labRender(); }
+  if (name === 'vocab' && !vocab.started) { vocab.started = true; vocabRender(); }
+}
+
+// ═══════════════════════════════════════
+//  SHARED HELPERS
+// ═══════════════════════════════════════
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+// Fetch JSON from our API. If the server answers with something that isn't JSON
+// (an outage page, say), report that plainly instead of a parse error.
+async function getJSON(url) {
+  let res;
+  try { res = await fetch(url); }
+  catch { throw Object.assign(new Error("Couldn't reach the market data service. Check your connection and try again."), { unavailable: true }); }
+  let data;
+  try { data = await res.json(); }
+  catch { throw Object.assign(new Error('Market data is temporarily unavailable. Try again in a few minutes.'), { unavailable: true }); }
+  if (!res.ok) throw new Error(data.error || 'Failed to load data');
+  return data;
+}
+
+// Chart colours come from the page's CSS variables so light and dark mode match.
+function theme() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  return { s1: v('--blue'), s2: v('--orange'), text: v('--text'), muted: v('--muted'), grid: v('--grid'), surface: v('--bg2'), border: v('--border') };
+}
+const tooltipStyle = T => ({ backgroundColor: T.surface, borderColor: T.border, borderWidth: 1, titleColor: T.muted, bodyColor: T.text, padding: 10, boxPadding: 4 });
+const moneyTick = v => '$' + (Math.abs(v) >= 1e6 ? +(v / 1e6).toFixed(1) + 'M' : Math.abs(v) >= 1000 ? +(v / 1000).toFixed(1) + 'k' : v);
+const axisStyle = (T, extra = {}) => ({ grid: { color: T.grid }, border: { color: T.border }, ticks: { color: T.muted, font: { size: 11 }, ...extra } });
 
 // ═══════════════════════════════════════
 //  SIMULATOR
@@ -646,6 +964,7 @@ const fiveYearsAgo = new Date(today); fiveYearsAgo.setFullYear(today.getFullYear
 document.getElementById('end-date').value   = today.toISOString().slice(0,10);
 document.getElementById('start-date').value = fiveYearsAgo.toISOString().slice(0,10);
 document.getElementById('end-date').max     = today.toISOString().slice(0,10);
+document.getElementById('dateline').textContent = today.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
 
 let simChart = null;
 
@@ -653,10 +972,10 @@ function toggleRecurring(on) {
   document.getElementById('recurring-fields').className = 'form-row' + (on ? ' visible' : '');
 }
 
-function loadPreset(ticker, startDate, initial, recurring, recurAmt, freq) {
+function loadPreset(ticker, startDate, initial, recurring, recurAmt, freq, endDate, lessonNote) {
   document.getElementById('ticker').value             = ticker;
   document.getElementById('start-date').value         = startDate;
-  document.getElementById('end-date').value           = today.toISOString().slice(0,10);
+  document.getElementById('end-date').value           = endDate || today.toISOString().slice(0,10);
   document.getElementById('initial-amount').value     = initial;
   document.getElementById('recurring-toggle').checked = recurring;
   toggleRecurring(recurring);
@@ -664,7 +983,20 @@ function loadPreset(ticker, startDate, initial, recurring, recurAmt, freq) {
     document.getElementById('recurring-amount').value = recurAmt;
     document.getElementById('frequency').value        = freq;
   }
-  runSimulation();
+  runSimulation(lessonNote);
+}
+
+// Each Education lesson links to a real stretch of market history that shows it happening.
+const LESSONS = {
+  gdp:       { ticker:'SPY',  start:'2020-01-01', end:'2021-12-31', note:'GDP lesson: the economy shrank in 2020, then bounced back hard in 2021. Watch what the market did.' },
+  inflation: { ticker:'SPY',  start:'2022-01-01', end:'2022-12-31', note:'Inflation lesson: prices rose about 8% in 2022. Here is what the same year did to stocks.' },
+  cpi:       { ticker:'SPY',  start:'2022-06-01', end:'2023-12-31', note:'CPI lesson: yearly CPI inflation peaked in June 2022 and cooled through 2023.' },
+  rates:     { ticker:'ARKK', start:'2022-01-01', end:'2022-12-31', note:'Interest rates lesson: the Fed hiked all through 2022. Compare a growth-stock fund with the S&P 500.' },
+};
+function runLesson(key) {
+  const L = LESSONS[key];
+  switchTab('simulator');
+  loadPreset(L.ticker, L.start, 10000, false, 0, 'monthly', L.end, L.note);
 }
 
 function advanceDate(date, freq) {
@@ -703,28 +1035,50 @@ function simulate(timestamps, closes, startTs, endTs, initialAmount, recurring, 
 
 const fmt = n => new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(n);
 
-function renderSimStats(sim, ticker, name, currency) {
+function renderSimStats(sim, ticker, name, currency, bench) {
   const pos = sim.profit >= 0;
+  let benchCard = '';
+  if (bench) {
+    const diff = sim.finalValue - bench.finalValue, ahead = diff >= 0;
+    benchCard = `<div class="stat-card"><div class="s-label">vs. S&amp;P 500</div><div class="s-val ${ahead?'positive':'negative'}">${ahead?'+':'−'}${fmt(Math.abs(diff))}</div><div class="s-sub" title="The same money put into the S&amp;P 500 (SPY) on the same dates">Index: ${fmt(bench.finalValue)} (${bench.pct>=0?'+':'−'}${Math.abs(bench.pct).toFixed(1)}%)</div></div>`;
+  }
   document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card"><div class="s-label">Total Invested</div><div class="s-val">${fmt(sim.totalInvested)}</div><div class="s-sub">${currency}</div></div>
-    <div class="stat-card"><div class="s-label">Current Value</div><div class="s-val ${pos?'positive':'negative'}">${fmt(sim.finalValue)}</div><div class="s-sub">${ticker} · ${name}</div></div>
-    <div class="stat-card"><div class="s-label">Total Profit</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':''}${fmt(sim.profit)}</div><div class="s-sub">Unrealised gain/loss</div></div>
-    <div class="stat-card"><div class="s-label">Return</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':''}${sim.pct.toFixed(1)}%</div><div class="s-sub">Total return</div></div>`;
+    <div class="stat-card"><div class="s-label">Total Invested</div><div class="s-val">${fmt(sim.totalInvested)}</div><div class="s-sub">${esc(currency)}</div></div>
+    <div class="stat-card"><div class="s-label">Ending Value</div><div class="s-val ${pos?'positive':'negative'}">${fmt(sim.finalValue)}</div><div class="s-sub">${esc(ticker)} · ${esc(name)}</div></div>
+    <div class="stat-card"><div class="s-label">Total Profit</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':'−'}${fmt(Math.abs(sim.profit))}</div><div class="s-sub">Unrealised gain/loss</div></div>
+    <div class="stat-card"><div class="s-label">Return</div><div class="s-val ${pos?'positive':'negative'}">${pos?'+':'−'}${Math.abs(sim.pct).toFixed(1)}%</div><div class="s-sub">Total return</div></div>
+    ${benchCard}`;
 }
 
-function renderSimChart(sim, ticker) {
+// ── S&P 500 benchmark ──
+// The same deposits on the same schedule, put into SPY instead. Skipped when the
+// ticker already tracks the S&P 500 or trades in another currency.
+const BENCH = 'SPY';
+const SP500_TRACKERS = new Set(['SPY', 'VOO', 'IVV', 'SPLG', '^GSPC', '^SPX']);
+
+// Line the benchmark up with the main series' dates: for each date use the most
+// recent benchmark value on or before it (markets differ in trading days).
+function alignSeries(labels, benchSim) {
+  const out = []; let j = 0;
+  for (const d of labels) {
+    while (j + 1 < benchSim.labels.length && benchSim.labels[j + 1] <= d) j++;
+    out.push(benchSim.labels[j] <= d ? benchSim.portfolio[j] : null);
+  }
+  return out;
+}
+
+function renderSimChart(sim, ticker, benchLine) {
   if (simChart) { simChart.destroy(); simChart = null; }
-  const ctx = document.getElementById('sim-chart').getContext('2d');
-  const grad = ctx.createLinearGradient(0,0,0,300);
-  grad.addColorStop(0,'rgba(0,230,118,.2)'); grad.addColorStop(1,'rgba(0,230,118,0)');
-  document.getElementById('chart-title').textContent = ticker + ' — Portfolio Value Over Time';
-  simChart = new Chart(ctx, {
+  const T = theme();
+  document.getElementById('chart-title').textContent = ticker + ': value over time';
+  simChart = new Chart(document.getElementById('sim-chart').getContext('2d'), {
     type: 'line',
     data: {
       labels: sim.labels,
       datasets: [
-        { label:'Portfolio', data:sim.portfolio, borderColor:'#00e676', borderWidth:2.5, backgroundColor:grad, fill:true, tension:0.3, pointRadius:0, pointHoverRadius:5, pointHoverBackgroundColor:'#00e676' },
-        { label:'Invested',  data:sim.invested,  borderColor:'#444',    borderWidth:2,   borderDash:[6,4], backgroundColor:'transparent', fill:false, tension:0, pointRadius:0, pointHoverRadius:4 },
+        { label:ticker, data:sim.portfolio, borderColor:T.s1, backgroundColor:T.s1, borderWidth:2, fill:false, tension:0.15, pointRadius:0, pointHoverRadius:4 },
+        ...(benchLine ? [{ label:'S&P 500', data:benchLine, borderColor:T.s2, backgroundColor:T.s2, borderWidth:2, fill:false, tension:0.15, pointRadius:0, pointHoverRadius:4, spanGaps:true }] : []),
+        { label:'Invested',  data:sim.invested,  borderColor:T.muted, backgroundColor:T.muted, borderWidth:1.5, fill:false, stepped:true, pointRadius:0, pointHoverRadius:3 },
       ],
     },
     options: {
@@ -733,8 +1087,7 @@ function renderSimChart(sim, ticker) {
       plugins:{
         legend:{display:false},
         tooltip:{
-          backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1,
-          titleColor:'#aaa', bodyColor:'#fff', padding:12,
+          ...tooltipStyle(T),
           callbacks:{
             title: items => new Date(items[0].parsed.x).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
             label: item => ` ${item.dataset.label}: ${fmt(item.parsed.y)}`,
@@ -742,26 +1095,28 @@ function renderSimChart(sim, ticker) {
         },
       },
       scales:{
-        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, grid:{color:'#161616'}, ticks:{color:'#444',maxTicksLimit:8,font:{size:11}} },
-        y:{ grid:{color:'#161616'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, ...axisStyle(T, {maxTicksLimit:8}), grid:{display:false} },
+        y:{ ...axisStyle(T, {callback:moneyTick}) },
       },
     },
   });
 }
 
-function restoreSimChartCard() {
+function restoreSimChartCard(ticker, hasBench) {
   document.getElementById('sim-chart-card').innerHTML = `
     <div class="chart-header">
-      <div class="chart-title" id="chart-title">Portfolio Value Over Time</div>
+      <div class="chart-title" id="chart-title">Value over time</div>
       <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Portfolio</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#333;border:1.5px dashed #555"></div>Invested</div>
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--blue)"></div>${esc(ticker)}</div>
+        ${hasBench ? '<div class="legend-item"><div class="legend-dot" style="border-color:var(--orange)"></div>S&amp;P 500</div>' : ''}
+        <div class="legend-item"><div class="legend-dot" style="border-color:var(--muted)"></div>Invested</div>
       </div>
     </div>
-    <div class="chart-wrap"><canvas id="sim-chart"></canvas></div>`;
+    <div class="chart-wrap"><canvas id="sim-chart"></canvas></div>
+    <p class="chart-note">Based on share price only; dividends aren't included.${hasBench ? ' The S&amp;P 500 line is the same money invested on the same dates in SPY, a fund that tracks the index.' : ''}</p>`;
 }
 
-async function runSimulation() {
+async function runSimulation(lessonNote) {
   const ticker    = document.getElementById('ticker').value.trim().toUpperCase();
   const startDate = document.getElementById('start-date').value;
   const endDate   = document.getElementById('end-date').value;
@@ -778,25 +1133,38 @@ async function runSimulation() {
   const resultsEl = document.getElementById('results');
   resultsEl.style.display = 'block';
   document.getElementById('stats-row').innerHTML = '';
-  document.getElementById('sim-chart-card').innerHTML = `<div class="loading-state"><div class="spinner"></div>Loading ${ticker} history…</div>`;
+  const noteEl = document.getElementById('lesson-note');
+  noteEl.classList.toggle('visible', typeof lessonNote === 'string');
+  if (typeof lessonNote === 'string') document.getElementById('lesson-note-text').textContent = lessonNote;
+  document.getElementById('sim-chart-card').innerHTML = `<div class="loading-state"><span class="spinner"></span>Loading ${esc(ticker)} history…</div>`;
   if (simChart) { simChart.destroy(); simChart = null; }
   resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
   try {
     const p1 = Math.floor(new Date(startDate).getTime()/1000);
     const p2 = Math.floor(new Date(endDate+'T23:59:59').getTime()/1000);
-    const res = await fetch(`/api/stock-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load data');
-    restoreSimChartCard();
+    const history = t => getJSON(`/api/stock-history?ticker=${encodeURIComponent(t)}&period1=${p1}&period2=${p2}`);
+    // The benchmark is a bonus: if it fails to load, show the simulation without it
+    const [data, benchData] = await Promise.all([
+      history(ticker),
+      SP500_TRACKERS.has(ticker) ? null : history(BENCH).catch(() => null),
+    ]);
     const sim = simulate(data.timestamps, data.closes, p1, p2, initAmt, recurring, recurAmt, freq);
     if (!sim||!sim.labels.length) throw new Error('No price data in that date range');
-    renderSimStats(sim, data.ticker, data.name, data.currency);
-    renderSimChart(sim, data.ticker);
+    let bench = null;
+    if (benchData && data.currency === 'USD' && !SP500_TRACKERS.has(data.ticker)) {
+      // Start the benchmark on the ticker's first trading day so both invest over the same stretch
+      const firstTs = Math.floor(sim.labels[0].getTime()/1000);
+      bench = simulate(benchData.timestamps, benchData.closes, firstTs - p1 > 35*86400 ? firstTs : p1, p2, initAmt, recurring, recurAmt, freq);
+      if (!bench || !bench.labels.length) bench = null;
+    }
+    restoreSimChartCard(data.ticker, !!bench);
+    renderSimStats(sim, data.ticker, data.name, data.currency, bench);
+    renderSimChart(sim, data.ticker, bench && alignSeries(sim.labels, bench));
   } catch(e) {
-    restoreSimChartCard();
-    document.getElementById('sim-chart-card').innerHTML = `<div class="error-state"><div class="error-msg">⚠️ ${e.message}</div><div>Check the ticker symbol and try again.</div></div>`;
+    document.getElementById('stats-row').innerHTML = '';
+    document.getElementById('sim-chart-card').innerHTML = `<div class="error-state"><div class="error-msg">${esc(e.message)}</div>${e.unavailable ? '' : '<div>Check the ticker symbol and try again.</div>'}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = 'Simulate →';
+    btn.disabled = false; btn.textContent = 'Run simulation';
   }
 }
 
@@ -872,8 +1240,8 @@ function renderDivStats(sim, ticker, name, currency, initialShares, drip) {
   const hasProjection = sim.projectedCash > 0;
   const projCard = hasProjection ? `
     <div class="stat-card">
-      <div class="s-label">Projected Income 🔮</div>
-      <div class="s-val" style="color:var(--blue)">${fmt(sim.projectedCash)}</div>
+      <div class="s-label">Projected Income</div>
+      <div class="s-val">${fmt(sim.projectedCash)}</div>
       <div class="s-sub">Estimated future dividends</div>
     </div>` : '';
   document.getElementById('div-stats').innerHTML = `
@@ -886,7 +1254,7 @@ function renderDivStats(sim, ticker, name, currency, initialShares, drip) {
     <div class="stat-card">
       <div class="s-label">${drip ? 'DRIP Portfolio Value' : 'Portfolio Value'}</div>
       <div class="s-val ${pos?'positive':'negative'}">${fmt(drip ? sim.finalDripVal : sim.finalNoDripVal)}</div>
-      <div class="s-sub">${drip ? fmt(sim.shares.toFixed(4))+' shares' : initialShares+' shares'}</div>
+      <div class="s-sub">${drip ? sim.shares.toFixed(2)+' shares' : initialShares+' shares'}</div>
     </div>
     <div class="stat-card">
       <div class="s-label">${drip ? 'DRIP Gain vs No-DRIP' : 'Total Value'}</div>
@@ -895,28 +1263,25 @@ function renderDivStats(sim, ticker, name, currency, initialShares, drip) {
     </div>
     <div class="stat-card">
       <div class="s-label">Trailing Yield</div>
-      <div class="s-val" style="color:var(--yellow)">${sim.yield_.toFixed(2)}%</div>
+      <div class="s-val">${sim.yield_.toFixed(2)}%</div>
       <div class="s-sub">Last 4 payments annualised</div>
     </div>`;
 }
 
 function renderDivChart(sim, ticker, drip) {
   if (divChart) { divChart.destroy(); divChart = null; }
-  const ctx = document.getElementById('div-chart').getContext('2d');
-  const gradG = ctx.createLinearGradient(0,0,0,300);
-  gradG.addColorStop(0,'rgba(0,230,118,.18)'); gradG.addColorStop(1,'rgba(0,230,118,0)');
+  const T = theme();
   const nowMs = Date.now();
   const hasProjection = sim.dripPoints.some(p => p.x.getTime() > nowMs);
   document.getElementById('div-chart-title').textContent =
-    `${ticker} — Portfolio Value Over Time${hasProjection ? ' · dashed = projected' : ''}`;
-  divChart = new Chart(ctx, {
+    `${ticker}: portfolio value over time${hasProjection ? ' (dashed = projected)' : ''}`;
+  const projected = { borderDash: c => c.p1.parsed.x > nowMs ? [5,4] : undefined };
+  divChart = new Chart(document.getElementById('div-chart').getContext('2d'), {
     type: 'line',
     data: {
       datasets: [
-        { label:'With DRIP',    data: sim.dripPoints,   borderColor:'#00e676', borderWidth:2.5, backgroundColor:gradG, fill:true,  tension:0.3, pointRadius:0, pointHoverRadius:5,
-          segment:{ borderColor: c => c.p1.parsed.x > nowMs ? 'rgba(0,230,118,0.4)' : undefined, borderDash: c => c.p1.parsed.x > nowMs ? [5,4] : undefined } },
-        { label:'Without DRIP', data: sim.noDripPoints, borderColor:'#448aff', borderWidth:2,   backgroundColor:'transparent', fill:false, tension:0.3, pointRadius:0, pointHoverRadius:4,
-          segment:{ borderColor: c => c.p1.parsed.x > nowMs ? 'rgba(68,138,255,0.35)' : undefined, borderDash: c => c.p1.parsed.x > nowMs ? [5,4] : [6,4] } },
+        { label:'With DRIP',    data: sim.dripPoints,   borderColor:T.s1, backgroundColor:T.s1, borderWidth:2, fill:false, tension:0.15, pointRadius:0, pointHoverRadius:4, segment:projected },
+        { label:'Without DRIP', data: sim.noDripPoints, borderColor:T.s2, backgroundColor:T.s2, borderWidth:2, fill:false, tension:0.15, pointRadius:0, pointHoverRadius:4, segment:projected },
       ],
     },
     options: {
@@ -925,8 +1290,7 @@ function renderDivChart(sim, ticker, drip) {
       plugins:{
         legend:{display:false},
         tooltip:{
-          backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1,
-          titleColor:'#aaa', bodyColor:'#fff', padding:12,
+          ...tooltipStyle(T),
           callbacks:{
             title: i => new Date(i[0].parsed.x).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
             label: i => ` ${i.dataset.label}: ${fmt(i.parsed.y)}`,
@@ -934,8 +1298,8 @@ function renderDivChart(sim, ticker, drip) {
         },
       },
       scales:{
-        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, grid:{color:'#161616'}, ticks:{color:'#444',maxTicksLimit:8,font:{size:11}} },
-        y:{ grid:{color:'#161616'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+        x:{ type:'time', time:{tooltipFormat:'MMM yyyy'}, ...axisStyle(T, {maxTicksLimit:8}), grid:{display:false} },
+        y:{ ...axisStyle(T, {callback:moneyTick}) },
       },
     },
   });
@@ -943,26 +1307,22 @@ function renderDivChart(sim, ticker, drip) {
 
 function renderAnnualChart(sim) {
   if (annualChart) { annualChart.destroy(); annualChart = null; }
-  const ctx = document.getElementById('annual-chart').getContext('2d');
-  annualChart = new Chart(ctx, {
+  const T = theme();
+  annualChart = new Chart(document.getElementById('annual-chart').getContext('2d'), {
     type: 'bar',
     data: {
       labels: sim.annualLabels,
-      datasets:[{
-        label:'Annual Dividend Income', data: sim.annualValues,
-        backgroundColor:'rgba(0,230,118,.6)', borderColor:'#00e676', borderWidth:1, borderRadius:5,
-      }],
+      datasets:[{ label:'Annual dividend income', data: sim.annualValues, backgroundColor:T.s1, borderRadius:{topLeft:3,topRight:3}, maxBarThickness:28, categoryPercentage:0.8, barPercentage:0.85 }],
     },
     options: {
       responsive:true, maintainAspectRatio:false,
       plugins:{
         legend:{display:false},
-        tooltip:{ backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1, titleColor:'#aaa', bodyColor:'#fff', padding:10,
-          callbacks:{ label: i => ` Annual income: ${fmt(i.parsed.y)}` } },
+        tooltip:{ ...tooltipStyle(T), callbacks:{ label: i => ` Annual income: ${fmt(i.parsed.y)}` } },
       },
       scales:{
-        x:{ grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:11}} },
-        y:{ grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:11}, callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)} },
+        x:{ ...axisStyle(T), grid:{display:false} },
+        y:{ ...axisStyle(T, {callback:moneyTick}), beginAtZero:true },
       },
     },
   });
@@ -971,12 +1331,12 @@ function renderAnnualChart(sim) {
 function renderPayTable(sim, drip) {
   const rows = sim.payments.slice().reverse().slice(0, 20); // last 20, newest first
   document.getElementById('pay-table-title').textContent =
-    `Last ${rows.length} Dividend Payments${drip ? ' (DRIP active)' : ''}`;
+    `Last ${rows.length} dividend payments${drip ? ' (DRIP on)' : ''}`;
   document.getElementById('pay-tbody').innerHTML = rows.map(p => `
     <tr>
       <td>${p.date.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</td>
       <td>$${p.perShare.toFixed(4)}</td>
-      <td class="pos">+${fmt(p.payout)}${p.projected ? '<span class="proj-badge">PROJECTED</span>' : (drip ? '<span class="drip-badge">REINVESTED</span>' : '')}</td>
+      <td class="pos">+${fmt(p.payout)}${p.projected ? '<span class="proj-badge">projected</span>' : (drip ? '<span class="drip-badge">reinvested</span>' : '')}</td>
       <td>${p.sharesAfter.toFixed(drip?4:0)}</td>
       <td>${fmt(p.cumCash)}</td>
     </tr>`).join('');
@@ -1021,7 +1381,7 @@ async function runDividendSim() {
   document.getElementById('div-stats').innerHTML = '';
   const divChartWrap = document.querySelector('.div-chart-card .div-chart-wrap');
   divChartWrap.innerHTML =
-    '<div class="loading-state"><div class="spinner"></div>Loading dividend history…</div>';
+    '<div class="loading-state"><span class="spinner"></span>Loading dividend history…</div>';
   if (divChart)   { divChart.destroy();   divChart   = null; }
   if (annualChart){ annualChart.destroy(); annualChart = null; }
   resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -1033,9 +1393,7 @@ async function runDividendSim() {
     // Round to end-of-today so all users share the same CDN cache key each day
     const todayEnd = Math.floor(new Date(new Date().toISOString().slice(0,10) + 'T23:59:59').getTime() / 1000);
     const p2      = Math.min(todayEnd, endTs);
-    const res = await fetch(`/api/dividend-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load data');
+    const data = await getJSON(`/api/dividend-history?ticker=${encodeURIComponent(ticker)}&period1=${p1}&period2=${p2}`);
     if (!data.dividends?.length) throw new Error(`No dividend history found for ${ticker} — try a dividend-paying stock like SCHD, KO, or AAPL`);
 
     const allDividends = endTs > nowTs
@@ -1051,10 +1409,10 @@ async function runDividendSim() {
     renderAnnualChart(sim);
     renderPayTable(sim, drip);
   } catch(e) {
-    document.getElementById('div-stats').innerHTML = `<div class="error-state" style="grid-column:1/-1"><div class="error-msg">⚠️ ${e.message}</div></div>`;
+    document.getElementById('div-stats').innerHTML = `<div class="error-state" style="grid-column:1/-1"><div class="error-msg">${esc(e.message)}</div></div>`;
     divChartWrap.innerHTML = '';
   } finally {
-    btn.disabled = false; btn.textContent = 'Simulate Dividends →';
+    btn.disabled = false; btn.textContent = 'Run dividend simulation';
   }
 }
 
@@ -1110,7 +1468,7 @@ function renderPortfolioUI() {
 }
 
 function renderPortfolioTable() {
-  document.getElementById('port-holdings-title').textContent = `Your Holdings (${portfolio.length})`;
+  document.getElementById('port-holdings-title').textContent = `Your holdings (${portfolio.length})`;
   document.getElementById('port-tbody').innerHTML = portfolio.map(pos => {
     const cached   = priceCache[pos.ticker];
     const price    = cached?.price;
@@ -1129,7 +1487,7 @@ function renderPortfolioTable() {
       ? `<span class="${pl >= 0 ? 'positive' : 'negative'}">${pl >= 0 ? '+' : ''}${fmt(pl)}<br><span style="font-size:0.75rem">${plPct >= 0 ? '+' : ''}${plPct.toFixed(1)}%</span></span>`
       : dash;
     return `<tr>
-      <td><strong style="color:var(--text)">${pos.ticker}</strong>${name ? `<br><span style="font-size:0.75rem;color:var(--muted)">${name}</span>` : ''}</td>
+      <td><strong>${esc(pos.ticker)}</strong>${name ? `<br><span style="font-size:.8rem;color:var(--muted)">${esc(name)}</span>` : ''}</td>
       <td>${pos.shares}</td>
       <td>$${pos.avgCost.toFixed(2)}</td>
       <td>${priceStr}</td>
@@ -1137,8 +1495,8 @@ function renderPortfolioTable() {
       <td>${valueStr}</td>
       <td>${plStr}</td>
       <td style="white-space:nowrap">
-        <button class="port-btn-sm" style="background:var(--green-dim);color:var(--green);border-color:var(--green-bdr);margin-right:4px" onclick="analyzeDividends('${pos.ticker}',${pos.shares})">💰 Divs</button>
-        <button class="port-btn-sm" style="background:rgba(255,82,82,.1);color:var(--red);border-color:rgba(255,82,82,.25)" onclick="removePosition('${pos.id}')">✕</button>
+        <button class="port-btn-sm" data-act="divs" data-id="${pos.id}">Dividends</button>
+        <button class="port-btn-sm" data-act="remove" data-id="${pos.id}" aria-label="Remove ${esc(pos.ticker)}">Remove</button>
       </td>
     </tr>`;
   }).join('');
@@ -1165,7 +1523,7 @@ function renderPortfolioStats() {
 
 async function refreshPortfolio() {
   const btn = document.getElementById('port-refresh-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
   const tickers = [...new Set(portfolio.map(p => p.ticker))];
   const p2 = Math.floor(Date.now() / 1000);
   const p1 = p2 - 10 * 86400;
@@ -1183,14 +1541,20 @@ async function refreshPortfolio() {
   }));
   renderPortfolioTable();
   renderPortfolioStats();
-  if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh Prices'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Refresh prices'; }
 }
+
+document.getElementById('port-tbody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const pos = portfolio.find(p => p.id === b.dataset.id); if (!pos) return;
+  if (b.dataset.act === 'remove') removePosition(pos.id);
+  else analyzeDividends(pos.ticker, pos.shares);
+});
 
 function analyzeDividends(ticker, shares) {
   document.getElementById('div-ticker').value = ticker;
   document.getElementById('div-shares').value = shares;
-  const divTabBtn = document.querySelector('.tab-btn[onclick*="dividends"]');
-  switchTab('dividends', divTabBtn);
+  switchTab('dividends');
 }
 
 // ═══════════════════════════════════════
@@ -1205,133 +1569,502 @@ const EDU_DATA = {
   rates:     [0.25,0.25,0.25,0.25,0.25,0.50,0.75,1.50,2.50,1.75,0.25,0.25,4.50,5.50,4.50],
 };
 
-const EDU_CHART_DEFAULTS = {
-  responsive: true, maintainAspectRatio: false,
-  plugins: { legend:{display:false}, tooltip:{ backgroundColor:'#1a1a1a', borderColor:'#333', borderWidth:1, titleColor:'#aaa', bodyColor:'#fff', padding:10 } },
-  scales: {
-    x: { grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:10}} },
-    y: { grid:{color:'#1a1a1a'}, ticks:{color:'#444',font:{size:10}} },
-  },
-};
-
 function initEduCharts() {
-
-  // GDP — bar chart, green/red by sign
-  new Chart(document.getElementById('chart-gdp').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: YEARS,
-      datasets:[{
-        label: 'GDP Growth %',
-        data: EDU_DATA.gdp,
-        backgroundColor: EDU_DATA.gdp.map(v => v>=0 ? 'rgba(0,230,118,.7)' : 'rgba(255,82,82,.7)'),
-        borderColor:     EDU_DATA.gdp.map(v => v>=0 ? '#00e676' : '#ff5252'),
-        borderWidth: 1, borderRadius: 4,
-      }],
-    },
+  const T = theme();
+  const pct = v => v + '%';
+  const make = (id, type, datasets, yFmt, tipLabel) => new Chart(document.getElementById(id).getContext('2d'), {
+    type,
+    data: { labels: YEARS, datasets },
     options: {
-      ...EDU_CHART_DEFAULTS,
-      plugins: {
-        ...EDU_CHART_DEFAULTS.plugins,
-        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` ${i.parsed.y > 0 ? '+':''}${i.parsed.y}% GDP growth` } },
-      },
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { ...tooltipStyle(T), callbacks: { label: tipLabel } } },
       scales: {
-        ...EDU_CHART_DEFAULTS.scales,
-        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v => v+'%' } },
+        x: { ...axisStyle(T, { font: { size: 10 }, maxRotation: 0, autoSkipPadding: 8 }), grid: { display: false } },
+        y: { ...axisStyle(T, { font: { size: 10 }, ...(yFmt ? { callback: yFmt } : {}) }) },
       },
     },
   });
+  const line = (label, data) => ({ label, data, borderColor: T.s1, backgroundColor: T.s1, borderWidth: 2, fill: false, tension: 0.15, pointRadius: 2, pointHoverRadius: 4 });
 
-  // INFLATION — line with 2% target reference
-  new Chart(document.getElementById('chart-inflation').getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: YEARS,
-      datasets:[
-        {
-          label:'Inflation Rate', data: EDU_DATA.inflation,
-          borderColor:'#ff5252', borderWidth:2.5,
-          backgroundColor: ctx => {
-            const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
-            g.addColorStop(0,'rgba(255,82,82,.2)'); g.addColorStop(1,'rgba(255,82,82,0)');
-            return g;
-          },
-          fill:true, tension:0.35, pointRadius:3, pointBackgroundColor:'#ff5252',
-        },
-        {
-          label:'Fed Target (2%)', data: YEARS.map(()=>2),
-          borderColor:'#444', borderWidth:1.5, borderDash:[5,4],
-          backgroundColor:'transparent', fill:false, pointRadius:0,
-        },
-      ],
-    },
-    options: {
-      ...EDU_CHART_DEFAULTS,
-      plugins: {
-        ...EDU_CHART_DEFAULTS.plugins,
-        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` ${i.dataset.label}: ${i.parsed.y}%` } },
-      },
-      scales: {
-        ...EDU_CHART_DEFAULTS.scales,
-        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v=>v+'%' } },
-      },
-    },
-  });
+  make('chart-gdp', 'bar',
+    [{ label: 'GDP growth', data: EDU_DATA.gdp, backgroundColor: T.s1, borderRadius: 3, maxBarThickness: 22 }],
+    pct, i => ` ${i.parsed.y > 0 ? '+' : ''}${i.parsed.y}% GDP growth`);
 
-  // CPI — line chart
-  new Chart(document.getElementById('chart-cpi').getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: YEARS,
-      datasets:[{
-        label:'CPI Index', data: EDU_DATA.cpi,
-        borderColor:'#ffd740', borderWidth:2.5,
-        backgroundColor: ctx => {
-          const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
-          g.addColorStop(0,'rgba(255,215,64,.18)'); g.addColorStop(1,'rgba(255,215,64,0)');
-          return g;
-        },
-        fill:true, tension:0.3, pointRadius:3, pointBackgroundColor:'#ffd740',
-      }],
-    },
-    options: {
-      ...EDU_CHART_DEFAULTS,
-      plugins: {
-        ...EDU_CHART_DEFAULTS.plugins,
-        tooltip: { ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` CPI Index: ${i.parsed.y}` } },
-      },
-    },
-  });
+  make('chart-inflation', 'line',
+    [line('Inflation rate', EDU_DATA.inflation),
+     { label: 'Fed target', data: YEARS.map(() => 2), borderColor: T.muted, backgroundColor: T.muted, borderWidth: 1.5, fill: false, pointRadius: 0, pointHoverRadius: 0 }],
+    pct, i => ` ${i.dataset.label}: ${i.parsed.y}%`);
 
-  // INTEREST RATES — line chart
-  new Chart(document.getElementById('chart-rates').getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: YEARS,
-      datasets:[{
-        label:'Fed Funds Rate', data: EDU_DATA.rates,
-        borderColor:'#448aff', borderWidth:2.5,
-        backgroundColor: ctx => {
-          const g = ctx.chart.ctx.createLinearGradient(0,0,0,170);
-          g.addColorStop(0,'rgba(68,138,255,.2)'); g.addColorStop(1,'rgba(68,138,255,0)');
-          return g;
-        },
-        fill:true, tension:0.2, pointRadius:3, pointBackgroundColor:'#448aff',
-      }],
-    },
-    options: {
-      ...EDU_CHART_DEFAULTS,
-      plugins: {
-        ...EDU_CHART_DEFAULTS.plugins,
-        tooltip:{ ...EDU_CHART_DEFAULTS.plugins.tooltip, callbacks:{ label: i => ` Fed Rate: ${i.parsed.y}%` } },
-      },
-      scales: {
-        ...EDU_CHART_DEFAULTS.scales,
-        y: { ...EDU_CHART_DEFAULTS.scales.y, ticks:{ ...EDU_CHART_DEFAULTS.scales.y.ticks, callback: v=>v+'%' } },
-      },
-    },
+  make('chart-cpi', 'line', [line('CPI index', EDU_DATA.cpi)], null, i => ` CPI index: ${i.parsed.y}`);
+
+  make('chart-rates', 'line', [{ ...line('Fed funds rate', EDU_DATA.rates), stepped: false }], pct, i => ` Fed rate: ${i.parsed.y}%`);
+}
+
+// ═══════════════════════════════════════
+//  MOVERS
+// ═══════════════════════════════════════
+let mvData = null, mvLoadedAt = 0, mvLoading = false, mvFilter = 'all', mvSort = 'move';
+const MV_ROWS = 25;
+const mvMetric = {
+  move:   m => Math.abs(m.changePct),
+  range:  m => m.rangePct  ?? -1,
+  relvol: m => m.relVolume ?? -1,
+};
+const MV_STATE = { REGULAR:'Market open', PRE:'Pre-market', PREPRE:'Market closed', POST:'After hours', POSTPOST:'After hours', CLOSED:'Market closed' };
+const signedPct = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + '%';
+const compact   = n => new Intl.NumberFormat('en-US', { notation:'compact', maximumFractionDigits:1 }).format(n);
+const price2    = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+async function loadMovers(force) {
+  if (mvLoading) return;
+  if (!force && mvData && Date.now() - mvLoadedAt < 120000) return;
+  mvLoading = true;
+  const body = document.getElementById('mv-body');
+  const msg  = document.getElementById('mv-msg');
+  const btn  = document.getElementById('mv-refresh');
+  btn.disabled = true; btn.textContent = 'Refreshing…';
+  // On a refetch keep the previous list on screen, dimmed, rather than flashing empty
+  if (mvData) body.classList.add('stale');
+  else msg.innerHTML = '<div class="loading-state"><span class="spinner"></span>Loading today\'s movers…</div>';
+  try {
+    mvData = await getJSON('/api/market-movers');
+    mvLoadedAt = Date.now();
+    msg.innerHTML = '';
+    renderMovers();
+  } catch (e) {
+    if (mvData) document.getElementById('mv-asof').textContent = 'Refresh failed, showing the last list';
+    else msg.innerHTML = `<div class="error-state"><div class="error-msg">${esc(e.message)}</div></div>`;
+  } finally {
+    mvLoading = false;
+    body.classList.remove('stale');
+    btn.disabled = false; btn.textContent = 'Refresh';
+  }
+}
+
+function renderMovers() {
+  if (!mvData) return;
+  const all = mvData.movers;
+  const best = f => all.reduce((a, b) => f(b) > f(a) ? b : a);
+  const stat = (label, m, figure) => `
+    <div class="stat-card">
+      <div class="s-label">${label}</div>
+      <div class="s-val">${esc(m.symbol)}</div>
+      <div class="s-sub" title="${esc(m.name)}">${figure} · ${esc(m.name)}</div>
+    </div>`;
+  const up = best(m => m.changePct), down = best(m => -m.changePct), wide = best(mvMetric.range), busy = best(mvMetric.relvol);
+  document.getElementById('mv-stats').innerHTML =
+    (up.changePct > 0   ? stat('Biggest gainer', up,   `<span class="positive">${signedPct(up.changePct)}</span>`)   : '') +
+    (down.changePct < 0 ? stat('Biggest loser',  down, `<span class="negative">${signedPct(down.changePct)}</span>`) : '') +
+    (wide.rangePct  != null ? stat('Widest day range',      wide, `${wide.rangePct.toFixed(1)}% high to low`) : '') +
+    (busy.relVolume != null ? stat('Most unusual volume',   busy, `${busy.relVolume.toFixed(1)}× normal`)     : '');
+
+  const rows = all
+    .filter(m => mvFilter === 'all' || (mvFilter === 'up' ? m.changePct > 0 : m.changePct < 0))
+    .sort((a, b) => mvMetric[mvSort](b) - mvMetric[mvSort](a))
+    .slice(0, MV_ROWS);
+  const scale = Math.max(...rows.map(m => Math.abs(m.changePct)), 1);
+  const dash = '<span style="color:var(--muted)">—</span>';
+
+  document.getElementById('mv-tbody').innerHTML = rows.map((m, i) => {
+    const isUp = m.changePct >= 0;
+    const w = (Math.abs(m.changePct) / scale * 50).toFixed(1);
+    const tip = `${m.symbol}: ${signedPct(m.changePct)} today, ${price2(m.prevClose)} to ${price2(m.price)}` +
+      (m.dayLow != null && m.dayHigh != null ? `. Day range ${price2(m.dayLow)} to ${price2(m.dayHigh)}` : '');
+    return `<tr title="${esc(tip)}">
+      <td class="mv-rank">${i + 1}</td>
+      <td class="mv-sym"><b>${esc(m.symbol)}</b><span>${esc(m.name)}</span></td>
+      <td>${price2(m.price)}</td>
+      <td><div class="mv-move"><div class="mv-track"><div class="mv-fill ${isUp ? 'up' : 'down'}" style="width:${w}%"></div></div><span class="mv-pct">${signedPct(m.changePct)}</span></div></td>
+      <td>${m.rangePct != null ? m.rangePct.toFixed(1) + '%' : dash}</td>
+      <td>${m.relVolume != null ? m.relVolume.toFixed(1) + '×' : dash}</td>
+      <td class="mv-hide-sm">${compact(m.volume)}</td>
+      <td><button class="link-btn" data-sym="${esc(m.symbol)}">Simulate</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('mv-msg').innerHTML = rows.length ? '' :
+    `<div class="error-state">No ${mvFilter === 'up' ? 'gainers' : 'losers'} in today's list.</div>`;
+
+  document.querySelectorAll('.mv-table th[data-col]').forEach(th => th.classList.toggle('ranked', th.dataset.col === mvSort));
+  const when = mvData.asOf
+    ? new Date(mvData.asOf * 1000).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' })
+    : '';
+  document.getElementById('mv-asof').textContent = [MV_STATE[mvData.marketState], when && 'as of ' + when].filter(Boolean).join(' · ');
+}
+
+function bindSeg(id, set) {
+  const group = document.getElementById(id);
+  group.addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]'); if (!b) return;
+    group.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    set(b.dataset.v);
+    renderMovers();
   });
 }
+bindSeg('mv-filter', v => { mvFilter = v; });
+bindSeg('mv-sort',   v => { mvSort = v; });
+
+// "Simulate" on a mover: what would $1,000 a year ago be worth now?
+document.getElementById('mv-tbody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-sym]'); if (!b) return;
+  const yearAgo = new Date(today); yearAgo.setFullYear(today.getFullYear() - 1);
+  document.getElementById('ticker').value         = b.dataset.sym;
+  document.getElementById('start-date').value     = yearAgo.toISOString().slice(0,10);
+  document.getElementById('end-date').value       = today.toISOString().slice(0,10);
+  document.getElementById('initial-amount').value = document.getElementById('initial-amount').value || 1000;
+  document.getElementById('recurring-toggle').checked = false;
+  toggleRecurring(false);
+  switchTab('simulator');
+  runSimulation();
+});
+// ═══════════════════════════════════════
+//  INTERACTIVE LESSON: THE TAX RACE
+// ═══════════════════════════════════════
+const LAB_DEFAULTS = { amount: 5000, years: 30, taxNow: 22, taxLater: 22, ret: 7 };
+const lab = { ...LAB_DEFAULTS, step: 0, picks: [], started: false };
+const LAB_GAINS_TAX = 0.15, LAB_DIV_YIELD = 0.015;
+
+// After-tax value of the same pre-tax paycheck money in each account.
+function labCompute(s) {
+  const r = s.ret / 100, t0 = s.taxNow / 100, t1 = s.taxLater / 100;
+  const net = s.amount * (1 - t0);            // what's left to invest after income tax
+  let trad = 0, roth = 0, taxable = 0, basis = 0;
+  for (let y = 0; y < s.years; y++) {
+    trad = (trad + s.amount) * (1 + r);
+    roth = (roth + net) * (1 + r);
+    taxable += net; basis += net;
+    const div = taxable * LAB_DIV_YIELD, divTax = div * LAB_GAINS_TAX;
+    taxable = taxable * (1 + r) - divTax;     // dividends are taxed in the year they're paid
+    basis += div - divTax;                    // reinvested dividends aren't taxed again at sale
+  }
+  const taxableNet = taxable - Math.max(0, taxable - basis) * LAB_GAINS_TAX;
+  return { net, trad: trad * (1 - t1), roth, taxable: taxableNet, tradTax: trad * t1 };
+}
+
+const LAB_STEPS = [
+  {
+    title: 'Start with a tie-breaker',
+    body: s => `You set aside <strong>${fmt(s.amount)} of your paycheck</strong> every year for ${s.years} years and put it in the same fund. A traditional 401(k) invests all ${fmt(s.amount)} and gets taxed on the way out. A Roth pays the tax first, so only ${fmt(s.amount * (1 - s.taxNow / 100))} goes in, but nothing is owed later. Say your tax rate is <strong>${s.taxNow}% now and ${s.taxLater}% in retirement</strong>.`,
+    q: 'Which one leaves you more to spend?',
+    options: ['Traditional', 'Roth', 'Exactly the same'],
+    answer: 2,
+    apply: s => { Object.assign(s, LAB_DEFAULTS); },
+    explain: (s, r) => `It's a dead heat: ${fmt(r.trad)} each. Taking ${s.taxNow}% off at the start or ${s.taxNow}% off at the end gives the same answer, because the order you multiply in doesn't matter. So the account type alone doesn't decide it. The <strong>difference between your tax rate now and later</strong> does.`,
+  },
+  {
+    title: 'Change the future',
+    body: s => `Most people earn less in retirement than at the peak of their career, which can put them in a lower bracket. Suppose your rate is <strong>22% now but only 12% in retirement</strong>.`,
+    q: 'Who wins now?',
+    options: ['Traditional', 'Roth', 'Still a tie'],
+    answer: 0,
+    apply: s => { s.taxNow = 22; s.taxLater = 12; },
+    explain: (s, r) => `Traditional pulls ahead by ${fmt(r.trad - r.roth)}. It skipped a ${s.taxNow}% tax on the way in and paid only ${s.taxLater}% on the way out. Flip the rates and the Roth wins by the same logic, which is why the Roth tends to suit people early in their careers, when their tax rate is the lowest it will ever be.`,
+  },
+  {
+    title: 'The one that trails',
+    body: s => `The regular brokerage account gets the same ${fmt(s.amount * (1 - s.taxNow / 100))} a year as the Roth, in the same fund, with the same return. It still finishes behind.`,
+    q: 'Why?',
+    options: ['It earns a lower return', "It's taxed along the way and again when you sell", 'Brokerages charge higher fees'],
+    answer: 1,
+    apply: () => {},
+    explain: (s, r) => `Same deposits, same fund, but it pays tax on its dividends every year and on its gains at the end. Here that costs about <strong>${fmt(r.roth - r.taxable)}</strong> compared with the Roth. That gap is the price of having no rules: no limits, and you can take the money out whenever you want.`,
+  },
+  {
+    title: 'Your turn',
+    free: true,
+    body: () => `The controls are all yours. A few things worth trying:`,
+    tries: [
+      'Set your retirement tax rate higher than your rate now. The Roth takes the lead.',
+      'Stretch the years from 10 to 40 and watch the brokerage account fall further behind.',
+      'Drop both tax rates to 0%. Traditional and Roth match the full untaxed total.',
+    ],
+  },
+];
+
+function labRender() {
+  const step = LAB_STEPS[lab.step], r = labCompute(lab);
+  const picked = lab.picks[lab.step], answered = step.free || picked != null;
+  const el = document.getElementById('lab-step');
+
+  let html = `<div class="edu-term">Step ${lab.step + 1} of ${LAB_STEPS.length}</div>
+    <h3 class="edu-title">${step.title}</h3>
+    <div class="edu-body">${step.body(lab)}</div>`;
+  if (step.free) {
+    const right = LAB_STEPS.filter((st, i) => !st.free && lab.picks[i] === st.answer).length;
+    html += `<ul class="impact-pills">${step.tries.map(t => `<li class="pill-neutral">${t}</li>`).join('')}</ul>
+      <div class="lab-recap"><strong>You called ${right} of ${LAB_STEPS.length - 1} correctly.</strong> The takeaways: traditional and Roth are a bet on your future tax rate, not a better-or-worse choice. A brokerage account trades tax efficiency for freedom. And time makes every one of those gaps bigger.</div>`;
+  } else {
+    html += `<div class="lab-q">${step.q}</div><div class="lab-options">` +
+      step.options.map((o, i) => {
+        const cls = !answered ? '' : i === step.answer ? ' correct' : i === picked ? ' wrong' : '';
+        const tag = !answered ? '' : i === step.answer ? '<span>Correct answer</span>' : i === picked ? '<span>Your pick</span>' : '';
+        return `<button class="lab-option${cls}" data-pick="${i}" ${answered ? 'disabled' : ''}>${esc(o)}${tag}</button>`;
+      }).join('') + `</div>`;
+    if (answered) html += `<div class="lab-explain"><strong>${picked === step.answer ? 'You called it.' : 'Not quite.'}</strong> ${step.explain(lab, r)}</div>`;
+  }
+  html += `<div class="lab-nav">
+      ${lab.step > 0 ? '<button class="link-btn" data-nav="-1">Back</button>' : '<span></span>'}
+      ${step.free ? '<button class="link-btn" data-nav="restart">Start over</button>'
+                  : `<button class="sim-btn" data-nav="1" ${answered ? '' : 'disabled'}>${lab.step === LAB_STEPS.length - 2 ? 'Take the controls' : 'Next'}</button>`}
+    </div>`;
+  el.innerHTML = html;
+  labRenderPanel(answered);
+}
+
+function labRenderPanel(revealed) {
+  const r = labCompute(lab);
+  const rows = [
+    { name: 'Traditional 401(k)', value: r.trad,    sub: `${fmt(lab.amount)} a year goes in, then ${lab.taxLater}% tax on the way out` },
+    { name: 'Roth',               value: r.roth,    sub: `${fmt(r.net)} a year goes in after ${lab.taxNow}% tax, nothing owed later` },
+    { name: 'Taxable brokerage',  value: r.taxable, sub: `${fmt(r.net)} a year goes in after tax, then taxed yearly and at sale` },
+  ];
+  const max = Math.max(...rows.map(x => x.value), 1);
+  const leaders = rows.filter(x => max - x.value < 1);
+  document.getElementById('lab-bars').innerHTML = rows.map(x => `
+    <div class="lab-row">
+      <div class="lab-row-head"><span class="lab-name">${x.name}</span><span class="lab-value">${revealed ? fmt(x.value) : '?'}${revealed && leaders.includes(x) ? `<em>${leaders.length > 1 ? 'Tied' : 'Most'}</em>` : ''}</span></div>
+      <div class="lab-track"><div class="lab-fill" style="width:${revealed ? (x.value / max * 100).toFixed(1) : 0}%"></div></div>
+      <div class="lab-sub">${x.sub}</div>
+    </div>`).join('');
+  document.getElementById('lab-caption').textContent = revealed ? `After ${lab.years} years, after all taxes` : 'Make your call to see the result';
+
+  const free = LAB_STEPS[lab.step].free;
+  const show = { amount: fmt(lab.amount), years: lab.years, taxNow: lab.taxNow + '%', taxLater: lab.taxLater + '%', ret: lab.ret + '%' };
+  for (const k of Object.keys(show)) {
+    const input = document.getElementById('lab-' + k);
+    input.value = lab[k]; input.disabled = !free;
+    document.getElementById('lab-v-' + k).textContent = show[k];
+  }
+  document.getElementById('lab-controls').classList.toggle('locked', !free);
+}
+
+document.getElementById('lab-step').addEventListener('click', e => {
+  const pick = e.target.closest('button[data-pick]'), nav = e.target.closest('button[data-nav]');
+  if (pick) {
+    const step = LAB_STEPS[lab.step];
+    step.apply(lab);                         // put the model in the state the question describes
+    lab.picks[lab.step] = +pick.dataset.pick;
+    labRender();
+  } else if (nav) {
+    if (nav.dataset.nav === 'restart') { Object.assign(lab, LAB_DEFAULTS, { step: 0, picks: [] }); }
+    else {
+      lab.step = Math.max(0, Math.min(LAB_STEPS.length - 1, lab.step + +nav.dataset.nav));
+      const step = LAB_STEPS[lab.step];
+      // Returning to an answered question shows the scenario it was about
+      if (!step.free && lab.picks[lab.step] != null) step.apply(lab);
+      if (!step.free && lab.picks[lab.step] == null && lab.step === 0) Object.assign(lab, LAB_DEFAULTS);
+    }
+    labRender();
+    document.getElementById('edu-lab').scrollIntoView({ block: 'start' });
+  }
+});
+document.getElementById('lab-controls').addEventListener('input', e => {
+  const k = e.target.id.replace('lab-', '');
+  if (!(k in LAB_DEFAULTS)) return;
+  lab[k] = +e.target.value;
+  labRenderPanel(true);
+});
+// ═══════════════════════════════════════
+//  STOCK VOCAB: 4 PARTS + QUIZ
+// ═══════════════════════════════════════
+// Each term: [name, plain definition, example or "where you'll see it"]
+const VOCAB = [
+  {
+    nav: 'The basics',
+    title: "What you're actually buying",
+    intro: "Before any of the numbers make sense, you need the nouns. This is what a stock is, where it lives, and the different ways to own a bunch of them at once.",
+    try: { label: 'Put $10,000 in an S&P 500 index fund since 2015', run: () => { switchTab('simulator'); loadPreset('SPY', '2015-01-01', 10000, false, 0, 'monthly'); } },
+    terms: [
+      ['Stock', "A slice of ownership in a company. Own some and you own a small piece of the business, including a claim on its profits.", "Buy Apple stock and you're a (very small) co-owner of Apple."],
+      ['Share', "One unit of a company's stock. Most brokers also let you buy a fraction of a share.", "\"I own 10 shares of Nike.\""],
+      ['Ticker', "The short code a stock trades under.", "AAPL is Apple, TSLA is Tesla. It's what you type into the Simulator."],
+      ['Stock exchange', "The marketplace where shares are bought and sold.", "The New York Stock Exchange and the Nasdaq are the two big US ones."],
+      ['Broker', "The company or app that holds your account and places your trades on the exchange.", "Fidelity, Schwab and Robinhood are brokers."],
+      ['IPO', "Initial public offering: the first time a company sells its shares to the public. Before that it's a private company.", "\"They're going public next month\" means an IPO is coming."],
+      ['Market cap', "What the whole company is worth on the market: share price times the number of shares.", "$100 a share × 1 billion shares = a $100 billion market cap."],
+      ['Large, mid and small cap', "Size labels based on market cap. Roughly: large is over $10 billion, mid is $2–10 billion, small is under $2 billion.", "Smaller companies tend to swing harder in both directions."],
+      ['Blue chip', "A big, established company with a long record of steady business.", "Coca-Cola and Johnson & Johnson are classic blue chips."],
+      ['Index', "A list of stocks used to measure how a market is doing. You can't buy an index itself, only a fund that copies it.", "The S&P 500 tracks 500 of the largest US companies. The Dow tracks 30."],
+      ['ETF', "Exchange-traded fund: a basket of many investments that you buy as a single ticker and can trade all day like a stock.", "SPY is one ETF that holds every company in the S&P 500."],
+      ['Mutual fund', "Also a basket of investments, but you buy it from the fund company and it's priced once a day after the market closes.", "Common inside 401(k) plans."],
+      ['Index fund', "A fund, either an ETF or a mutual fund, that simply copies an index instead of paying managers to pick stocks. Fees are usually very low.", "\"Just buy the index\" means buying one of these."],
+      ['Expense ratio', "The yearly fee a fund charges, as a percentage of what you have invested in it.", "A 0.03% expense ratio costs $3 a year on $10,000."],
+    ],
+  },
+  {
+    nav: 'Price & trading',
+    title: 'Reading the price and placing a trade',
+    intro: "A stock doesn't have one price. It has a price someone will pay and a price someone will sell for, and how you place your order decides which one you get.",
+    try: { label: "See volume and day ranges on today's Movers", run: () => switchTab('movers') },
+    terms: [
+      ['Quote', "The current price information for a stock: the last price, how much it has changed today, and more.", "Any stock app's main screen is a list of quotes."],
+      ['Bid', "The highest price a buyer is currently offering.", "Bid $20.00 means someone will buy right now at $20.00."],
+      ['Ask', "The lowest price a seller is currently willing to accept.", "Ask $20.10 means the cheapest share for sale costs $20.10."],
+      ['Spread', "The gap between the bid and the ask. A tight spread means lots of trading; a wide one makes it more expensive to get in and out.", "Bid $20.00, ask $20.10: the spread is 10 cents."],
+      ['Volume', "The number of shares traded in a period, usually one day.", "The Movers tab compares today's volume with what's normal for that stock."],
+      ['Liquidity', "How easily you can buy or sell without pushing the price around. High volume usually means high liquidity.", "Apple is very liquid. A tiny company may not be."],
+      ['Market order', "An order to buy or sell right now at the best available price. Fast, but you don't control the exact price.", "\"Just get me in.\""],
+      ['Limit order', "An order to buy or sell only at your price or better. You control the price, but it might never fill.", "\"Buy, but only if it's $30 or less.\""],
+      ['Stop-loss order', "An instruction to sell automatically if the price falls to a level you set, to cap your losses. In a fast drop it can sell for less than that level.", "\"If it hits $40, get me out.\""],
+      ['Day range', "The lowest and highest price a stock has traded at today.", "A wide day range means a wild day. Movers ranks by it."],
+      ['52-week high and low', "The highest and lowest price over the past year.", "\"It's trading near its 52-week low\" means near its cheapest in a year."],
+      ['Market hours', "US stock markets are open 9:30am to 4pm Eastern on weekdays.", "When Movers says \"Market closed,\" this is why."],
+      ['After-hours trading', "Buying and selling outside regular market hours. Fewer people are trading, so prices can jump around more.", "Stocks often move after hours when earnings come out."],
+    ],
+  },
+  {
+    nav: 'Company numbers',
+    title: 'Is the company any good?',
+    intro: "A price alone tells you nothing. These are the numbers people use to judge whether a business is making money, and whether its stock is cheap or expensive for what you get.",
+    try: { label: 'See dividends and DRIP on real payout history', run: () => { switchTab('dividends'); loadDivPreset('KO', 50, '2010-01-01'); } },
+    terms: [
+      ['Revenue', "All the money a company brings in from sales, before any costs. Also called the top line.", "A store that sells $1 million of stuff has $1 million in revenue."],
+      ['Earnings', "What's left after every cost and tax is paid. Also called profit, net income, or the bottom line.", "$1 million in revenue minus $900,000 in costs is $100,000 in earnings."],
+      ['EPS', "Earnings per share: the company's profit divided by its number of shares.", "$100 million in profit ÷ 50 million shares = $2 EPS."],
+      ['P/E ratio', "Price-to-earnings: the share price divided by EPS. It's how many dollars investors pay for each $1 of yearly profit. A high P/E means people expect growth, or the stock is pricey.", "$100 share price ÷ $5 EPS = a P/E of 20."],
+      ['Earnings report', "The results a company publishes every three months. The stock often jumps or drops that day, depending on how results compare with what was expected.", "\"They beat earnings\" means profit came in above expectations."],
+      ['Guidance', "The company's own forecast for its upcoming results.", "Weak guidance can sink a stock even after a great quarter."],
+      ['Dividend', "Cash a company pays its shareholders out of its profits, usually every three months.", "Own 100 shares paying $0.50 each a quarter and you get $50."],
+      ['Dividend yield', "A year of dividends divided by the share price.", "$2 a year in dividends on a $50 stock is a 4% yield."],
+      ['DRIP', "Dividend reinvestment plan: automatically using each dividend to buy more shares, which then earn dividends of their own.", "It's the toggle on the Dividends tab."],
+      ['Growth stock', "A company expected to grow quickly. It usually reinvests its profits instead of paying dividends, and tends to have a high P/E.", "Most young tech companies."],
+      ['Value stock', "A company whose stock looks cheap compared with its earnings. Often slower growing and more likely to pay dividends.", "Many banks and consumer staples."],
+      ['Stock split', "When a company divides each share into several cheaper ones. The total value of what you own doesn't change.", "A 2-for-1 split turns 10 shares at $200 into 20 shares at $100."],
+      ['Buyback', "When a company buys its own shares back. Fewer shares are left, so each one is a slightly bigger slice of the company.", "Companies often announce these alongside earnings."],
+    ],
+  },
+  {
+    nav: 'Risk & strategy',
+    title: 'Risk, moods and strategy',
+    intro: "Markets go up, down and sideways, and there's a word for each mood. These terms describe how rough the ride is and the main ways people try to handle it.",
+    try: { label: 'Try dollar-cost averaging: $200 a month into the S&P 500 since 2015', run: () => { switchTab('simulator'); loadPreset('SPY', '2015-01-01', 200, true, 200, 'monthly'); } },
+    terms: [
+      ['Bull market', "A long stretch of rising prices, commonly counted as a climb of 20% or more from a recent low.", "\"Bullish\" means you think it's going up."],
+      ['Bear market', "A fall of 20% or more from a recent high.", "The S&P 500 was in a bear market for much of 2022."],
+      ['Correction', "A drop of at least 10% but less than 20% from a recent high. These happen fairly often.", "Scary in the moment, routine in hindsight."],
+      ['Rally', "A sharp rise in prices over a short period.", "\"Stocks rallied after the inflation report.\""],
+      ['Volatility', "How much and how fast a price swings. More volatility means bigger moves in both directions, and more risk.", "The Movers tab is a list of the day's most volatile stocks."],
+      ['Beta', "How much a stock tends to move compared with the overall market. A beta of 1 moves with the market; above 1 swings more; below 1 is calmer.", "A beta of 1.5 tends to move about 50% more than the market."],
+      ['Diversification', "Spreading your money across many investments so one bad one can't sink you.", "An S&P 500 fund is 500 companies in a single purchase."],
+      ['Asset allocation', "How you split your money between types of investments, such as stocks, bonds and cash.", "\"80% stocks, 20% bonds.\""],
+      ['Dollar-cost averaging', "Investing a fixed amount on a regular schedule no matter what the price is. You buy more shares when prices are low and fewer when they're high.", "The recurring-investment toggle in the Simulator."],
+      ['Buy and hold', "Buying investments and keeping them for years, ignoring the short-term swings.", "The opposite of day trading."],
+      ['Capital gain or loss', "The profit or loss when you sell for more or less than you paid. Until you actually sell, it's \"unrealized.\"", "Buy at $50, sell at $80: a $30 capital gain per share."],
+      ['Short selling', "Borrowing shares and selling them, betting the price will fall so you can buy them back cheaper. If the price rises instead, there's no ceiling on what you can lose.", "\"Shorting\" a stock is betting against it."],
+      ['Margin', "Borrowing money from your broker to invest. It magnifies gains and losses alike, and if your account falls too far a margin call forces you to add cash or sell.", "Investing $10,000 with only $5,000 of your own money."],
+    ],
+  },
+];
+
+const VOCAB_QUIZ = [
+  { part: 0, q: 'A company has 2 billion shares trading at $50 each. What is its market cap?', options: ['$25 billion', '$52 billion', '$100 billion', '$2 billion'], answer: 2, why: 'Market cap is share price times the number of shares: $50 × 2 billion = $100 billion.' },
+  { part: 0, q: 'Which of these describes an ETF?', options: ['The stock of one single company', 'A basket of investments that trades all day like a stock', 'A fund that is only priced once a day', 'An account with tax benefits'], answer: 1, why: 'An ETF holds many investments but trades under one ticker throughout the day. Being priced once a day describes a mutual fund.' },
+  { part: 0, q: 'A fund has a 0.5% expense ratio. About how much does it cost per year on $10,000?', options: ['$0.50', '$5', '$50', '$500'], answer: 2, why: 'The expense ratio is a yearly percentage of what you have invested: 0.5% of $10,000 is $50.' },
+  { part: 1, q: 'A stock has a bid of $20.00 and an ask of $20.10. What is the spread?', options: ['$20.05', '10 cents', '$40.10', '$20.10'], answer: 1, why: 'The spread is the gap between the highest price a buyer offers (bid) and the lowest a seller accepts (ask): 10 cents.' },
+  { part: 1, q: "You want to buy a stock but refuse to pay more than $30. Which order do you use?", options: ['Market order', 'Limit order', 'Stop-loss order', 'Short sale'], answer: 1, why: 'A limit order only fills at your price or better. A market order buys immediately at whatever the price is.' },
+  { part: 1, q: "A stock's volume today is five times its normal level. What does that tell you?", options: ['Its price is five times higher', 'The company issued five times more shares', 'Far more shares than usual are changing hands', 'Its dividend went up'], answer: 2, why: 'Volume counts shares traded. A spike means unusual activity, often because of news, but says nothing by itself about direction.' },
+  { part: 2, q: 'A stock trades at $60 and has earnings per share of $3. What is its P/E ratio?', options: ['2', '18', '20', '180'], answer: 2, why: 'P/E is price divided by earnings per share: $60 ÷ $3 = 20. Investors are paying $20 for each $1 of yearly profit.' },
+  { part: 2, q: 'A $50 stock pays $1.50 a year in dividends. What is its dividend yield?', options: ['0.3%', '3%', '7.5%', '33%'], answer: 1, why: 'Yield is yearly dividends divided by price: $1.50 ÷ $50 = 3%.' },
+  { part: 2, q: 'You own 10 shares at $200 and the company does a 2-for-1 split. What do you have now?', options: ['10 shares at $400', '20 shares at $200', '20 shares at $100', '5 shares at $400'], answer: 2, why: "A split gives you more shares at a proportionally lower price. You had $2,000 of stock before and $2,000 after." },
+  { part: 3, q: 'The S&P 500 falls 12% from its recent high. What is that called?', options: ['A rally', 'A correction', 'A bear market', 'A stock split'], answer: 1, why: 'A drop of 10% or more is a correction. It only becomes a bear market at 20%.' },
+  { part: 3, q: 'Why is short selling riskier than simply buying a stock?', options: ['It costs more in fees', "There's no ceiling on losses, because the price can keep rising", 'It only works on small companies', 'You have to hold for a year'], answer: 1, why: 'When you buy, the most you can lose is what you paid. When you short, the stock can keep climbing, and your loss climbs with it.' },
+  { part: 3, q: 'You invest $200 in an index fund on the first of every month, whatever the price. What is this called?', options: ['Diversification', 'Margin trading', 'Dollar-cost averaging', 'A buyback'], answer: 2, why: 'Dollar-cost averaging is investing a fixed amount on a schedule. You automatically buy more shares when prices are low.' },
+];
+
+// Answer options are shown in a fresh random order each attempt; picks store the original index.
+const vocabShuffle = () => VOCAB_QUIZ.map(q => q.options.map((_, i) => i).sort(() => Math.random() - 0.5));
+const vocab = { view: 0, started: false, qi: 0, picks: [], done: false, order: vocabShuffle() };
+const VOCAB_BEST_KEY = 'mm101_vocab_best';
+const vocabBest = () => { try { return parseInt(localStorage.getItem(VOCAB_BEST_KEY), 10) || 0; } catch { return 0; } };
+
+function vocabGo(view) {
+  vocab.view = view;
+  vocabRender();
+  document.querySelector('.subnav').scrollIntoView({ block: 'start' });
+}
+
+function vocabRender() {
+  const quizView = VOCAB.length;
+  document.getElementById('vocab-steps').innerHTML =
+    VOCAB.map((p, i) => `<button data-view="${i}" aria-pressed="${vocab.view === i}">${i + 1}. ${p.nav}</button>`).join('') +
+    `<button data-view="${quizView}" aria-pressed="${vocab.view === quizView}">Quiz</button>`;
+  const body = document.getElementById('vocab-body');
+  if (vocab.view === quizView) { body.innerHTML = vocabQuizHTML(); return; }
+
+  const p = VOCAB[vocab.view], last = vocab.view === VOCAB.length - 1;
+  body.innerHTML = `
+    <div class="vocab-head">
+      <div class="edu-term">Part ${vocab.view + 1} of ${VOCAB.length} · ${p.terms.length} terms</div>
+      <h2 class="edu-title">${p.title}</h2>
+      <p>${p.intro}</p>
+    </div>
+    <dl class="vocab-grid">${p.terms.map(([name, def, eg]) => `
+      <div class="vocab-term"><dt>${esc(name)}</dt><dd>${esc(def)}<span class="vocab-eg">${esc(eg)}</span></dd></div>`).join('')}
+    </dl>
+    <div class="edu-try"><span class="presets-label">See it happen</span><button class="preset-btn" data-try="${vocab.view}">${esc(p.try.label)}</button></div>
+    <div class="lab-nav">
+      ${vocab.view > 0 ? `<button class="link-btn" data-view="${vocab.view - 1}">Back to part ${vocab.view}</button>` : '<span></span>'}
+      <button class="sim-btn" data-view="${vocab.view + 1}">${last ? 'Take the quiz' : `Next: ${VOCAB[vocab.view + 1].nav}`}</button>
+    </div>`;
+}
+
+function vocabQuizHTML() {
+  const total = VOCAB_QUIZ.length;
+  if (vocab.done) {
+    const score = VOCAB_QUIZ.filter((q, i) => vocab.picks[i] === q.answer).length;
+    const missed = VOCAB_QUIZ.map((q, i) => ({ q, i })).filter(x => vocab.picks[x.i] !== x.q.answer);
+    const verdict = score === total ? 'Perfect score. You speak fluent stock market.'
+      : score >= total * 0.75 ? 'Solid. You can follow most market talk now.'
+      : score >= total * 0.5 ? 'Halfway there. Review the parts below and run it back.'
+      : 'Rough round. Go through the parts again and retake it.';
+    return `
+      <div class="vocab-head">
+        <div class="edu-term">Quiz results</div>
+        <h2 class="edu-title">You got ${score} of ${total}</h2>
+        <p>${verdict} Your best so far is ${Math.max(score, vocabBest())} of ${total}.</p>
+      </div>
+      ${missed.length ? `<div class="vocab-review"><h3>What to review</h3>${missed.map(({ q, i }) => `
+        <div class="vocab-missed">
+          <div class="lab-q">${esc(q.q)}</div>
+          <div>You picked <span class="negative">${esc(q.options[vocab.picks[i]])}</span>. The answer is <strong>${esc(q.options[q.answer])}</strong>. ${esc(q.why)}</div>
+          <button class="link-btn" data-view="${q.part}">Review part ${q.part + 1}: ${VOCAB[q.part].nav}</button>
+        </div>`).join('')}</div>` : ''}
+      <div class="lab-nav"><span></span><button class="sim-btn" data-quiz="restart">Retake the quiz</button></div>`;
+  }
+  const q = VOCAB_QUIZ[vocab.qi], picked = vocab.picks[vocab.qi], answered = picked != null;
+  return `
+    <div class="vocab-quiz">
+      <div class="edu-term">Question ${vocab.qi + 1} of ${total} · from part ${q.part + 1}</div>
+      <h2 class="edu-title">${esc(q.q)}</h2>
+      <div class="lab-options">${vocab.order[vocab.qi].map(i => {
+        const cls = !answered ? '' : i === q.answer ? ' correct' : i === picked ? ' wrong' : '';
+        const tag = !answered ? '' : i === q.answer ? '<span>Correct answer</span>' : i === picked ? '<span>Your pick</span>' : '';
+        return `<button class="lab-option${cls}" data-pick="${i}" ${answered ? 'disabled' : ''}>${esc(q.options[i])}${tag}</button>`;
+      }).join('')}</div>
+      ${answered ? `<div class="lab-explain"><strong>${picked === q.answer ? 'Correct.' : 'Not quite.'}</strong> ${esc(q.why)}</div>` : ''}
+      <div class="lab-nav">
+        <span class="note">${vocab.picks.filter((p, i) => p === VOCAB_QUIZ[i].answer).length} correct so far</span>
+        <button class="sim-btn" data-quiz="next" ${answered ? '' : 'disabled'}>${vocab.qi === total - 1 ? 'See my score' : 'Next question'}</button>
+      </div>
+    </div>`;
+}
+
+document.getElementById('edu-vocab').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.view != null) return vocabGo(+b.dataset.view);
+  if (b.dataset.try != null) return VOCAB[+b.dataset.try].try.run();
+  if (b.dataset.pick != null) { vocab.picks[vocab.qi] = +b.dataset.pick; return vocabRender(); }
+  if (b.dataset.quiz === 'next') {
+    if (vocab.qi < VOCAB_QUIZ.length - 1) vocab.qi++;
+    else {
+      vocab.done = true;
+      const score = VOCAB_QUIZ.filter((q, i) => vocab.picks[i] === q.answer).length;
+      try { if (score > vocabBest()) localStorage.setItem(VOCAB_BEST_KEY, score); } catch {}
+    }
+    return vocabGo(vocab.view);
+  }
+  if (b.dataset.quiz === 'restart') { Object.assign(vocab, { qi: 0, picks: [], done: false, order: vocabShuffle() }); return vocabGo(vocab.view); }
+});
 </script>
 </body>
 </html>

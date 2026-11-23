@@ -27,9 +27,15 @@
     }
     .spots.open { color: #34C759; background: #f0faf3; }
     .spots.full { color: #ff3b30; background: #fff0ef; }
+    .spots.closed { color: #b25d00; background: #fff6e8; }
+    .notes { background: #f8f8f8; border-radius: 10px; padding: 12px 14px; margin: 16px 0; }
+    .notes-title { font-size: 0.8rem; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .notes-body { font-size: 0.9rem; color: #333; line-height: 1.5; white-space: pre-wrap; }
+    .waiver { display: flex; gap: 10px; align-items: flex-start; font-size: 0.85rem; color: #555; line-height: 1.45; margin-bottom: 16px; font-weight: 400; }
+    .waiver input { margin-top: 3px; width: 18px; height: 18px; flex-shrink: 0; accent-color: #34C759; }
     .divider { border: none; border-top: 1px solid #eee; margin: 20px 0; }
     label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: #333; }
-    input[type="text"], input[type="email"] {
+    input[type="text"], input[type="email"], input[type="password"] {
       width: 100%; padding: 11px 12px; font-size: 16px;
       border: 1px solid #ddd; border-radius: 8px; margin-bottom: 14px;
     }
@@ -55,6 +61,15 @@
     .not-found p { color: #666; font-size: 0.95rem; }
     .footer { text-align: center; margin-top: 24px; font-size: 0.8rem; color: #bbb; }
     .footer a { color: #34C759; text-decoration: none; }
+    .warn { background: #fff6e8; color: #8a4b00; border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; line-height: 1.45; margin: 4px 0 14px; }
+    .account { font-size: 0.88rem; color: #666; text-align: center; margin-bottom: 14px; }
+    .linkbtn { background: none; border: none; color: #007AFF; cursor: pointer; font-size: inherit; padding: 0; }
+    .login-box { background: #fafafa; border-radius: 10px; padding: 14px; margin-bottom: 4px; }
+    .mine { text-align: center; }
+    .btn.ghost { background: #fff; color: #666; border: 1px solid #ddd; font-weight: 500; font-size: 15px; }
+    .btn.ghost:hover:not(:disabled) { background: #fafafa; }
+    .btn.danger { background: #ff3b30; }
+    .btn.danger:hover:not(:disabled) { background: #e0352b; }
   </style>
 </head>
 <body>
@@ -66,44 +81,69 @@
   </div>
   <div class="footer">Powered by <a href="https://athletesbridge.com">AthleteBridge</a></div>
 
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyBxn8JJE3KFzJ06VgqM3yAyZFW5CgiVEF8",
+      authDomain: "athletebridge-63176.firebaseapp.com",
+      projectId: "athletebridge-63176",
+      storageBucket: "athletebridge-63176.firebasestorage.app",
+      messagingSenderId: "107606691152"
+    });
+    const auth = firebase.auth();
+
     const app = document.getElementById('app');
     const params = new URLSearchParams(window.location.search);
     const eventId = params.get('event');
+    const LOGO = '<img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />';
+
+    let currentEvent = null;
+    let currentUser = null;
+    let showLogin = false;
+    let confirmingCancel = false;
+
+    // Guests get a private cancel token at signup; keep it on this device so they can cancel later
+    const tokenKey = 'ab_signup_' + eventId;
+    function savedSignup() {
+      try { return JSON.parse(localStorage.getItem(tokenKey) || 'null'); } catch { return null; }
+    }
+    function saveSignup(v) {
+      try { v ? localStorage.setItem(tokenKey, JSON.stringify(v)) : localStorage.removeItem(tokenKey); } catch {}
+    }
+
+    function notFound(title, text) {
+      app.innerHTML = `<div class="not-found">${LOGO}<h2>${title}</h2><p>${text}</p></div>`;
+    }
+
+    async function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (currentUser) h['Authorization'] = 'Bearer ' + await currentUser.getIdToken();
+      return h;
+    }
 
     if (!eventId) {
-      app.innerHTML = `
-        <div class="not-found">
-          <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
-          <h2>No Event Specified</h2>
-          <p>This link appears to be missing an event ID.</p>
-        </div>`;
+      notFound('No Event Specified', 'This link appears to be missing an event ID.');
     } else {
-      loadEvent();
+      // Wait for Firebase to restore a saved login before the first load
+      auth.onAuthStateChanged(user => {
+        currentUser = user;
+        showLogin = false;
+        loadEvent();
+      });
     }
 
     async function loadEvent() {
       try {
-        const res = await fetch('/api/signup?event=' + encodeURIComponent(eventId));
+        const res = await fetch('/api/signup?event=' + encodeURIComponent(eventId), { headers: await authHeaders() });
         if (res.status === 404) {
-          app.innerHTML = `
-            <div class="not-found">
-              <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
-              <h2>Event Not Found</h2>
-              <p>This event may have been removed or the link is incorrect.</p>
-            </div>`;
+          notFound('Event Not Found', 'This event may have been removed or the link is incorrect.');
           return;
         }
         if (!res.ok) throw new Error('Failed to load event');
-        const ev = await res.json();
-        renderEvent(ev);
+        renderEvent(await res.json());
       } catch (err) {
-        app.innerHTML = `
-          <div class="not-found">
-            <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
-            <h2>Something went wrong</h2>
-            <p>Unable to load event details. Please try again later.</p>
-          </div>`;
+        notFound('Something went wrong', 'Unable to load event details. Please try again later.');
       }
     }
 
@@ -113,8 +153,6 @@
       return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         + ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     }
-
-    let currentEvent = null;
 
     // Venmo destinations (an @handle or venmo.com link) get the fee amount and
     // event title prefilled so payers just confirm; other links open unchanged.
@@ -139,10 +177,75 @@
       return ev.paymentLink.toLowerCase().startsWith('http') ? ev.paymentLink : 'https://' + ev.paymentLink;
     }
 
+    function payHtml(ev) {
+      if (!ev || !ev.feeUSD) return '';
+      const feeText = '$' + Number(ev.feeUSD).toFixed(2);
+      const link = payUrl(ev);
+      return link
+        ? `<hr class="divider" /><a class="btn" style="text-decoration:none;text-align:center" href="${escapeHtml(link)}" target="_blank" rel="noopener">Pay ${feeText} to confirm your spot</a>`
+        : `<hr class="divider" /><div class="success-text">Please bring ${feeText} to the event.</div>`;
+    }
+
+    function warningHtml(count, limit) {
+      if (!count) return '';
+      const left = Math.max(0, limit - count);
+      return `<div class="warn">You have <b>${count} of ${limit}</b> no-show warnings this year.
+        ${left ? `If you can't make it, please cancel so someone else can play — ${left} more no-show${left === 1 ? '' : 's'} and you won't be able to sign up for the rest of the year.` : ''}</div>`;
+    }
+
+    // The viewer's own signup: signed-in account, or a guest token saved on this device
+    function mySignup(ev) {
+      if (ev.me && ev.me.signupId) return { id: ev.me.signupId, name: ev.me.name };
+      const saved = savedSignup();
+      if (saved && ev.signups.some(s => s.id === saved.signupId)) return { id: saved.signupId, name: saved.name };
+      return null;
+    }
+
+    function signedUpHtml(ev, mine) {
+      const started = ev.eventDate && Date.now() >= new Date(ev.eventDate).getTime();
+      return `
+        <div class="mine">
+          <div class="success-title" style="font-size:17px;margin-bottom:4px">✓ You're signed up${mine.name ? ', ' + escapeHtml(mine.name) : ''}</div>
+          ${ev.me ? warningHtml(ev.me.noShows, ev.noShowLimit) : ''}
+          ${started ? '' : `
+            <button class="btn ${confirmingCancel ? 'danger' : 'ghost'}" id="cancelBtn" onclick="handleCancel()">
+              ${confirmingCancel ? 'Tap again to cancel your spot' : "Can't make it? Cancel my sign-up"}
+            </button>
+            <div id="cancelError" class="error-msg" style="display:none"></div>`}
+        </div>
+        ${payHtml(ev)}`;
+    }
+
+    function accountHtml(ev) {
+      if (currentUser) {
+        return `<div class="account">Signed in as <b>${escapeHtml((ev.me && ev.me.email) || currentUser.email || '')}</b> ·
+          <button class="linkbtn" onclick="auth.signOut()">Sign out</button></div>`;
+      }
+      if (!showLogin) {
+        return `<div class="account">Have an AthleteBridge account?
+          <button class="linkbtn" onclick="showLogin = true; renderEvent(currentEvent)">Sign in to fill this in</button></div>`;
+      }
+      return `
+        <form class="login-box" onsubmit="handleLogin(event)">
+          <label for="loginEmail">AthleteBridge email</label>
+          <input type="email" id="loginEmail" required autocomplete="email" />
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" required autocomplete="current-password" />
+          <button type="submit" class="btn" id="loginBtn">Sign In</button>
+          <div id="loginError" class="error-msg" style="display:none"></div>
+          <div style="text-align:center;margin-top:10px">
+            <button type="button" class="linkbtn" onclick="showLogin = false; renderEvent(currentEvent)">Continue as guest</button>
+          </div>
+        </form>`;
+    }
+
     function renderEvent(ev) {
       currentEvent = ev;
       const isFull = ev.signupCount >= ev.maxSignups;
       const spotsLeft = Math.max(0, ev.maxSignups - ev.signupCount);
+      const notOpenYet = ev.opensAt && Date.now() < new Date(ev.opensAt).getTime();
+      const mine = mySignup(ev);
+      const blocked = ev.me && ev.me.noShows >= ev.noShowLimit;
 
       let attendeesHtml = '';
       if (ev.signups && ev.signups.length > 0) {
@@ -154,19 +257,41 @@
           </div>`;
       }
 
-      const formHtml = isFull ? '' : `
+      const waiverHtml = ev.waiverText ? `
+          <label class="waiver">
+            <input type="checkbox" id="waiver" required />
+            <span>${escapeHtml(ev.waiverText)}</span>
+          </label>` : '';
+
+      const me = ev.me || {};
+      let formHtml = '';
+      if (mine) {
+        formHtml = `<hr class="divider" />${signedUpHtml(ev, mine)}`;
+      } else if (blocked) {
+        formHtml = `<hr class="divider" /><div class="warn">You've reached ${ev.noShowLimit} no-show warnings this year at ${escapeHtml(ev.placeName || 'this club')}, so you can't sign up for its events until next year. Please contact the organizer.</div>${accountHtml(ev)}`;
+      } else if (!isFull && !notOpenYet) {
+        formHtml = `
         <hr class="divider" />
+        ${accountHtml(ev)}
+        ${showLogin ? '' : `
         <form id="signupForm" onsubmit="handleSignup(event)">
           <label for="name">Your Name</label>
-          <input type="text" id="name" name="name" required placeholder="Jane Doe" autocomplete="name" />
+          <input type="text" id="name" name="name" required placeholder="Jane Doe" autocomplete="name" value="${escapeHtml(me.name || '')}" />
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" required placeholder="jane@example.com" autocomplete="email" />
+          <input type="email" id="email" name="email" required placeholder="jane@example.com" autocomplete="email"
+            value="${escapeHtml(me.email || '')}" ${me.email ? 'readonly' : ''} />
+          ${ev.me ? warningHtml(me.noShows, ev.noShowLimit) : ''}
+          ${waiverHtml}
           <button type="submit" class="btn" id="submitBtn">Sign Up</button>
           <div id="formError" class="error-msg" style="display:none"></div>
-        </form>`;
+        </form>`}`;
+      } else if (!currentUser && (isFull || notOpenYet)) {
+        // Let returning players sign in to see/cancel an app or other-device signup
+        formHtml = `<hr class="divider" />${accountHtml(ev)}`;
+      }
 
       app.innerHTML = `
-        <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
+        ${LOGO}
         <div class="brand">ATHLETEBRIDGE</div>
         <h1>${escapeHtml(ev.title)}</h1>
         ${ev.description ? `<div class="description">${escapeHtml(ev.description)}</div>` : ''}
@@ -190,11 +315,37 @@
           <svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8A5.87 5.87 0 016 12c0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg>
           <span>Repeats weekly</span>
         </div>` : ''}
-        <div class="spots ${isFull ? 'full' : 'open'}">
-          ${isFull ? 'This event is full' : spotsLeft + ' of ' + ev.maxSignups + ' spots remaining'}
+        ${ev.notes ? `<div class="notes">
+          <div class="notes-title">Important Notes</div>
+          <div class="notes-body">${escapeHtml(ev.notes)}</div>
+        </div>` : ''}
+        <div class="spots ${isFull ? 'full' : (notOpenYet ? 'closed' : 'open')}">
+          ${isFull ? 'This event is full'
+            : notOpenYet ? 'Sign-ups open ' + formatDate(ev.opensAt) + ' · ' + ev.maxSignups + ' spots'
+            : spotsLeft + ' of ' + ev.maxSignups + ' spots remaining'}
         </div>
         ${formHtml}
         ${attendeesHtml}`;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const errEl = document.getElementById('loginError');
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      try {
+        // onAuthStateChanged reloads the event with the account's details filled in
+        await auth.signInWithEmailAndPassword(
+          document.getElementById('loginEmail').value.trim(),
+          document.getElementById('loginPassword').value);
+      } catch (err) {
+        const bad = ['auth/wrong-password', 'auth/user-not-found', 'auth/invalid-credential', 'auth/invalid-login-credentials'];
+        errEl.textContent = bad.includes(err.code) ? 'Email or password is incorrect.' : 'Sign-in failed. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
     }
 
     async function handleSignup(e) {
@@ -203,6 +354,8 @@
       const errEl = document.getElementById('formError');
       const name = document.getElementById('name').value.trim();
       const email = document.getElementById('email').value.trim();
+      const waiverBox = document.getElementById('waiver');
+      const acceptedWaiver = waiverBox ? waiverBox.checked : false;
 
       btn.disabled = true;
       btn.textContent = 'Signing up...';
@@ -211,27 +364,24 @@
       try {
         const res = await fetch('/api/signup?event=' + encodeURIComponent(eventId), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email })
+          headers: await authHeaders(),
+          body: JSON.stringify({ name, email, acceptedWaiver })
         });
         const data = await res.json();
 
         if (res.ok && data.success) {
-          let payHtml = '';
-          if (currentEvent && currentEvent.feeUSD) {
-            const feeText = '$' + Number(currentEvent.feeUSD).toFixed(2);
-            const link = payUrl(currentEvent);
-            payHtml = link
-              ? `<hr class="divider" /><a class="btn" style="text-decoration:none;text-align:center" href="${escapeHtml(link)}" target="_blank" rel="noopener">Pay ${feeText} to confirm your spot</a>`
-              : `<hr class="divider" /><div class="success-text">Please bring ${feeText} to the event.</div>`;
-          }
+          saveSignup({ signupId: data.signupId, cancelToken: data.cancelToken, name });
           app.innerHTML = `
-            <img src="../stripe/AthleteBridgeLogo.png" alt="AthleteBridge" class="logo" />
+            ${LOGO}
             <div class="brand">ATHLETEBRIDGE</div>
             <div class="success-icon">&#10003;</div>
             <div class="success-title">You're signed up!</div>
             <div class="success-text">${escapeHtml(name)}, you've been registered for this event.</div>
-            ${payHtml}`;
+            ${warningHtml(data.noShows, data.noShowLimit)}
+            ${payHtml(currentEvent)}
+            <hr class="divider" />
+            <div class="success-text" style="font-size:0.85rem">Plans change? Come back to this page to cancel your spot.</div>
+            <button class="btn ghost" style="margin-top:12px" onclick="loadEvent()">Back to event</button>`;
         } else {
           errEl.textContent = data.error || 'Something went wrong';
           errEl.style.display = 'block';
@@ -243,6 +393,44 @@
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Sign Up';
+      }
+    }
+
+    // Two taps to cancel (no browser confirm dialog)
+    async function handleCancel() {
+      if (!confirmingCancel) {
+        confirmingCancel = true;
+        renderEvent(currentEvent);
+        return;
+      }
+      const btn = document.getElementById('cancelBtn');
+      btn.disabled = true;
+      btn.textContent = 'Cancelling...';
+      const saved = savedSignup() || {};
+      try {
+        const res = await fetch('/api/signup?event=' + encodeURIComponent(eventId) + '&action=cancel', {
+          method: 'POST',
+          headers: await authHeaders(),
+          body: JSON.stringify({ signupId: saved.signupId, cancelToken: saved.cancelToken })
+        });
+        const data = await res.json();
+        confirmingCancel = false;
+        if (res.ok && data.success) {
+          saveSignup(null);
+          await loadEvent();
+          const note = document.createElement('div');
+          note.className = 'success-text';
+          note.style.margin = '12px 0';
+          note.textContent = 'Your sign-up was cancelled. Thanks for letting us know!';
+          app.querySelector('.spots').after(note);
+        } else {
+          renderEvent(currentEvent);
+          const errEl = document.getElementById('cancelError');
+          if (errEl) { errEl.textContent = data.error || 'Could not cancel'; errEl.style.display = 'block'; }
+        }
+      } catch (err) {
+        confirmingCancel = false;
+        renderEvent(currentEvent);
       }
     }
 

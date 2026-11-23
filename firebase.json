@@ -13,26 +13,73 @@
         "firebase.json",
         "**/.DS_Store",
         "**/node_modules/**",
-        "public/moneymogging101/**"
+        "public/moneymogging101/**",
+        "egret/**"
       ],
       "rewrites": [
-        { "source": "/api/signup",       "function": "signupApi" },
-        { "source": "/api/prices",       "function": "getPCPrices" },
-        { "source": "/api/ebay-image",   "function": "getEbayImage" },
-        { "source": "/api/search-jp",    "function": "searchJapanesePC" },
-        { "source": "/api/jp-sets",      "function": "getJapaneseSets" },
-        { "source": "/api/search-scp",   "function": "searchSCP" },
-        { "source": "/api/search-promo", "function": "searchPCPromos" },
-        { "source": "/api/psa-cert",     "function": "getPSACert" }
+        {
+          "source": "/api/signup",
+          "function": "signupApi"
+        },
+        {
+          "source": "/api/prices",
+          "function": "getPCPrices"
+        },
+        {
+          "source": "/api/ebay-image",
+          "function": "getEbayImage"
+        },
+        {
+          "source": "/api/search-jp",
+          "function": "searchJapanesePC"
+        },
+        {
+          "source": "/api/jp-sets",
+          "function": "getJapaneseSets"
+        },
+        {
+          "source": "/api/search-scp",
+          "function": "searchSCP"
+        },
+        {
+          "source": "/api/search-promo",
+          "function": "searchPCPromos"
+        },
+        {
+          "source": "/api/psa-cert",
+          "function": "getPSACert"
+        }
       ]
     },
     {
       "site": "moneymogging101",
       "public": "public/moneymogging101",
-      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
       "rewrites": [
-        { "source": "/api/stock-history",    "function": "getStockHistory" },
-        { "source": "/api/dividend-history", "function": "getDividendHistory" }
+        {
+          "source": "/api/stock-history",
+          "function": "getStockHistory"
+        },
+        {
+          "source": "/api/dividend-history",
+          "function": "getDividendHistory"
+        },
+        {
+          "source": "/api/market-movers",
+          "function": "getMarketMovers"
+        }
+      ]
+    },
+    {
+      "site": "egret-athletesbridge",
+      "public": "public/egret",
+      "ignore": [
+        "firebase.json",
+        "**/.*"
       ]
     }
   ]
