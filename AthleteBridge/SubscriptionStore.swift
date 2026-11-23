@@ -111,13 +111,34 @@ final class SubscriptionStore: ObservableObject {
 
     // MARK: - Private
 
+    /// Marks a coach tier granted by an App Store subscription (the Android app tags its own "play").
+    static let appStoreSource = "appstore"
+
+    /// Runs on every launch. Only App Store-granted tiers are ever lowered here: a coach paying through
+    /// Stripe or Google Play has no StoreKit entitlement on this device and must keep their tier. Clients
+    /// (no coaches/{uid} doc) are left alone instead of being given a nameless coach profile.
     private func syncTierToFirestore() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        let tierValue = currentTier.rawValue
+        let storeTier = currentTier
+        let ref = db.collection("coaches").document(uid)
         for attempt in 1...3 {
             do {
-                try await db.collection("coaches").document(uid)
-                    .setData(["subscriptionTier": tierValue], mergeFields: ["subscriptionTier"])
+                guard let data = try await ref.getDocument().data() else { return }
+                let current = CoachTier(rawValue: (data["subscriptionTier"] as? String ?? "free").lowercased()) ?? .free
+                let source = data["subscriptionSource"] as? String
+                if storeTier != .free {
+                    if storeTier == current {
+                        // StoreKit confirms the stored tier: tag it so a later lapse is noticed
+                        if source == nil { try await ref.updateData(["subscriptionSource": Self.appStoreSource]) }
+                        return
+                    }
+                    // A higher tier paid for elsewhere stays
+                    if source != Self.appStoreSource && storeTier.rank < current.rank { return }
+                    try await ref.updateData(["subscriptionTier": storeTier.rawValue, "subscriptionSource": Self.appStoreSource])
+                } else if source == Self.appStoreSource && current != .free {
+                    // The App Store subscription ended
+                    try await ref.updateData(["subscriptionTier": CoachTier.free.rawValue, "subscriptionSource": FieldValue.delete()])
+                }
                 return
             } catch {
                 print("[SubscriptionStore] syncTierToFirestore attempt \(attempt) failed: \(error)")

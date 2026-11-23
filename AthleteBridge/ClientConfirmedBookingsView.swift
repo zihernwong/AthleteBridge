@@ -349,6 +349,7 @@ struct ClientRescheduleView: View {
                         let notifPayload: [String: Any] = [
                             "title": "Booking Reschedule Requested",
                             "body": "\(clientName) has requested to reschedule the booking.",
+                            "type": "booking_rescheduled",
                             "bookingId": booking.id,
                             "senderId": booking.clientID,
                             "createdAt": FieldValue.serverTimestamp(),

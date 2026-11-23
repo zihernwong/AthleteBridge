@@ -387,8 +387,19 @@ struct MetricTrendChart: View {
             guard numbers.count == segments.count, !numbers.isEmpty else { return nil }
             return numbers.reversed().enumerated().reduce(0) { $0 + $1.element * pow(60, Double($1.offset)) }
         }
-        let cleaned = trimmed.replacingOccurrences(of: ",", with: ".").filter { "0123456789.-".contains($0) }
-        guard let value = Double(cleaned), value.isFinite else { return nil }
+        // Exactly one number ("12 reps", "$25", "1,500 m"). Several ("3x10", "2 sets of 15") aren't one
+        // quantity — stripping the letters used to chart them as 310 and 215.
+        guard let numberPattern = try? NSRegularExpression(pattern: #"-?(?:\d[\d,]*(?:\.\d+)?|\.\d+)"#) else { return nil }
+        let text = trimmed as NSString
+        let tokens = numberPattern.matches(in: trimmed, range: NSRange(location: 0, length: text.length))
+            .map { text.substring(with: $0.range) }
+        guard tokens.count == 1, var token = tokens.first else { return nil }
+        if token.range(of: #"^-?\d{1,3}(,\d{3})+(\.\d+)?$"#, options: .regularExpression) != nil {
+            token = token.replacingOccurrences(of: ",", with: "") // thousands separators: 1,500
+        } else {
+            token = token.replacingOccurrences(of: ",", with: ".") // decimal comma: 8,5
+        }
+        guard let value = Double(token), value.isFinite else { return nil }
         return value
     }
 

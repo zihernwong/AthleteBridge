@@ -939,6 +939,16 @@ struct BookingEditorView: View {
         }
     }
 
+    /// Start/end times for a weekly series of `weeks` sessions beginning with `start`–`end`, at the same
+    /// local time every week (a fixed 7×24h step lands an hour off after a daylight-saving change).
+    static func weeklySeries(start: Date, end: Date, weeks: Int) -> [(start: Date, end: Date)] {
+        let cal = Calendar.current
+        return (0..<weeks).map { week in
+            (cal.date(byAdding: .weekOfYear, value: week, to: start) ?? start,
+             cal.date(byAdding: .weekOfYear, value: week, to: end) ?? end)
+        }
+    }
+
     private func performSave(coachIds: [String], clientUid: String) {
         // UI-level timeout: ensure spinner cleared if backend callback never invoked
         var uiTimeoutItem: DispatchWorkItem? = nil
@@ -1032,14 +1042,13 @@ struct BookingEditorView: View {
                 extra["recurrenceGroupId"] = UUID().uuidString
                 let saveGroup = DispatchGroup()
                 var firstError: Error? = nil
-                for week in 0..<weeks {
-                    let offset = TimeInterval(week * 7 * 24 * 3600)
+                for occurrence in Self.weeklySeries(start: startAt, end: endAt, weeks: weeks) {
                     saveGroup.enter()
                     firestore.saveBookingAndMirror(
                         coachId: coachUid,
                         clientId: clientUid,
-                        startAt: startAt.addingTimeInterval(offset),
-                        endAt: endAt.addingTimeInterval(offset),
+                        startAt: occurrence.start,
+                        endAt: occurrence.end,
                         status: "requested",
                         location: locationName,
                         notes: notes,

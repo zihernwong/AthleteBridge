@@ -40,5 +40,9 @@ AthleteBridge/functions/
 # Firebase hosting cache
 .firebase/
 
+# Firebase emulator logs (unit tests)
+firebase-debug.log
+firestore-debug.log
+
 # Xcode user state
 *.xcuserstate

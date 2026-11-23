@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreImage.CIFilterBuiltins
 
 struct SignupEventDetailView: View {
     @EnvironmentObject var firestore: FirestoreManager
@@ -9,6 +10,9 @@ struct SignupEventDetailView: View {
     @State private var isSigningUp = false
     @State private var showDeleteConfirmation = false
     @State private var signupError: String?
+    @State private var acceptedWaiver = false
+    @State private var showQRCode = false
+    @State private var showCancelConfirmation = false
 
     private var currentUid: String? { auth.user?.uid }
 
@@ -84,32 +88,74 @@ struct SignupEventDetailView: View {
                         }
                         .font(.subheadline)
                     }
+                    if let opensAt = ev.opensAt, !ev.isSignupOpen {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.clock")
+                                .foregroundColor(.orange)
+                            Text("Sign-ups open \(Self.dateFormatter.string(from: opensAt))")
+                        }
+                        .font(.subheadline)
+                    }
                 }
                 .padding(.vertical, 4)
             }
 
-            // Share Link
+            if let notes = ev.notes, !notes.isEmpty {
+                Section(header: Text("Important Notes")) {
+                    Text(notes)
+                        .font(.subheadline)
+                }
+            }
+
+            // Share kit: a ready-made post caption, the link, and a QR code for flyers/slides
             if let url = ev.shareURL {
-                Section {
+                Section(header: Text("Share")) {
+                    ShareLink(item: url, message: Text(ev.shareCaption)) {
+                        Label("Share Post", systemImage: "square.and.arrow.up")
+                    }
                     Button {
-                        UIPasteboard.general.url = url
-                        firestore.showToast("Copied to clipboard")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            UIApplication.shared.open(url)
-                        }
+                        UIPasteboard.general.string = ev.shareCaption
+                        firestore.showToast("Caption copied")
                     } label: {
-                        Label("Share Signup Link", systemImage: "square.and.arrow.up")
+                        Label("Copy Caption", systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        showQRCode = true
+                    } label: {
+                        Label("QR Code", systemImage: "qrcode")
+                    }
+                }
+            }
+
+            // Waiver must be accepted before signing up or joining the waitlist
+            if ev.requiresWaiver && !isAlreadySignedUp && !isOnWaitlist {
+                Section(header: Text("Waiver")) {
+                    Text(ev.waiverText ?? "")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Toggle("I agree to the waiver", isOn: $acceptedWaiver)
+                }
+            }
+
+            // Not open yet: players see when it opens; the organizer can still add themselves
+            if !isAlreadySignedUp && !ev.isFull && !ev.isSignupOpen && !isCreator, let opensAt = ev.opensAt {
+                Section {
+                    HStack {
+                        Spacer()
+                        Text("Sign-ups open \(Self.dateFormatter.string(from: opensAt))")
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
                 }
             }
 
             // Sign Up Button (anyone can sign up, including the creator)
-            if !isAlreadySignedUp && !ev.isFull {
+            if !isAlreadySignedUp && !ev.isFull && (ev.isSignupOpen || isCreator) {
                 Section {
                     Button {
                         isSigningUp = true
                         signupError = nil
-                        firestore.signupForEvent(eventId: ev.id) { err in
+                        firestore.signupForEvent(eventId: ev.id, acceptedWaiver: acceptedWaiver) { err in
                             DispatchQueue.main.async {
                                 isSigningUp = false
                                 if let err = err {
@@ -129,7 +175,7 @@ struct SignupEventDetailView: View {
                             Spacer()
                         }
                     }
-                    .disabled(isSigningUp)
+                    .disabled(isSigningUp || (ev.requiresWaiver && !acceptedWaiver))
                     if let error = signupError {
                         Text(error)
                             .font(.caption)
@@ -147,6 +193,15 @@ struct SignupEventDetailView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(Color("LogoGreen"))
                     }
+                    if Date() < ev.eventDate {
+                        Button(role: .destructive) {
+                            showCancelConfirmation = true
+                        } label: {
+                            Text("Can't make it? Cancel my sign-up")
+                        }
+                    }
+                } footer: {
+                    Text("Please cancel if you can't come so someone on the waitlist can play. No-shows count as warnings — after \(FirestoreManager.noShowLimit) in a year you can't sign up for this club's events.")
                 }
             }
 
@@ -212,12 +267,13 @@ struct SignupEventDetailView: View {
                                 .foregroundColor(.secondary)
                         }
                         Button {
-                            firestore.joinEventWaitlist(eventId: ev.id)
+                            firestore.joinEventWaitlist(eventId: ev.id, acceptedWaiver: acceptedWaiver)
                         } label: {
                             Text("Event Full — Join Waitlist")
                                 .fontWeight(.semibold)
                                 .frame(maxWidth: .infinity)
                         }
+                        .disabled(ev.requiresWaiver && !acceptedWaiver)
                     }
                 } header: {
                     Text("Waitlist")
@@ -299,9 +355,14 @@ struct SignupEventDetailView: View {
                 }
             }
 
-            // Weekly events: creator rolls the next occurrence forward
-            if isCreator && ev.isRecurringWeekly {
-                Section(footer: Text("Creates a copy of this event one week later with an empty signup list.")) {
+            // Weekly events roll forward automatically when they start; the creator can also do it early
+            if isCreator && ev.isRecurringWeekly && ev.nextOccurrenceId != nil {
+                Section {
+                    Label("Next week's event is scheduled", systemImage: "checkmark.circle")
+                        .foregroundColor(Color("LogoGreen"))
+                }
+            } else if isCreator && ev.isRecurringWeekly {
+                Section(footer: Text("Happens automatically when this event starts. Tap to create next week's event (empty signup list) now.")) {
                     Button {
                         firestore.createNextOccurrence(of: ev) { err in
                             DispatchQueue.main.async {
@@ -336,6 +397,21 @@ struct SignupEventDetailView: View {
                 firestore.fetchSignupEvents()
             }
         }
+        .sheet(isPresented: $showQRCode) {
+            if let url = ev.shareURL {
+                SignupQRCodeSheet(url: url, title: ev.title, caption: ev.shareCaption)
+            }
+        }
+        .confirmationDialog("Cancel your sign-up?", isPresented: $showCancelConfirmation, titleVisibility: .visible) {
+            Button("Cancel My Spot", role: .destructive) {
+                firestore.cancelMySignup(event: ev) { err in
+                    DispatchQueue.main.async {
+                        firestore.showToast(err == nil ? "Your sign-up was cancelled" : (err?.localizedDescription ?? "Couldn't cancel"))
+                    }
+                }
+            }
+            Button("Keep My Spot", role: .cancel) {}
+        }
         .confirmationDialog("Delete this event?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 firestore.deleteSignupEvent(id: ev.id) { _ in
@@ -345,6 +421,57 @@ struct SignupEventDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will permanently remove the event and all signups.")
+        }
+    }
+}
+
+/// Full-screen QR code for the signup link, for printing, a projector slide, or attaching to a post.
+private struct SignupQRCodeSheet: View {
+    let url: URL
+    let title: String
+    let caption: String
+    @Environment(\.dismiss) private var dismiss
+
+    private var qrImage: UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(url.absoluteString.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 12, y: 12)),
+              let cg = CIContext().createCGImage(output, from: output.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
+                if let image = qrImage {
+                    Image(uiImage: image)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 280)
+                    ShareLink(item: Image(uiImage: image), subject: Text(title), message: Text(caption),
+                              preview: SharePreview(title, image: Image(uiImage: image))) {
+                        Label("Share QR Code", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color("LogoGreen"))
+                }
+                Text(url.absoluteString)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+            }
+            .padding()
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 }

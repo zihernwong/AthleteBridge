@@ -543,7 +543,8 @@ struct ChatView: View {
                 ]
                 let batch = Firestore.firestore().batch()
                 batch.setData(payload, forDocument: newDoc)
-                batch.updateData(["lastMessageText": "📷 Photo", "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatDoc)
+                // lastSenderId drives the Android chat list's unread badge
+                batch.updateData(["lastMessageText": "📷 Photo", "lastMessageAt": FieldValue.serverTimestamp(), "lastSenderId": uid], forDocument: chatDoc)
                 batch.commit { err in
                     DispatchQueue.main.async {
                         self.isUploadingImage = false
@@ -581,7 +582,8 @@ struct ChatView: View {
         // Use batch to write message and update parent chat's last message metadata
         let batch = Firestore.firestore().batch()
         batch.setData(payload, forDocument: newDoc)
-        batch.updateData(["lastMessageText": trimmed, "lastMessageAt": nowField], forDocument: chatDoc)
+        // lastSenderId drives the Android chat list's unread badge
+        batch.updateData(["lastMessageText": trimmed, "lastMessageAt": nowField, "lastSenderId": uid], forDocument: chatDoc)
 
         batch.commit { err in
             DispatchQueue.main.async {

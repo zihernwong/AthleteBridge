@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseAuth
+import FirebaseFirestore
 import FirebaseInAppMessaging
 import FirebaseMessaging
 import UserNotifications
@@ -14,6 +15,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // runs before App.init when using @UIApplicationDelegateAdaptor.
         FirebaseApp.configure()
         print("[AppDelegate] FirebaseApp.configure() called")
+        #if DEBUG
+        Self.useFirebaseEmulatorsWhenUnitTesting()
+        #endif
 
         // Initialize NotificationManager early to set up MessagingDelegate
         _ = NotificationManager.shared
@@ -49,6 +53,28 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         print("[AppDelegate] didFinishLaunchingWithOptions complete")
         return true
     }
+
+    #if DEBUG
+    /// Unit tests run inside this app (it is their TEST_HOST). Point Auth and Firestore at the local
+    /// Firebase emulators before anything touches them, so tests can never read or write production data.
+    /// Start the emulators with: firebase emulators:start --only auth,firestore --project athletebridge-63176
+    static let isRunningUnitTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    static let emulatorFirestoreHost = "127.0.0.1:8080"
+
+    private static func useFirebaseEmulatorsWhenUnitTesting() {
+        guard isRunningUnitTests else { return }
+        Auth.auth().useEmulator(withHost: "127.0.0.1", port: 9099)
+        // A production session left on the simulator can't refresh against the Auth emulator,
+        // which keeps Firestore offline; tests always start signed out.
+        try? Auth.auth().signOut()
+        let settings = Firestore.firestore().settings
+        settings.host = emulatorFirestoreHost
+        settings.isSSLEnabled = false
+        settings.cacheSettings = MemoryCacheSettings()
+        Firestore.firestore().settings = settings
+        print("[AppDelegate] Unit tests: using the Firebase Auth/Firestore emulators")
+    }
+    #endif
 
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

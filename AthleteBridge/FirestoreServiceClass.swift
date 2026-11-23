@@ -748,6 +748,10 @@ class FirestoreManager: ObservableObject {
 
     // Snapshot listeners keyed by chat id for the latest-message preview (limit 1 listener per chat)
     private var previewListeners: [String: ListenerRegistration] = [:]
+    // Second preview query per chat for messages a legacy Android build wrote with `timestamp` instead of createdAt
+    private var legacyPreviewListeners: [String: ListenerRegistration] = [:]
+    // chatId -> query ("createdAt"/"timestamp") -> newest message data ([:] = none)
+    private var previewCandidates: [String: [String: [String: Any]]] = [:]
 
     /// Load the latest message preview for the given chat IDs.
     /// This fetches the newest message document from chats/{chatId}/messages ordered by createdAt desc limit 1
@@ -761,6 +765,9 @@ class FirestoreManager: ObservableObject {
             if !incomingSet.contains(id) {
                 listener.remove()
                 previewListeners.removeValue(forKey: id)
+                legacyPreviewListeners[id]?.remove()
+                legacyPreviewListeners.removeValue(forKey: id)
+                previewCandidates.removeValue(forKey: id)
                 DispatchQueue.main.async {
                     self.previewTexts.removeValue(forKey: id)
                     self.previewDates.removeValue(forKey: id)
@@ -774,55 +781,69 @@ class FirestoreManager: ObservableObject {
             if previewListeners[chatId] != nil { continue }
 
             let coll = collRoot.collection("chats").document(chatId).collection("messages")
-            let q = coll.order(by: "createdAt", descending: true).limit(to: 1)
-            let listener = q.addSnapshotListener { snap, err in
+            // Ordering by a field skips documents without it, so also watch the newest message by the
+            // `timestamp` field a legacy Android build wrote instead of createdAt, and show the newer one.
+            previewListeners[chatId] = coll.order(by: "createdAt", descending: true).limit(to: 1).addSnapshotListener { snap, err in
                 if let err = err {
                     print("loadPreviewsForChats listener error for \(chatId): \(err)")
                     return
                 }
-
-                guard let doc = snap?.documents.first else {
-                    DispatchQueue.main.async {
-                        self.previewTexts[chatId] = ""
-                        self.previewDates[chatId] = nil
-                        self.unreadChatIds.remove(chatId)
-                    }
+                self.previewCandidates[chatId, default: [:]]["createdAt"] = snap?.documents.first?.data(with: .estimate) ?? [:]
+                self.applyPreview(chatId: chatId)
+            }
+            legacyPreviewListeners[chatId] = coll.order(by: "timestamp", descending: true).limit(to: 1).addSnapshotListener { snap, err in
+                if let err = err {
+                    print("loadPreviewsForChats legacy listener error for \(chatId): \(err)")
                     return
                 }
+                self.previewCandidates[chatId, default: [:]]["timestamp"] = snap?.documents.first?.data(with: .estimate) ?? [:]
+                self.applyPreview(chatId: chatId)
+            }
+        }
+    }
 
-                let data = doc.data()
-                let text = data["text"] as? String ?? ""
-                var date: Date? = nil
-                if let ts = data["createdAt"] as? Timestamp { date = ts.dateValue() }
+    /// Publishes the newest of a chat's candidate latest messages and whether it's unread for the signed-in user.
+    private func applyPreview(chatId: String) {
+        func sentAt(_ data: [String: Any]) -> Date? {
+            ((data["createdAt"] ?? data["timestamp"]) as? Timestamp)?.dateValue()
+        }
+        let candidates = (previewCandidates[chatId] ?? [:]).values.filter { !$0.isEmpty }
+        guard let data = candidates.max(by: { (sentAt($0) ?? .distantPast) < (sentAt($1) ?? .distantPast) }) else {
+            DispatchQueue.main.async {
+                self.previewTexts[chatId] = ""
+                self.previewDates[chatId] = nil
+                self.unreadChatIds.remove(chatId)
+            }
+            return
+        }
 
-                // Determine unread status for current user
-                var isUnread = false
-                if let uid = Auth.auth().currentUser?.uid {
-                    var senderId: String? = nil
-                    if let sRef = data["senderRef"] as? DocumentReference { senderId = sRef.documentID }
-                    else if let s = data["senderId"] as? String { senderId = s }
-                    else if let s = data["sender"] as? String { senderId = s }
+        let text = data["text"] as? String ?? ""
+        let date = sentAt(data)
 
-                    if let sid = senderId, sid != uid {
-                        if let readBy = data["readBy"] as? [String: Any] {
-                            if readBy[uid] == nil { isUnread = true }
-                        } else {
-                            isUnread = true
-                        }
-                    }
+        // Determine unread status for current user
+        var isUnread = false
+        if let uid = Auth.auth().currentUser?.uid {
+            var senderId: String? = nil
+            if let sRef = data["senderRef"] as? DocumentReference { senderId = sRef.documentID }
+            else if let s = data["senderId"] as? String { senderId = s }
+            else if let s = data["sender"] as? String { senderId = s }
+
+            if let sid = senderId, sid != uid {
+                if let readBy = data["readBy"] as? [String: Any] {
+                    if readBy[uid] == nil { isUnread = true }
                 } else {
-                    // If we don't have an authenticated uid yet, conservatively treat it as unread
                     isUnread = true
                 }
-
-                DispatchQueue.main.async {
-                    self.previewTexts[chatId] = text
-                    if let d = date { self.previewDates[chatId] = d }
-                    if isUnread { self.unreadChatIds.insert(chatId) } else { self.unreadChatIds.remove(chatId) }
-                }
             }
+        } else {
+            // If we don't have an authenticated uid yet, conservatively treat it as unread
+            isUnread = true
+        }
 
-            previewListeners[chatId] = listener
+        DispatchQueue.main.async {
+            self.previewTexts[chatId] = text
+            if let d = date { self.previewDates[chatId] = d }
+            if isUnread { self.unreadChatIds.insert(chatId) } else { self.unreadChatIds.remove(chatId) }
         }
     }
 
@@ -830,6 +851,9 @@ class FirestoreManager: ObservableObject {
     func stopAllPreviewListeners() {
         for (_, l) in previewListeners { l.remove() }
         previewListeners.removeAll()
+        for (_, l) in legacyPreviewListeners { l.remove() }
+        legacyPreviewListeners.removeAll()
+        previewCandidates.removeAll()
         DispatchQueue.main.async {
             self.previewTexts = [:]
             self.previewDates = [:]
@@ -1745,6 +1769,7 @@ class FirestoreManager: ObservableObject {
                       self.profilesLoaded = false
                      // stop and clear chat listeners/state
                      self.stopAllChatListeners()
+                     self.stopClubListeners()
                   }
               }
          }
@@ -1795,7 +1820,11 @@ class FirestoreManager: ObservableObject {
                 let phoneVerified = data["phoneVerified"] as? Bool ?? false
                 let linkedPlaceIds = data["linkedPlaceIds"] as? [String] ?? []
 
-                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, rateRange: rateRange, subscriptionTier: subscriptionTier, phoneVerified: phoneVerified, linkedPlaceIds: linkedPlaceIds))
+                mapped.append(Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate,
+                                    meetingPreference: data["meetingPreference"] as? String,
+                                    zipCode: (data["ZipCode"] ?? data["zipCode"]) as? String, city: (data["City"] ?? data["city"]) as? String,
+                                    rateRange: rateRange, subscriptionTier: subscriptionTier, phoneVerified: phoneVerified, linkedPlaceIds: linkedPlaceIds,
+                                    cancellationWindowHours: data["cancellationWindowHours"] as? Int ?? 0))
 
                 // resolve coach photo if provided and cache into coachPhotoURLs
                 let photoStr = (data["PhotoURL"] as? String) ?? (data["photoURL"] as? String) ?? (data["photoUrl"] as? String)
@@ -1927,7 +1956,12 @@ class FirestoreManager: ObservableObject {
                 let feeUSD = (data["feeUSD"] as? NSNumber)?.doubleValue
                 let paymentLink = data["paymentLink"] as? String
                 let allowSelfReportPaid = data["allowSelfReportPaid"] as? Bool ?? false
-                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist, recurrence: recurrence, feeUSD: feeUSD, paymentLink: paymentLink, allowSelfReportPaid: allowSelfReportPaid))
+                let opensHoursBefore = (data["opensHoursBefore"] as? NSNumber)?.intValue
+                let customOpensAt = (data["opensAt"] as? Timestamp)?.dateValue()
+                let notes = data["notes"] as? String
+                let waiverText = data["waiverText"] as? String
+                let nextOccurrenceId = data["nextOccurrenceId"] as? String
+                results.append(SignupEvent(id: id, title: title, description: description, eventDate: eventDate, location: location, placeId: placeId, placeName: placeName, maxSignups: maxSignups, signupCount: signupCount, createdBy: createdBy, signups: signups, waitlist: waitlist, recurrence: recurrence, feeUSD: feeUSD, paymentLink: paymentLink, allowSelfReportPaid: allowSelfReportPaid, opensHoursBefore: opensHoursBefore, customOpensAt: customOpensAt, notes: notes, waiverText: waiverText, nextOccurrenceId: nextOccurrenceId))
             }
             DispatchQueue.main.async {
                 self.signupEvents = results
@@ -1935,10 +1969,12 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, recurrence: String? = nil, feeUSD: Double? = nil, paymentLink: String? = nil, allowSelfReportPaid: Bool = false, completion: @escaping (Error?) -> Void) {
+    /// Returns the new event's document ID (nil if not signed in).
+    @discardableResult
+    func createSignupEvent(title: String, description: String, eventDate: Date, location: String, placeId: String, placeName: String, maxSignups: Int, recurrence: String? = nil, feeUSD: Double? = nil, paymentLink: String? = nil, allowSelfReportPaid: Bool = false, opensHoursBefore: Int? = nil, opensAt: Date? = nil, notes: String? = nil, waiverText: String? = nil, completion: @escaping (Error?) -> Void) -> String? {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
-            return
+            return nil
         }
         var data: [String: Any] = [
             "title": title,
@@ -1951,13 +1987,22 @@ class FirestoreManager: ObservableObject {
             "signupCount": 0,
             "createdBy": uid,
             "createdAt": FieldValue.serverTimestamp(),
-            "signups": [String: Any]()
+            "signups": [String: Any](),
+            // Lets the weekly roll-forward function keep the local start time across DST changes
+            "timeZone": TimeZone.current.identifier
         ]
         if let recurrence = recurrence { data["recurrence"] = recurrence }
+        if let opensAt = opensAt {
+            data["opensAt"] = Timestamp(date: opensAt)
+        } else if let opensHoursBefore = opensHoursBefore, opensHoursBefore > 0 {
+            data["opensHoursBefore"] = opensHoursBefore
+        }
+        if let notes = notes, !notes.isEmpty { data["notes"] = notes }
+        if let waiverText = waiverText, !waiverText.isEmpty { data["waiverText"] = waiverText }
         if let feeUSD = feeUSD, feeUSD > 0 { data["feeUSD"] = feeUSD }
         if let paymentLink = paymentLink, !paymentLink.isEmpty { data["paymentLink"] = paymentLink }
         if allowSelfReportPaid { data["allowSelfReportPaid"] = true }
-        self.db.collection("signupEvents").addDocument(data: data) { err in
+        let ref = self.db.collection("signupEvents").addDocument(data: data) { err in
             if let err = err {
                 print("createSignupEvent error: \(err)")
                 completion(err)
@@ -1968,37 +2013,107 @@ class FirestoreManager: ObservableObject {
             }
             completion(nil)
         }
+        return ref.documentID
     }
 
     /// Roll a weekly event forward: create next week's occurrence with a fresh
     /// signup list. No-op (reports an error) if the next occurrence already exists.
+    /// Fields carried from an event to next week's occurrence (signups, payments and links start fresh).
+    nonisolated static let rolledEventKeys = ["title", "description", "location", "placeId", "placeName", "maxSignups",
+                                              "createdBy", "recurrence", "feeUSD", "paymentLink", "allowSelfReportPaid",
+                                              "opensHoursBefore", "notes", "waiverText", "timeZone"]
+
     func createNextOccurrence(of event: SignupEvent, completion: @escaping (Error?) -> Void) {
         let nextDate = Calendar.current.date(byAdding: .day, value: 7, to: event.eventDate) ?? event.eventDate
         let duplicate = signupEvents.contains { existing in
             existing.placeId == event.placeId && existing.title == event.title
                 && abs(existing.eventDate.timeIntervalSince(nextDate)) < 86400
         }
-        if duplicate {
+        if duplicate || event.nextOccurrenceId != nil {
             completion(NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "Next week's event already exists."]))
             return
         }
-        createSignupEvent(
-            title: event.title,
-            description: event.description,
-            eventDate: nextDate,
-            location: event.location,
-            placeId: event.placeId,
-            placeName: event.placeName,
-            maxSignups: event.maxSignups,
-            recurrence: event.recurrence,
-            feeUSD: event.feeUSD,
-            paymentLink: event.paymentLink,
-            allowSelfReportPaid: event.allowSelfReportPaid,
-            completion: completion
-        )
+        // Create next week's event and link it in one transaction, checking the stored event rather than this
+        // possibly stale copy: another device or the weekly roll-forward function may have rolled it already.
+        let sourceRef = db.collection("signupEvents").document(event.id)
+        let nextRef = db.collection("signupEvents").document()
+        db.runTransaction({ transaction, errorPointer -> Any? in
+            let snapshot: DocumentSnapshot
+            do {
+                snapshot = try transaction.getDocument(sourceRef)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+            guard let source = snapshot.data() else {
+                errorPointer?.pointee = NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+                return nil
+            }
+            if let existing = source["nextOccurrenceId"] as? String, !existing.isEmpty {
+                errorPointer?.pointee = NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "Next week's event already exists."])
+                return nil
+            }
+            // Same local time next week in the event's own time zone, across daylight-saving changes
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = TimeZone(identifier: source["timeZone"] as? String ?? "") ?? .current
+            let start = (source["eventDate"] as? Timestamp)?.dateValue() ?? event.eventDate
+            var data: [String: Any] = [:]
+            for key in Self.rolledEventKeys { if let value = source[key] { data[key] = value } }
+            data["eventDate"] = Timestamp(date: cal.date(byAdding: .weekOfYear, value: 1, to: start) ?? start.addingTimeInterval(7 * 86_400))
+            if let opensAt = (source["opensAt"] as? Timestamp)?.dateValue(), let nextOpens = cal.date(byAdding: .weekOfYear, value: 1, to: opensAt) {
+                data["opensAt"] = Timestamp(date: nextOpens)
+            }
+            data["timeZone"] = cal.timeZone.identifier
+            data["signupCount"] = 0
+            data["signups"] = [String: Any]()
+            data["previousOccurrenceId"] = sourceRef.documentID
+            data["createdAt"] = FieldValue.serverTimestamp()
+            transaction.setData(data, forDocument: nextRef)
+            // The link also stops the scheduled roll-forward function from creating a second copy
+            transaction.updateData(["nextOccurrenceId": nextRef.documentID], forDocument: sourceRef)
+            return nil
+        }) { [weak self] _, error in
+            if let error = error {
+                print("createNextOccurrence error: \(error)")
+                completion(error)
+                return
+            }
+            DispatchQueue.main.async { self?.fetchSignupEvents() }
+            completion(nil)
+        }
     }
 
-    func signupForEvent(eventId: String, completion: ((Error?) -> Void)? = nil) {
+    // Keep in sync with NO_SHOW_LIMIT in functions/src/index.ts and the web admin
+    static let noShowLimit = 5
+
+    /// noShowRecords doc IDs for a player at an event's club and year: "{placeId}__{year}__{key}"
+    /// where key is u_{uid} and/or e_{email} — the same scheme the web signupApi and admin use.
+    static func noShowRecordIds(event data: [String: Any], userId: String?, email: String?) -> [String] {
+        var keys: [String] = []
+        if let uid = userId, !uid.isEmpty { keys.append("u_\(uid)") }
+        let mail = (email ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        if !mail.isEmpty { keys.append("e_\(mail)") }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: data["timeZone"] as? String ?? "") ?? TimeZone(identifier: "America/Chicago")!
+        let date = (data["eventDate"] as? Timestamp)?.dateValue() ?? Date()
+        let year = cal.component(.year, from: date)
+        let placeId = (data["placeId"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "none"
+        return keys.map { "\(placeId)__\(year)__\($0.replacingOccurrences(of: "/", with: "_"))" }
+    }
+
+    /// Cancel the current user's own signup; the first waitlisted player moves up.
+    func cancelMySignup(event: SignupEvent, completion: ((Error?) -> Void)? = nil) {
+        guard let uid = Auth.auth().currentUser?.uid,
+              let mine = event.signups.first(where: { $0.userId == uid }) else {
+            completion?(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Signup not found"]))
+            return
+        }
+        removeSignupFromEvent(eventId: event.id, signupId: mine.id, completion: completion)
+    }
+
+    /// `acceptedWaiver` must be true when the event has waiver text. Signups that haven't
+    /// opened yet are rejected, except for the event's creator.
+    func signupForEvent(eventId: String, acceptedWaiver: Bool = false, completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -2023,10 +2138,38 @@ class FirestoreManager: ObservableObject {
                 errorPointer?.pointee = err
                 return nil
             }
+            // No-show warnings at this club this year (same records and limit as the web signupApi)
+            let noShowEvents = Set(Self.noShowRecordIds(event: data, userId: uid, email: userEmail).flatMap { docId -> [String] in
+                let snap = try? transaction.getDocument(self.db.collection("noShowRecords").document(docId))
+                return Array(((snap?.data()?["events"]) as? [String: Any] ?? [:]).keys)
+            })
+            if noShowEvents.count >= Self.noShowLimit {
+                let club = data["placeName"] as? String ?? "this club"
+                let err = NSError(domain: "FirestoreManager", code: 403, userInfo: [NSLocalizedDescriptionKey: "You've reached \(Self.noShowLimit) no-show warnings this year at \(club), so you can't sign up for its events until next year. Please contact the organizer."])
+                errorPointer?.pointee = err
+                return nil
+            }
             let currentCount = data["signupCount"] as? Int ?? 0
             let maxSignups = data["maxSignups"] as? Int ?? 0
             if currentCount >= maxSignups {
                 let err = NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "This event is full"])
+                errorPointer?.pointee = err
+                return nil
+            }
+            let opensAt: Date? = {
+                if let exact = (data["opensAt"] as? Timestamp)?.dateValue() { return exact }
+                guard let hours = (data["opensHoursBefore"] as? NSNumber)?.doubleValue, hours > 0,
+                      let eventDate = (data["eventDate"] as? Timestamp)?.dateValue() else { return nil }
+                return eventDate.addingTimeInterval(-hours * 3600)
+            }()
+            if let opensAt = opensAt, Date() < opensAt, (data["createdBy"] as? String) != uid {
+                let err = NSError(domain: "FirestoreManager", code: 403, userInfo: [NSLocalizedDescriptionKey: "Sign-ups aren't open yet"])
+                errorPointer?.pointee = err
+                return nil
+            }
+            let waiver = (data["waiverText"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !waiver.isEmpty && !acceptedWaiver {
+                let err = NSError(domain: "FirestoreManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "Please accept the waiver to sign up"])
                 errorPointer?.pointee = err
                 return nil
             }
@@ -2041,17 +2184,24 @@ class FirestoreManager: ObservableObject {
                 }
             }
             let key = UUID().uuidString
-            let signupData: [String: Any] = [
+            var signupData: [String: Any] = [
                 "name": userName,
                 "email": userEmail,
                 "userId": uid,
                 "signedUpAt": Timestamp(date: Date()),
                 "paid": false
             ]
-            transaction.updateData([
+            if !waiver.isEmpty { signupData["waiverAcceptedAt"] = Timestamp(date: Date()) }
+            var update: [String: Any] = [
                 "signups.\(key)": signupData,
                 "signupCount": FieldValue.increment(Int64(1))
-            ], forDocument: ref)
+            ]
+            // Signing up directly takes the player off the waitlist, so a later promotion can't add them twice
+            for (waitKey, value) in data["waitlist"] as? [String: Any] ?? [:]
+            where ((value as? [String: Any])?["userId"] as? String) == uid {
+                update["waitlist.\(waitKey)"] = FieldValue.delete()
+            }
+            transaction.updateData(update, forDocument: ref)
             return nil
         }) { [weak self] _, error in
             if let error = error {
@@ -2066,17 +2216,29 @@ class FirestoreManager: ObservableObject {
 
     func removeSignupFromEvent(eventId: String, signupId: String, completion: ((Error?) -> Void)? = nil) {
         let ref = self.db.collection("signupEvents").document(eventId)
-        ref.updateData([
-            "signups.\(signupId)": FieldValue.delete(),
-            "signupCount": FieldValue.increment(Int64(-1))
-        ]) { [weak self] err in
+        db.runTransaction({ transaction, errorPointer -> Any? in
+            let snapshot: DocumentSnapshot
+            do {
+                snapshot = try transaction.getDocument(ref)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+            // Already gone (a double tap, or the player cancelled first): don't free a second spot
+            guard let signups = snapshot.data()?["signups"] as? [String: Any], signups[signupId] != nil else { return false }
+            transaction.updateData([
+                "signups.\(signupId)": FieldValue.delete(),
+                "signupCount": FieldValue.increment(Int64(-1))
+            ], forDocument: ref)
+            return true
+        }) { [weak self] removed, err in
             if let err = err {
                 print("removeSignupFromEvent error: \(err)")
                 completion?(err)
                 return
             }
-            // A spot just opened — promote the first person on the waitlist, if any
-            self?.promoteFromWaitlist(eventId: eventId)
+            // A spot just opened — promote from the waitlist, if anyone is waiting
+            if removed as? Bool == true { self?.promoteFromWaitlist(eventId: eventId) }
             DispatchQueue.main.async { self?.fetchSignupEvents() }
             completion?(nil)
         }
@@ -2084,7 +2246,7 @@ class FirestoreManager: ObservableObject {
 
     // MARK: - Event Waitlist
 
-    func joinEventWaitlist(eventId: String, completion: ((Error?) -> Void)? = nil) {
+    func joinEventWaitlist(eventId: String, acceptedWaiver: Bool = false, completion: ((Error?) -> Void)? = nil) {
         guard let uid = Auth.auth().currentUser?.uid else {
             completion?(NSError(domain: "FirestoreManager", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"]))
             return
@@ -2096,14 +2258,34 @@ class FirestoreManager: ObservableObject {
         }()
         let userEmail = Auth.auth().currentUser?.email ?? ""
         let key = UUID().uuidString
-        self.db.collection("signupEvents").document(eventId).updateData([
-            "waitlist.\(key)": [
-                "name": userName,
-                "email": userEmail,
-                "userId": uid,
-                "joinedAt": Timestamp(date: Date())
-            ]
-        ]) { [weak self] err in
+        var entry: [String: Any] = [
+            "name": userName,
+            "email": userEmail,
+            "userId": uid,
+            "joinedAt": Timestamp(date: Date())
+        ]
+        if acceptedWaiver { entry["waiverAcceptedAt"] = Timestamp(date: Date()) }
+        let ref = self.db.collection("signupEvents").document(eventId)
+        db.runTransaction({ transaction, errorPointer -> Any? in
+            let snapshot: DocumentSnapshot
+            do {
+                snapshot = try transaction.getDocument(ref)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
+            }
+            let data = snapshot.data() ?? [:]
+            func listed(_ field: String) -> Bool {
+                (data[field] as? [String: Any] ?? [:]).values.contains { ($0 as? [String: Any])?["userId"] as? String == uid }
+            }
+            if listed("waitlist") { return nil } // already waiting — a second tap adds nothing
+            if listed("signups") {
+                errorPointer?.pointee = NSError(domain: "FirestoreManager", code: 409, userInfo: [NSLocalizedDescriptionKey: "You're already signed up"])
+                return nil
+            }
+            transaction.updateData(["waitlist.\(key)": entry], forDocument: ref)
+            return nil
+        }) { [weak self] _, err in
             if err == nil { DispatchQueue.main.async { self?.fetchSignupEvents() } }
             completion?(err)
         }
@@ -2125,57 +2307,69 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    /// Move the earliest-joined waitlist entry into signups when capacity allows, and notify them.
+    /// Move the earliest-joined waitlist entries into every open spot (like the web signupApi) and notify them.
+    /// Entries for players who already got in some other way are just dropped from the waitlist.
     private func promoteFromWaitlist(eventId: String) {
         let ref = self.db.collection("signupEvents").document(eventId)
-        ref.getDocument { [weak self] snap, _ in
-            guard let self = self, let data = snap?.data() else { return }
-            let count = data["signupCount"] as? Int ?? 0
-            let max = data["maxSignups"] as? Int ?? 0
-            guard count < max, let raw = data["waitlist"] as? [String: Any], !raw.isEmpty else { return }
-
-            // Earliest joinedAt goes first
-            var firstKey: String? = nil
-            var firstInfo: [String: Any] = [:]
-            var firstDate = Date.distantFuture
-            for (key, value) in raw {
-                guard let info = value as? [String: Any] else { continue }
-                let joined = (info["joinedAt"] as? Timestamp)?.dateValue() ?? .distantPast
-                if joined < firstDate {
-                    firstDate = joined
-                    firstKey = key
-                    firstInfo = info
-                }
+        db.runTransaction({ transaction, errorPointer -> Any? in
+            let snapshot: DocumentSnapshot
+            do {
+                snapshot = try transaction.getDocument(ref)
+            } catch let fetchError as NSError {
+                errorPointer?.pointee = fetchError
+                return nil
             }
-            guard let key = firstKey else { return }
+            guard let data = snapshot.data(), let raw = data["waitlist"] as? [String: Any], !raw.isEmpty else { return nil }
+            let signedUp = Set((data["signups"] as? [String: Any] ?? [:]).values.compactMap { ($0 as? [String: Any])?["userId"] as? String })
+            let max = data["maxSignups"] as? Int ?? 0
+            var count = data["signupCount"] as? Int ?? 0
+            let queue = raw.compactMap { key, value -> (key: String, info: [String: Any], joined: Date)? in
+                guard let info = value as? [String: Any] else { return nil }
+                return (key, info, (info["joinedAt"] as? Timestamp)?.dateValue() ?? .distantPast)
+            }.sorted { $0.joined < $1.joined }
 
-            ref.updateData([
-                "waitlist.\(key)": FieldValue.delete(),
-                "signups.\(key)": [
-                    "name": firstInfo["name"] as? String ?? "",
-                    "email": firstInfo["email"] as? String ?? "",
-                    "userId": firstInfo["userId"] as? String ?? "",
+            var update: [String: Any] = [:]
+            var promotedUids: [String] = []
+            for entry in queue {
+                let uid = entry.info["userId"] as? String ?? ""
+                if !uid.isEmpty && signedUp.contains(uid) {
+                    update["waitlist.\(entry.key)"] = FieldValue.delete()
+                    continue
+                }
+                guard count < max else { continue }
+                var promoted: [String: Any] = [
+                    "name": entry.info["name"] as? String ?? "",
+                    "email": entry.info["email"] as? String ?? "",
+                    "userId": uid,
                     "signedUpAt": Timestamp(date: Date()),
                     "paid": false
-                ],
-                "signupCount": FieldValue.increment(Int64(1))
-            ]) { err in
-                guard err == nil else { return }
-                if let promotedUid = firstInfo["userId"] as? String, !promotedUid.isEmpty {
-                    let title = data["title"] as? String ?? "an event"
-                    let notifRef = self.db.collection("pendingNotifications").document(promotedUid).collection("notifications").document()
-                    notifRef.setData([
-                        "title": "You're in!",
-                        "body": "A spot opened up in \"\(title)\" — you've been moved off the waitlist.",
-                        "type": "event_waitlist_promoted",
-                        "eventId": eventId,
-                        "placeId": data["placeId"] as? String ?? "",
-                        "createdAt": FieldValue.serverTimestamp(),
-                        "delivered": false
-                    ]) { _ in }
-                }
-                DispatchQueue.main.async { self.fetchSignupEvents() }
+                ]
+                if let accepted = entry.info["waiverAcceptedAt"] { promoted["waiverAcceptedAt"] = accepted }
+                update["waitlist.\(entry.key)"] = FieldValue.delete()
+                update["signups.\(entry.key)"] = promoted
+                count += 1
+                if !uid.isEmpty { promotedUids.append(uid) }
             }
+            guard !update.isEmpty else { return nil }
+            update["signupCount"] = count
+            transaction.updateData(update, forDocument: ref)
+            return ["uids": promotedUids, "title": data["title"] as? String ?? "an event", "placeId": data["placeId"] as? String ?? ""]
+        }) { [weak self] result, err in
+            guard let self = self, err == nil, let info = result as? [String: Any] else { return }
+            let title = info["title"] as? String ?? "an event"
+            for promotedUid in info["uids"] as? [String] ?? [] {
+                let notifRef = self.db.collection("pendingNotifications").document(promotedUid).collection("notifications").document()
+                notifRef.setData([
+                    "title": "You're in!",
+                    "body": "A spot opened up in \"\(title)\" — you've been moved off the waitlist.",
+                    "type": "event_waitlist_promoted",
+                    "eventId": eventId,
+                    "placeId": info["placeId"] as? String ?? "",
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "delivered": false
+                ]) { _ in }
+            }
+            DispatchQueue.main.async { self.fetchSignupEvents() }
         }
     }
 
@@ -2230,6 +2424,8 @@ class FirestoreManager: ObservableObject {
                 completion?(err)
                 return
             }
+            // New spots go to the waitlist first
+            self?.promoteFromWaitlist(eventId: eventId)
             DispatchQueue.main.async { self?.fetchSignupEvents() }
             completion?(nil)
         }
@@ -2625,21 +2821,29 @@ class FirestoreManager: ObservableObject {
     func fetchPlacesToPlay() {
         // Already listening — the snapshot listener keeps data fresh.
         if placesToPlayListener != nil { return }
-        placesToPlayListener = self.db.collection("placesToPlay").order(by: "createdAt", descending: true).addSnapshotListener { [weak self] snap, err in
+        // No order(by: "createdAt") here: Firestore silently drops documents missing the field, and
+        // clubs created on Android don't have it. Sort newest-first on the device instead.
+        placesToPlayListener = self.db.collection("placesToPlay").addSnapshotListener { [weak self] snap, err in
             guard let self = self else { return }
             if let err = err {
                 print("fetchPlacesToPlay listener error: \(err)")
+                // Firestore ends a listener after an error (e.g. permission denied once signed out);
+                // forget it so the next fetchPlacesToPlay() attaches a working one.
+                self.placesToPlayListener?.remove()
+                self.placesToPlayListener = nil
                 return
             }
-            let docs = snap?.documents ?? []
+            let docs = (snap?.documents ?? []).sorted {
+                (($0.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast)
+                    > (($1.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast)
+            }
             let results: [PlaceToPlay] = docs.compactMap { d in
                 let data = d.data()
                 let name = data["name"] as? String ?? ""
                 guard !name.isEmpty else { return nil }
                 var timesMap: [String: String] = [:]
-                if let raw = data["playingTimes"] as? [String: String] {
-                    timesMap = raw
-                } else if let raw = data["playingTimes"] as? [String: Any] {
+                // iOS writes playingTimes, Android weeklySchedule
+                if let raw = (data["playingTimes"] ?? data["weeklySchedule"]) as? [String: Any] {
                     for (k, v) in raw { timesMap[k] = "\(v)" }
                 }
                 var members: [ClubMember] = []
@@ -2692,7 +2896,7 @@ class FirestoreManager: ObservableObject {
                     name: name,
                     address: data["address"] as? String ?? "",
                     playingTimes: timesMap,
-                    pricePerSession: data["pricePerSession"] as? String ?? "",
+                    pricePerSession: (data["pricePerSession"] ?? data["pricing"]) as? String ?? "",
                     photoURL: data["photoURL"] as? String,
                     createdBy: data["createdBy"] as? String ?? "",
                     contactUid: contactUid,
@@ -3043,6 +3247,15 @@ class FirestoreManager: ObservableObject {
 
     private var clubAnnouncementListeners: [String: ListenerRegistration] = [:]
 
+    /// Club listeners die once their user signs out (the rules require auth), so drop them on sign-out;
+    /// the next fetch attaches fresh ones for whoever signs in.
+    func stopClubListeners() {
+        placesToPlayListener?.remove()
+        placesToPlayListener = nil
+        for (_, listener) in clubAnnouncementListeners { listener.remove() }
+        clubAnnouncementListeners.removeAll()
+    }
+
     /// Attach a live snapshot listener for a club's announcements so new
     /// announcements appear automatically (e.g. while a member is viewing the
     /// announcements screen when the push notification arrives) — no manual
@@ -3055,6 +3268,9 @@ class FirestoreManager: ObservableObject {
             .addSnapshotListener { [weak self] snap, err in
                 if let err = err {
                     print("fetchClubAnnouncements listener error: \(err)")
+                    // The listener is dead after an error; let the next fetch re-attach
+                    self?.clubAnnouncementListeners[placeId]?.remove()
+                    self?.clubAnnouncementListeners[placeId] = nil
                     return
                 }
                 let docs = snap?.documents ?? []
@@ -3424,7 +3640,10 @@ class FirestoreManager: ObservableObject {
                         paymentsMap = tmp.isEmpty ? nil : tmp
                     }
 
-                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, meetingPreference: meetingPref, payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink, subscriptionTier: coachSubscriptionTier, phoneVerified: coachPhoneVerified, linkedPlaceIds: coachLinkedPlaceIds, cancellationWindowHours: data["cancellationWindowHours"] as? Int ?? 0)
+                    self.currentCoach = Coach(id: id, name: name, specialties: specialties, experienceYears: experience, availability: availability, bio: bio, hourlyRate: hourlyRate, photoURLString: photoStr, meetingPreference: meetingPref,
+                                              // saveCoachWithSchema writes ZipCode/City; without these the profile editor shows them blank
+                                              zipCode: (data["ZipCode"] ?? data["zipCode"]) as? String, city: (data["City"] ?? data["city"]) as? String,
+                                              payments: paymentsMap, rateRange: rateRange, tournamentSoftwareLink: coachTournamentSoftwareLink, subscriptionTier: coachSubscriptionTier, phoneVerified: coachPhoneVerified, linkedPlaceIds: coachLinkedPlaceIds, cancellationWindowHours: data["cancellationWindowHours"] as? Int ?? 0)
                     self.currentCoachPhotoURL = resolved
                     if let r = resolved {
                         print("fetchCurrentProfiles: coach photo resolved for \(id): \(r.absoluteString)")
@@ -3451,21 +3670,9 @@ class FirestoreManager: ObservableObject {
             let tier = CoachTier.effectiveTier(from: data)
             DispatchQueue.main.async {
                 if let current = self.currentCoach, current.subscriptionTier != tier {
-                    // Update the coach with the new tier
-                    let updated = Coach(
-                        id: current.id,
-                        name: current.name,
-                        specialties: current.specialties,
-                        experienceYears: current.experienceYears,
-                        availability: current.availability,
-                        bio: current.bio,
-                        hourlyRate: current.hourlyRate,
-                        meetingPreference: current.meetingPreference,
-                        payments: current.payments,
-                        rateRange: current.rateRange,
-                        subscriptionTier: tier,
-                        linkedPlaceIds: current.linkedPlaceIds
-                    )
+                    // Only the tier changes — rebuilding the coach field by field dropped the cancellation
+                    // policy, verified badge, location and links (and a later profile save then erased them)
+                    let updated = current.withTier(tier)
                     self.currentCoach = updated
                     // Sync the new tier into the coaches discovery list so
                     // MatchResultsView reflects the change without an app restart
@@ -3884,11 +4091,11 @@ class FirestoreManager: ObservableObject {
                                 // build item now
                                 let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                                 let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
-                                let location = data["Location"] as? String
-                                let notes = data["Notes"] as? String
-                                let coachNote = data["CoachNote"] as? String
+                                let location = (data["Location"] ?? data["location"]) as? String
+                                let notes = (data["Notes"] ?? data["notes"]) as? String
+                                let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
                                 let status = (data["Status"] ?? data["status"]) as? String
-                                let paymentStatus = data["PaymentStatus"] as? String
+                                let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                                 let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                                 // Group booking fields
                                 let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
@@ -3914,11 +4121,11 @@ class FirestoreManager: ObservableObject {
                             if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachID }
                             let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                             let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
-                            let location = data["Location"] as? String
-                            let notes = data["Notes"] as? String
-                            let coachNote = data["CoachNote"] as? String
+                            let location = (data["Location"] ?? data["location"]) as? String
+                            let notes = (data["Notes"] ?? data["notes"]) as? String
+                            let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
                             let status = (data["Status"] ?? data["status"]) as? String
-                            let paymentStatus = data["PaymentStatus"] as? String
+                            let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                             let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                             // Group booking fields
                             let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
@@ -3958,11 +4165,11 @@ class FirestoreManager: ObservableObject {
                             }
                             let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                             let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
-                            let location = data["Location"] as? String
-                            let notes = data["Notes"] as? String
-                            let coachNote = data["CoachNote"] as? String
+                            let location = (data["Location"] ?? data["location"]) as? String
+                            let notes = (data["Notes"] ?? data["notes"]) as? String
+                            let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
                             let status = (data["Status"] ?? data["status"]) as? String
-                            let paymentStatus = data["PaymentStatus"] as? String
+                            let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                             let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                             // Group booking fields
                             let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
@@ -3988,11 +4195,11 @@ class FirestoreManager: ObservableObject {
                         if let coachStr = data["CoachID"] as? String { coachID = coachStr.split(separator: "/").last.map(String.init) ?? coachStr }
                         let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                         let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
-                        let location = data["Location"] as? String
-                        let notes = data["Notes"] as? String
-                        let coachNote = data["CoachNote"] as? String
+                        let location = (data["Location"] ?? data["location"]) as? String
+                        let notes = (data["Notes"] ?? data["notes"]) as? String
+                        let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
                         let status = (data["Status"] ?? data["status"]) as? String
-                        let paymentStatus = data["PaymentStatus"] as? String
+                        let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                         let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                         // Group booking fields
                         let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String]
@@ -4129,10 +4336,10 @@ class FirestoreManager: ObservableObject {
                 let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                 let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                 let status = (data["Status"] ?? data["status"]) as? String
-                let location = data["Location"] as? String
-                let notes = data["Notes"] as? String
-                let coachNote = data["CoachNote"] as? String
-                let paymentStatus = data["PaymentStatus"] as? String
+                let location = (data["Location"] ?? data["location"]) as? String
+                let notes = (data["Notes"] ?? data["notes"]) as? String
+                let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
+                let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                 let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Prefer denormalized coach name stored on booking doc
                 let coachName = (data["CoachName"] as? String)
@@ -4176,10 +4383,10 @@ class FirestoreManager: ObservableObject {
                 let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                 let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                 let status = (data["Status"] ?? data["status"]) as? String
-                let location = data["Location"] as? String
-                let notes = data["Notes"] as? String
-                let coachNote = data["CoachNote"] as? String
-                let paymentStatus = data["PaymentStatus"] as? String
+                let location = (data["Location"] ?? data["location"]) as? String
+                let notes = (data["Notes"] ?? data["notes"]) as? String
+                let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
+                let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                 let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Prefer denormalized coach name stored on booking doc
                 let coachName = (data["CoachName"] as? String)
@@ -4738,7 +4945,9 @@ class FirestoreManager: ObservableObject {
                 let firstName = clientData["FirstName"] as? String ?? ""
                 let lastName = clientData["LastName"] as? String ?? ""
                 let fullName = [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " ")
-                if !fullName.isEmpty { clientName = fullName }
+                // Client profiles store a single `name` (saveClient); FirstName/LastName is the coach schema
+                let name = fullName.isEmpty ? (clientData["name"] as? String ?? "") : fullName
+                if !name.isEmpty { clientName = name }
             }
 
             var data: [String: Any] = [
@@ -4756,8 +4965,8 @@ class FirestoreManager: ObservableObject {
                 "coachID": coachRef.documentID,
                 "createdAt": FieldValue.serverTimestamp()
             ]
-            if let name = coachName { data["CoachName"] = name }
-            if let name = clientName { data["ClientName"] = name }
+            if let name = coachName { data["CoachName"] = name; data["coachName"] = name }
+            if let name = clientName { data["ClientName"] = name; data["clientName"] = name }
             if let extra = extra { for (k,v) in extra { data[k] = v } }
 
             print("[FirestoreManager] saveBookingAndMirror begin: bookingId=\(bookingRef.documentID) coachId=\(coachId) clientId=\(clientId) coachName=\(coachName ?? "nil")")
@@ -4831,6 +5040,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Booking Requested",
                             "body": "Booking Requested by \(displayName) Action Required",
+                            "type": "booking_request",
                             "bookingId": bookingRef.documentID,
                             "senderId": clientId,
                             "createdAt": FieldValue.serverTimestamp(),
@@ -4960,6 +5170,15 @@ class FirestoreManager: ObservableObject {
                 // camelCase mirrors so Android (which prefers camelCase group fields) reads these
                 "coachAcceptances": coachAcceptances,
                 "clientConfirmations": clientConfirmations,
+                "coachIDs": coachIds,
+                "clientIDs": clientIds,
+                "coachID": primaryCoachId,
+                "clientID": primaryClientId,
+                "startAt": Timestamp(date: startAt),
+                "endAt": Timestamp(date: endAt),
+                "location": location ?? "",
+                "notes": notes ?? "",
+                "paymentStatus": "unpaid",
                 "createdAt": FieldValue.serverTimestamp()
             ]
             if let extra = extra { for (k, v) in extra { data[k] = v } }
@@ -5018,6 +5237,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Group Booking Requested",
                             "body": "\(creatorName) requested a group session - Action Required",
+                            "type": "booking_request",
                             "bookingId": bookingId,
                             "senderId": creatorID,
                             "isGroupBooking": true,
@@ -5041,6 +5261,7 @@ class FirestoreManager: ObservableObject {
                             let notifPayload: [String: Any] = [
                                 "title": "Added to Group Session",
                                 "body": "\(creatorName) added you to a group session",
+                                "type": "booking_request",
                                 "bookingId": bookingId,
                                 "senderId": creatorID,
                                 "isGroupBooking": true,
@@ -5286,9 +5507,9 @@ class FirestoreManager: ObservableObject {
                         let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                         let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                         let status = (data["Status"] ?? data["status"]) as? String
-                        let location = data["Location"] as? String
-                        let notes = data["Notes"] as? String
-                        let coachNote = data["CoachNote"] as? String
+                        let location = (data["Location"] ?? data["location"]) as? String
+                        let notes = (data["Notes"] ?? data["notes"]) as? String
+                        let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
                         // attempt to resolve client name sync-ish: we won't block overall fetching per-client
                         // we don't retain clientName here because it will be resolved later in bulk
                         var clientName: String? = nil
@@ -5423,41 +5644,69 @@ class FirestoreManager: ObservableObject {
         }
     }
 
-    /// Flag a booking's deposit as forfeited after a late client cancellation.
+    /// Flag a booking's deposit as forfeited after a late client cancellation (every participant's copy).
     func markDepositForfeited(bookingId: String, coachId: String, clientId: String) {
-        let payload: [String: Any] = ["depositForfeited": true]
-        let batch = db.batch()
-        batch.updateData(payload, forDocument: db.collection("bookings").document(bookingId))
-        if !coachId.isEmpty {
-            batch.updateData(payload, forDocument: db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
+        updateAllBookingCopies(bookingId: bookingId, fields: ["depositForfeited": true]) { err in
+            if let err = err { print("markDepositForfeited: failed for \(bookingId): \(err)") }
         }
-        if !clientId.isEmpty {
-            batch.updateData(payload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(bookingId))
-        }
-        batch.commit { _ in }
     }
 
-    /// Coach-written, client-visible recap of the session (mirrors saveSessionNotes).
+    /// Coach-written, client-visible recap of the session (every participant's copy).
     func saveSessionRecap(bookingId: String, coachId: String, clientId: String, recap: String, completion: @escaping (Error?) -> Void) {
-        let batch = db.batch()
-        let payload: [String: Any] = ["sessionRecap": recap]
-        batch.updateData(payload, forDocument: db.collection("bookings").document(bookingId))
-        batch.updateData(payload, forDocument: db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
-        if !clientId.isEmpty {
-            batch.updateData(payload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(bookingId))
-        }
-        batch.commit(completion: completion)
+        updateAllBookingCopies(bookingId: bookingId, fields: ["sessionRecap": recap], completion: completion)
     }
 
     func saveSessionNotes(bookingId: String, coachId: String, clientId: String, notes: String, completion: @escaping (Error?) -> Void) {
-        let batch = db.batch()
-        let payload: [String: Any] = ["coachNote": notes]
-        batch.updateData(payload, forDocument: db.collection("bookings").document(bookingId))
-        batch.updateData(payload, forDocument: db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
-        if !clientId.isEmpty {
-            batch.updateData(payload, forDocument: db.collection("clients").document(clientId).collection("bookings").document(bookingId))
+        // Android writes the same camelCase field; the booking parsers read either casing
+        updateAllBookingCopies(bookingId: bookingId, fields: ["coachNote": notes], completion: completion)
+    }
+
+    // MARK: - Booking copies
+
+    /// Everyone on a booking: the group arrays when present plus the primary coach/client, which may be
+    /// stored as a DocumentReference, a "coaches/{id}" path or a bare id, in either casing.
+    nonisolated static func bookingParticipants(_ data: [String: Any]) -> (coaches: [String], clients: [String]) {
+        func id(_ value: Any?) -> String? {
+            if let ref = value as? DocumentReference { return ref.documentID }
+            if let s = value as? String { return s.split(separator: "/").last.map(String.init) }
+            if let dict = value as? [String: Any] {
+                if let id = dict["id"] as? String { return id }
+                if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
+            }
+            return nil
         }
-        batch.commit(completion: completion)
+        func ids(_ keys: [String]) -> [String] {
+            var seen = Set<String>()
+            let all = keys.flatMap { key -> [String] in
+                if let list = data[key] as? [Any] { return list.compactMap { id($0) } }
+                return [id(data[key])].compactMap { $0 }
+            }
+            return all.filter { !$0.isEmpty && seen.insert($0).inserted }
+        }
+        return (ids(["CoachIDs", "coachIDs", "CoachID", "coachID"]), ids(["ClientIDs", "clientIDs", "ClientID", "clientID"]))
+    }
+
+    /// Applies `fields` to every copy of a booking in one batch: bookings/{id} plus each participant's
+    /// coaches/{id}/bookings and clients/{id}/bookings mirror (group sessions have one per participant).
+    private func updateAllBookingCopies(bookingId: String, fields: [String: Any], completion: @escaping (Error?) -> Void) {
+        let bookingRef = db.collection("bookings").document(bookingId)
+        bookingRef.getDocument { snap, err in
+            if let err = err { completion(err); return }
+            guard let data = snap?.data() else {
+                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
+                return
+            }
+            let participants = Self.bookingParticipants(data)
+            let batch = self.db.batch()
+            batch.updateData(fields, forDocument: bookingRef)
+            for coachId in participants.coaches {
+                batch.updateData(fields, forDocument: self.db.collection("coaches").document(coachId).collection("bookings").document(bookingId))
+            }
+            for clientId in participants.clients {
+                batch.updateData(fields, forDocument: self.db.collection("clients").document(clientId).collection("bookings").document(bookingId))
+            }
+            batch.commit(completion: completion)
+        }
     }
 
     func fetchBookingsForCurrentCoachSubcollection() {
@@ -5581,74 +5830,25 @@ class FirestoreManager: ObservableObject {
     /// Update the Status field for a booking across root and mirrored subcollections.
     /// This is tolerant to CoachID/ClientID stored as DocumentReference or String.
     func updateBookingStatus(bookingId: String, status: String, completion: @escaping (Error?) -> Void) {
-        let bookingRef = self.db.collection("bookings").document(bookingId)
-
-        // Read the booking to resolve coach/client ids (if needed)
-        bookingRef.getDocument { snap, err in
+        // Every participant's copy: group sessions have one per coach and client
+        updateAllBookingCopies(bookingId: bookingId, fields: ["Status": status, "status": status]) { err in
             if let err = err {
-                print("updateBookingStatus: failed to read booking \(bookingId): \(err)")
+                print("updateBookingStatus: failed for \(bookingId): \(err)")
                 completion(err)
                 return
             }
-
-            guard let data = snap?.data() else {
-                // Booking missing: nothing to update
-                print("updateBookingStatus: booking \(bookingId) not found")
-                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
-                return
-            }
-
-            // Helper to extract document id from various representations
-            func extractId(from field: Any?) -> String? {
-                if let ref = field as? DocumentReference { return ref.documentID }
-                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
-                if let dict = field as? [String: Any] {
-                    if let id = dict["id"] as? String { return id }
-                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
-                }
-                return nil
-            }
-
-            let coachId = extractId(from: data["CoachID"])
-            let clientId = extractId(from: data["ClientID"])
-
-            // Build batch to update root booking and any mirrored subcollection documents
-            let batch = self.db.batch()
-
-            // Update root booking
-            batch.updateData(["Status": status, "status": status], forDocument:bookingRef)
-
-            // Update coach mirror if possible
-            if let cId = coachId {
-                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status, "status": status], forDocument:coachBookingRef)
-            }
-
-            // Update client mirror if possible
-            if let clId = clientId {
-                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status, "status": status], forDocument:clientBookingRef)
-            }
-
-            batch.commit { err in
-                if let err = err {
-                    print("updateBookingStatus: batch commit failed: \(err)")
-                    completion(err)
-                } else {
-                    print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
-                    // If cancelled, remove from Apple Calendar to free up coach availability
-                    if status.lowercased() == "cancelled" {
-                        self.removeBookingFromAppleCalendar(bookingId: bookingId) { calErr in
-                            if let calErr = calErr {
-                                print("updateBookingStatus: failed to remove calendar event: \(calErr)")
-                            }
-                            // Complete regardless of calendar removal result
-                            completion(nil)
-                        }
-                    } else {
-                        completion(nil)
+            print("updateBookingStatus: booking \(bookingId) status updated to \(status)")
+            // If cancelled, remove from Apple Calendar to free up coach availability
+            if status.lowercased() == "cancelled" {
+                self.removeBookingFromAppleCalendar(bookingId: bookingId) { calErr in
+                    if let calErr = calErr {
+                        print("updateBookingStatus: failed to remove calendar event: \(calErr)")
                     }
+                    // Complete regardless of calendar removal result
+                    completion(nil)
                 }
+            } else {
+                completion(nil)
             }
         }
     }
@@ -5754,6 +5954,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Group Booking Ready",
                             "body": "All coaches have accepted your group session - Please confirm",
+                            "type": "booking_accepted",
                             "bookingId": bookingId,
                             "senderId": coachId,
                             "isGroupBooking": true,
@@ -5769,6 +5970,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Coach Accepted",
                             "body": "\(coachName) has accepted your group session",
+                            "type": "booking_accepted",
                             "bookingId": bookingId,
                             "senderId": coachId,
                             "isGroupBooking": true,
@@ -5785,6 +5987,7 @@ class FirestoreManager: ObservableObject {
                     let notifPayload: [String: Any] = [
                         "title": "Coach Accepted",
                         "body": "\(coachName) has accepted the group session",
+                        "type": "booking_accepted",
                         "bookingId": bookingId,
                         "senderId": coachId,
                         "isGroupBooking": true,
@@ -5895,6 +6098,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Group Session Confirmed",
                             "body": "All participants have confirmed - your group session is now booked!",
+                            "type": "booking_confirmed",
                             "bookingId": bookingId,
                             "senderId": clientId,
                             "isGroupBooking": true,
@@ -5915,6 +6119,7 @@ class FirestoreManager: ObservableObject {
                         let notifPayload: [String: Any] = [
                             "title": "Action Required: Confirm Group Session",
                             "body": "\(confirmingClientName) has confirmed. Please review and confirm the group session.",
+                            "type": "booking_accepted",
                             "bookingId": bookingId,
                             "senderId": clientId,
                             "isGroupBooking": true,
@@ -5932,275 +6137,48 @@ class FirestoreManager: ObservableObject {
 
     /// Update booking status for group bookings - updates all participant mirrors.
     func updateGroupBookingStatus(bookingId: String, status: String, completion: @escaping (Error?) -> Void) {
-        let bookingRef = self.db.collection("bookings").document(bookingId)
-
-        bookingRef.getDocument { [weak self] snap, err in
-            guard let self = self else { return }
-
-            if let err = err {
-                completion(err)
-                return
-            }
-
-            guard let data = snap?.data() else {
-                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
-                return
-            }
-
-            let coachIds = data["CoachIDs"] as? [String] ?? []
-            let clientIds = data["ClientIDs"] as? [String] ?? []
-
-            // Fall back to single coach/client if arrays are empty
-            var allCoachIds = coachIds
-            var allClientIds = clientIds
-            if allCoachIds.isEmpty {
-                if let ref = data["CoachID"] as? DocumentReference {
-                    allCoachIds = [ref.documentID]
-                } else if let s = data["CoachID"] as? String {
-                    allCoachIds = [s.split(separator: "/").last.map(String.init) ?? s]
-                }
-            }
-            if allClientIds.isEmpty {
-                if let ref = data["ClientID"] as? DocumentReference {
-                    allClientIds = [ref.documentID]
-                } else if let s = data["ClientID"] as? String {
-                    allClientIds = [s.split(separator: "/").last.map(String.init) ?? s]
-                }
-            }
-
-            let batch = self.db.batch()
-
-            // Update root booking
-            batch.updateData(["Status": status, "status": status], forDocument:bookingRef)
-
-            // Update ALL coach mirrors
-            for cId in allCoachIds {
-                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status, "status": status], forDocument:coachBookingRef)
-            }
-
-            // Update ALL client mirrors
-            for clId in allClientIds {
-                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(["Status": status, "status": status], forDocument:clientBookingRef)
-            }
-
-            batch.commit { [weak self] err in
-                if let err = err {
-                    print("updateGroupBookingStatus: batch commit failed: \(err)")
-                    completion(err)
-                } else {
-                    print("updateGroupBookingStatus: booking \(bookingId) status updated to \(status)")
-                    // If cancelled, remove from Apple Calendar to free up coach availability
-                    if status.lowercased() == "cancelled" {
-                        self?.removeBookingFromAppleCalendar(bookingId: bookingId) { calErr in
-                            if let calErr = calErr {
-                                print("updateGroupBookingStatus: failed to remove calendar event: \(calErr)")
-                            }
-                            // Complete regardless of calendar removal result
-                            completion(nil)
-                        }
-                    } else {
-                        completion(nil)
-                    }
-                }
-            }
-        }
+        // updateBookingStatus already reaches every participant's copy
+        updateBookingStatus(bookingId: bookingId, status: status, completion: completion)
     }
 
     /// Reschedule a booking by updating StartAt, EndAt, and Status across root and mirrored subcollections.
     func rescheduleBooking(bookingId: String, newStart: Date, newEnd: Date, newStatus: String, completion: @escaping (Error?) -> Void) {
-        let bookingRef = self.db.collection("bookings").document(bookingId)
-
-        bookingRef.getDocument { snap, err in
+        let updateFields: [String: Any] = [
+            "StartAt": Timestamp(date: newStart),
+            "EndAt": Timestamp(date: newEnd),
+            // camelCase mirrors: Android prefers startAt/endAt, so without these an
+            // iOS reschedule of an Android-created booking keeps the old time there
+            "startAt": Timestamp(date: newStart),
+            "endAt": Timestamp(date: newEnd),
+            "Status": newStatus,
+            "status": newStatus
+        ]
+        updateAllBookingCopies(bookingId: bookingId, fields: updateFields) { err in
             if let err = err {
-                print("rescheduleBooking: failed to read booking \(bookingId): \(err)")
-                completion(err)
-                return
+                print("rescheduleBooking: failed for \(bookingId): \(err)")
+            } else {
+                print("rescheduleBooking: booking \(bookingId) rescheduled to \(newStart)-\(newEnd), status=\(newStatus)")
             }
-
-            guard let data = snap?.data() else {
-                print("rescheduleBooking: booking \(bookingId) not found")
-                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
-                return
-            }
-
-            func extractId(from field: Any?) -> String? {
-                if let ref = field as? DocumentReference { return ref.documentID }
-                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
-                if let dict = field as? [String: Any] {
-                    if let id = dict["id"] as? String { return id }
-                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
-                }
-                return nil
-            }
-
-            let coachId = extractId(from: data["CoachID"])
-            let clientId = extractId(from: data["ClientID"])
-
-            let batch = self.db.batch()
-            let updateFields: [String: Any] = [
-                "StartAt": Timestamp(date: newStart),
-                "EndAt": Timestamp(date: newEnd),
-                // camelCase mirrors: Android prefers startAt/endAt, so without these an
-                // iOS reschedule of an Android-created booking keeps the old time there
-                "startAt": Timestamp(date: newStart),
-                "endAt": Timestamp(date: newEnd),
-                "Status": newStatus,
-                "status": newStatus
-            ]
-
-            batch.updateData(updateFields, forDocument: bookingRef)
-
-            if let cId = coachId {
-                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(updateFields, forDocument: coachBookingRef)
-            }
-
-            if let clId = clientId {
-                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(updateFields, forDocument: clientBookingRef)
-            }
-
-            batch.commit { err in
-                if let err = err {
-                    print("rescheduleBooking: batch commit failed: \(err)")
-                    completion(err)
-                } else {
-                    print("rescheduleBooking: booking \(bookingId) rescheduled to \(newStart)-\(newEnd), status=\(newStatus)")
-                    completion(nil)
-                }
-            }
+            completion(err)
         }
     }
 
     /// Update the PaymentStatus field for a booking across root and mirrored subcollections.
     func updateBookingPaymentStatus(bookingId: String, paymentStatus: String, completion: @escaping (Error?) -> Void) {
-        let bookingRef = self.db.collection("bookings").document(bookingId)
-
-        bookingRef.getDocument { snap, err in
+        // Both casings: Android writes and reads either
+        updateAllBookingCopies(bookingId: bookingId, fields: ["PaymentStatus": paymentStatus, "paymentStatus": paymentStatus]) { err in
             if let err = err {
-                print("updateBookingPaymentStatus: failed to read booking \(bookingId): \(err)")
-                completion(err)
-                return
+                print("updateBookingPaymentStatus: failed for \(bookingId): \(err)")
+            } else {
+                print("updateBookingPaymentStatus: booking \(bookingId) payment status updated to \(paymentStatus)")
             }
-
-            guard let data = snap?.data() else {
-                print("updateBookingPaymentStatus: booking \(bookingId) not found")
-                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
-                return
-            }
-
-            func extractId(from field: Any?) -> String? {
-                if let ref = field as? DocumentReference { return ref.documentID }
-                if let s = field as? String { return s.split(separator: "/").last.map(String.init) ?? s }
-                if let dict = field as? [String: Any] {
-                    if let id = dict["id"] as? String { return id }
-                    if let path = dict["path"] as? String { return path.split(separator: "/").last.map(String.init) }
-                }
-                return nil
-            }
-
-            let coachId = extractId(from: data["CoachID"])
-            let clientId = extractId(from: data["ClientID"])
-
-            let batch = self.db.batch()
-
-            // Update root booking
-            batch.updateData(["PaymentStatus": paymentStatus], forDocument: bookingRef)
-
-            // Update coach mirror if possible
-            if let cId = coachId {
-                let coachBookingRef = self.db.collection("coaches").document(cId).collection("bookings").document(bookingId)
-                batch.updateData(["PaymentStatus": paymentStatus], forDocument: coachBookingRef)
-            }
-
-            // Update client mirror if possible
-            if let clId = clientId {
-                let clientBookingRef = self.db.collection("clients").document(clId).collection("bookings").document(bookingId)
-                batch.updateData(["PaymentStatus": paymentStatus], forDocument: clientBookingRef)
-            }
-
-            batch.commit { err in
-                if let err = err {
-                    print("updateBookingPaymentStatus: batch commit failed: \(err)")
-                    completion(err)
-                } else {
-                    print("updateBookingPaymentStatus: booking \(bookingId) payment status updated to \(paymentStatus)")
-                    completion(nil)
-                }
-            }
+            completion(err)
         }
     }
 
     /// Acknowledge payment for a group booking - updates root and all participant mirrors
     func acknowledgeGroupBookingPayment(bookingId: String, paymentStatus: String, completion: @escaping (Error?) -> Void) {
-        let bookingRef = self.db.collection("bookings").document(bookingId)
-
-        bookingRef.getDocument { snap, err in
-            if let err = err {
-                print("acknowledgeGroupBookingPayment: failed to read booking \(bookingId): \(err)")
-                completion(err)
-                return
-            }
-
-            guard let data = snap?.data() else {
-                print("acknowledgeGroupBookingPayment: booking \(bookingId) not found")
-                completion(NSError(domain: "FirestoreManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Booking not found"]))
-                return
-            }
-
-            // Get all coach and client IDs for group booking
-            let coachIDs = (data["CoachIDs"] ?? data["coachIDs"]) as? [String] ?? []
-            let clientIDs = (data["ClientIDs"] ?? data["clientIDs"]) as? [String] ?? []
-
-            // Fallback to single coach/client if arrays are empty
-            var allCoachIds = coachIDs
-            var allClientIds = clientIDs
-
-            if allCoachIds.isEmpty {
-                if let ref = data["CoachID"] as? DocumentReference {
-                    allCoachIds = [ref.documentID]
-                } else if let s = data["CoachID"] as? String {
-                    allCoachIds = [s.split(separator: "/").last.map(String.init) ?? s]
-                }
-            }
-
-            if allClientIds.isEmpty {
-                if let ref = data["ClientID"] as? DocumentReference {
-                    allClientIds = [ref.documentID]
-                } else if let s = data["ClientID"] as? String {
-                    allClientIds = [s.split(separator: "/").last.map(String.init) ?? s]
-                }
-            }
-
-            let batch = self.db.batch()
-
-            // Update root booking
-            batch.updateData(["PaymentStatus": paymentStatus], forDocument: bookingRef)
-
-            // Update all coach mirrors
-            for coachId in allCoachIds {
-                let coachBookingRef = self.db.collection("coaches").document(coachId).collection("bookings").document(bookingId)
-                batch.updateData(["PaymentStatus": paymentStatus], forDocument: coachBookingRef)
-            }
-
-            // Update all client mirrors
-            for clientId in allClientIds {
-                let clientBookingRef = self.db.collection("clients").document(clientId).collection("bookings").document(bookingId)
-                batch.updateData(["PaymentStatus": paymentStatus], forDocument: clientBookingRef)
-            }
-
-            batch.commit { err in
-                if let err = err {
-                    print("acknowledgeGroupBookingPayment: batch commit failed: \(err)")
-                    completion(err)
-                } else {
-                    print("acknowledgeGroupBookingPayment: booking \(bookingId) payment status updated to \(paymentStatus) for \(allCoachIds.count) coaches and \(allClientIds.count) clients")
-                    completion(nil)
-                }
-            }
-        }
+        updateBookingPaymentStatus(bookingId: bookingId, paymentStatus: paymentStatus, completion: completion)
     }
 
     /// Fetch bookings from the root `bookings` collection for a specific coach within an optional date range.
@@ -6225,10 +6203,10 @@ class FirestoreManager: ObservableObject {
                 let startAt = ((data["StartAt"] ?? data["startAt"]) as? Timestamp)?.dateValue()
                 let endAt = ((data["EndAt"] ?? data["endAt"]) as? Timestamp)?.dateValue()
                 let status = (data["Status"] ?? data["status"]) as? String
-                let location = data["Location"] as? String
-                let notes = data["Notes"] as? String
-                let coachNote = data["CoachNote"] as? String
-                let paymentStatus = data["PaymentStatus"] as? String
+                let location = (data["Location"] ?? data["location"]) as? String
+                let notes = (data["Notes"] ?? data["notes"]) as? String
+                let coachNote = (data["CoachNote"] ?? data["coachNote"]) as? String
+                let paymentStatus = (data["PaymentStatus"] ?? data["paymentStatus"]) as? String
                 let rate = ((data["RateUSD"] ?? data["rateUSD"]) as? Double) ?? (((data["RateUSD"] ?? data["rateUSD"]) as? Int).map { Double($0) })
                 // Extract client and coach names from booking doc
                 let clientName = (data["ClientName"] as? String)
@@ -6299,7 +6277,8 @@ class FirestoreManager: ObservableObject {
             batch.setData(data, forDocument: newMsgRef)
             // Update chat metadata (last message). Avoid writing into other users' subcollections here because
             // client-originated writes may be blocked by security rules (clients can't write into coaches/{id}/chats).
-            batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp()], forDocument: chatRef, merge: true)
+            // lastSenderId drives the Android chat list's unread badge
+            batch.setData(["lastMessageText": text, "lastMessageAt": FieldValue.serverTimestamp(), "lastSenderId": uid], forDocument: chatRef, merge: true)
 
             batch.commit { err in
                 if let err = err {
@@ -7320,7 +7299,7 @@ extension FirestoreManager {
             let notifData: [String: Any] = [
                 "title": "New Stringing Order",
                 "body": "\(buyerName) placed a stringing order for \(racketName)",
-                "type": "stringer_order_placed",
+                "type": "stringer_order", // the type both apps route to the order screen
                 "stringerOrderId": newDocRef.documentID,
                 "senderId": uid,
                 "createdAt": FieldValue.serverTimestamp(),
@@ -7357,21 +7336,21 @@ extension FirestoreManager {
 
     func fetchOrdersForBuyer() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        self.db.collection("stringerOrders")
-            .whereField("createdBy", isEqualTo: uid)
-            .getDocuments { snap, err in
-                if let err = err {
-                    print("fetchOrdersForBuyer error: \(err)")
-                    return
-                }
-                let docs = snap?.documents ?? []
-                let results: [StringerOrder] = docs.compactMap { d in
-                    self.parseStringerOrder(d)
-                }.sorted { $0.createdAt > $1.createdAt }
-                DispatchQueue.main.async {
-                    self.myStringerOrders = results
-                }
+        // iOS records the buyer as createdBy; older Android builds used buyerId / clientId
+        let group = DispatchGroup()
+        var docsById: [String: QueryDocumentSnapshot] = [:]
+        for field in ["createdBy", "buyerId", "clientId"] {
+            group.enter()
+            self.db.collection("stringerOrders").whereField(field, isEqualTo: uid).getDocuments { snap, err in
+                if let err = err { print("fetchOrdersForBuyer (\(field)) error: \(err)") }
+                for d in snap?.documents ?? [] { docsById[d.documentID] = d }
+                group.leave()
             }
+        }
+        group.notify(queue: .main) {
+            self.myStringerOrders = docsById.values.compactMap { self.parseStringerOrder($0) }
+                .sorted { $0.createdAt > $1.createdAt }
+        }
     }
 
     func updateStringerOrderStatus(orderId: String, status: String, buyerUid: String, stringerName: String, completion: @escaping (Error?) -> Void) {
@@ -7384,6 +7363,11 @@ extension FirestoreManager {
             if let err = err {
                 print("updateStringerOrderStatus error: \(err)")
                 completion(err)
+                return
+            }
+            // No buyer on record (an empty document id would crash Firestore): skip the push
+            guard !buyerUid.isEmpty else {
+                completion(nil)
                 return
             }
             // Notify the buyer of the status change
@@ -7401,7 +7385,7 @@ extension FirestoreManager {
             let notifData: [String: Any] = [
                 "title": "Stringing Order Update",
                 "body": "\(stringerName) updated your order status to \(displayStatus)",
-                "type": "stringer_order_update",
+                "type": "stringer_order",
                 "stringerOrderId": orderId,
                 "createdAt": FieldValue.serverTimestamp(),
                 "delivered": false
@@ -7427,26 +7411,34 @@ extension FirestoreManager {
                 completion(err)
                 return
             }
-            // Notify the stringer of the status change
-            let notifRef = self.db.collection("pendingNotifications")
-                .document(stringerUid)
-                .collection("notifications")
-                .document()
-            let displayStatus = status == "picked_up" ? "Picked Up" : status.replacingOccurrences(of: "_", with: " ").capitalized
-            let notifData: [String: Any] = [
-                "title": "Stringing Order Update",
-                "body": "\(buyerName) marked their order as \(displayStatus)",
-                "type": "stringer_order_update",
-                "stringerOrderId": orderId,
-                "createdAt": FieldValue.serverTimestamp(),
-                "delivered": false
-            ]
-            notifRef.setData(notifData) { nerr in
-                if let nerr = nerr {
-                    print("updateStringerOrderStatusAsBuyer notification error: \(nerr)")
-                }
+            guard !stringerUid.isEmpty else {
+                completion(nil)
+                return
             }
-            completion(nil)
+            // Callers pass the order's stringerId, i.e. the stringer profile's document id. iOS keys profiles by
+            // the owner's uid, but Android creates them with random ids, so notify the owner on record.
+            self.db.collection("stringers").document(stringerUid).getDocument { snap, _ in
+                let ownerUid = (snap?.data()?["createdBy"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? stringerUid
+                let notifRef = self.db.collection("pendingNotifications")
+                    .document(ownerUid)
+                    .collection("notifications")
+                    .document()
+                let displayStatus = status == "picked_up" ? "Picked Up" : status.replacingOccurrences(of: "_", with: " ").capitalized
+                let notifData: [String: Any] = [
+                    "title": "Stringing Order Update",
+                    "body": "\(buyerName) marked their order as \(displayStatus)",
+                    "type": "stringer_order",
+                    "stringerOrderId": orderId,
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "delivered": false
+                ]
+                notifRef.setData(notifData) { nerr in
+                    if let nerr = nerr {
+                        print("updateStringerOrderStatusAsBuyer notification error: \(nerr)")
+                    }
+                }
+                completion(nil)
+            }
         }
     }
 
@@ -7465,7 +7457,9 @@ extension FirestoreManager {
             orderTotal: data["orderTotal"] as? String,
             tension: data["tension"] as? Int ?? 24,
             timelinePreference: data["timelinePreference"] as? String ?? "",
-            createdBy: data["createdBy"] as? String ?? "",
+            // The buyer: iOS writes createdBy, older Android builds buyerId / clientId
+            createdBy: [data["createdBy"], data["buyerId"], data["clientId"]]
+                .compactMap { $0 as? String }.first { !$0.isEmpty } ?? "",
             createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date(),
             status: data["status"] as? String ?? "placed",
             buyerName: data["buyerName"] as? String ?? "Unknown",

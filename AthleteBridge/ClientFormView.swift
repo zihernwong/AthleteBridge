@@ -19,6 +19,7 @@ struct ClientFormView: View {
     @State private var clubDeepLinkType: String? = nil // "joinRequest", "members", or "announcement"
     @State private var clubDeepLinkAnnouncementId: String? = nil
     @State private var navigateToClubDeepLink = false
+    @State private var navigateToTournamentPartners = false
     
     let availabilityOptions = ["Morning", "Afternoon", "Evening"]
     
@@ -457,6 +458,11 @@ struct ClientFormView: View {
                          handleClubDeepLink(deepLink.pendingDestination)
                      }
                  }
+                 .navigationDestination(isPresented: $navigateToTournamentPartners) {
+                     TournamentPartnerView()
+                         .environmentObject(firestore)
+                         .environmentObject(auth)
+                 }
                  .navigationDestination(isPresented: $navigateToClubDeepLink) {
                      if let place = clubDeepLinkPlace {
                          if clubDeepLinkType == "joinRequest" {
@@ -534,6 +540,23 @@ struct ClientFormView: View {
                 }
             } else {
                 firestore.fetchPlacesToPlay()
+            }
+        case .signupEvent(let placeId, _):
+            // Off the waitlist: open the club, whose page lists its sign-up events
+            if let place = firestore.placesToPlay.first(where: { $0.id == placeId }) {
+                clubDeepLinkPlace = place
+                clubDeepLinkType = "event"
+                deepLink.pendingDestination = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigateToClubDeepLink = true
+                }
+            } else {
+                firestore.fetchPlacesToPlay()
+            }
+        case .tournaments:
+            deepLink.pendingDestination = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                navigateToTournamentPartners = true
             }
         default:
             break

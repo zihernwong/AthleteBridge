@@ -109,6 +109,15 @@ struct Coach: Identifiable, Hashable {
         !name.isEmpty
     }
 
+    /// The same coach with a different subscription tier; every other field is kept.
+    func withTier(_ tier: CoachTier) -> Coach {
+        Coach(id: id, name: name, specialties: specialties, experienceYears: experienceYears, availability: availability,
+              bio: bio, hourlyRate: hourlyRate, photoURLString: photoURLString, meetingPreference: meetingPreference,
+              zipCode: zipCode, city: city, payments: payments, rateRange: rateRange,
+              tournamentSoftwareLink: tournamentSoftwareLink, subscriptionTier: tier, phoneVerified: phoneVerified,
+              linkedPlaceIds: linkedPlaceIds, cancellationWindowHours: cancellationWindowHours)
+    }
+
     /// Returns the minimum rate from rateRange, or hourlyRate as fallback
     var minimumRate: Double? {
         rateRange?.first ?? hourlyRate
@@ -512,8 +521,25 @@ struct SignupEvent: Identifiable, Hashable {
     var paymentLink: String? = nil
     // Organizer setting: players may mark themselves paid (pending confirmation)
     var allowSelfReportPaid: Bool = false
+    // Signups open this many hours before the event; nil = open as soon as it's created
+    var opensHoursBefore: Int? = nil
+    // Exact opening time chosen by the organizer (e.g. Mon 8:30 PM); wins over opensHoursBefore
+    var customOpensAt: Date? = nil
+    // Organizer's "important notes" (rules, check-in, queue system) shown apart from the description
+    var notes: String? = nil
+    // Liability waiver players must accept before signing up
+    var waiverText: String? = nil
+    // Set once the following week's occurrence exists (by the app or the weekly roll-forward function)
+    var nextOccurrenceId: String? = nil
 
     var isRecurringWeekly: Bool { recurrence == "weekly" }
+    var opensAt: Date? {
+        if let custom = customOpensAt { return custom }
+        guard let hours = opensHoursBefore, hours > 0 else { return nil }
+        return eventDate.addingTimeInterval(-Double(hours) * 3600)
+    }
+    var isSignupOpen: Bool { opensAt.map { Date() >= $0 } ?? true }
+    var requiresWaiver: Bool { !(waiverText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var paidCount: Int { signups.filter { $0.paid }.count }
     var selfReportedCount: Int { signups.filter { $0.selfPaid && !$0.paid }.count }
 
@@ -522,7 +548,9 @@ struct SignupEvent: Identifiable, Hashable {
     /// confirm; anything else opens unchanged.
     var resolvedPaymentURL: URL? {
         guard let raw = paymentLink?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
-        if let handle = Self.venmoHandle(from: raw), let fee = feeUSD, fee > 0 {
+        if let handle = Self.venmoHandle(from: raw) {
+            // No fee to prefill: open the organizer's Venmo profile
+            guard let fee = feeUSD, fee > 0 else { return URL(string: "https://venmo.com/u/\(handle)") }
             var comps = URLComponents()
             comps.scheme = "https"
             comps.host = "venmo.com"
@@ -534,18 +562,31 @@ struct SignupEvent: Identifiable, Hashable {
             ]
             return comps.url
         }
+        // "@" followed by nothing usable isn't a link ("https://@" opens nothing)
+        if raw.hasPrefix("@") { return nil }
         if raw.lowercased().hasPrefix("http") { return URL(string: raw) }
         return URL(string: "https://\(raw)")
     }
 
-    /// "@handle", "venmo.com/handle", or "venmo.com/u/handle" → "handle"; nil for non-Venmo links.
+    /// Venmo paths that aren't usernames — "Share my QR code" links are venmo.com/code?user_id=…
+    static let venmoReservedPaths: Set<String> = ["code", "u", "pay", "account", "signup", "login", "settings"]
+
+    /// "@handle", "venmo.com/handle", or "venmo.com/u/handle" → "handle"; nil for non-Venmo links and
+    /// Venmo links that don't name a user.
     static func venmoHandle(from raw: String) -> String? {
-        if raw.hasPrefix("@") { return String(raw.dropFirst()) }
-        guard raw.lowercased().contains("venmo.com") else { return nil }
-        let noQuery = raw.split(separator: "?").first.map(String.init) ?? raw
-        let parts = noQuery.split(separator: "/").map(String.init)
-        guard let last = parts.last, !last.isEmpty, !last.lowercased().contains("venmo.com") else { return nil }
-        return last.hasPrefix("@") ? String(last.dropFirst()) : last
+        let candidate: String
+        if raw.hasPrefix("@") {
+            candidate = String(raw.dropFirst())
+        } else {
+            guard raw.lowercased().contains("venmo.com") else { return nil }
+            let noQuery = raw.split(separator: "?").first.map(String.init) ?? raw
+            let parts = noQuery.split(separator: "/").map(String.init)
+            guard let last = parts.last, !last.lowercased().contains("venmo.com") else { return nil }
+            candidate = last.hasPrefix("@") ? String(last.dropFirst()) : last
+        }
+        let handle = candidate.trimmingCharacters(in: .whitespaces)
+        guard !handle.isEmpty, !venmoReservedPaths.contains(handle.lowercased()) else { return nil }
+        return handle
     }
 
     func isWaitlisted(userId: String) -> Bool {
@@ -560,4 +601,38 @@ struct SignupEvent: Identifiable, Hashable {
     var spotsRemaining: Int { max(0, maxSignups - signupCount) }
     var isFull: Bool { signupCount >= maxSignups }
     var shareURL: URL? { URL(string: "https://athletesbridge.com/signup/?event=\(id)") }
+
+    /// Starting point for the waiver field on the create form; organizers edit it freely.
+    static func defaultWaiver(placeName: String) -> String {
+        let host = placeName.isEmpty
+            ? "the organizers, venue, employees and volunteers"
+            : "\(placeName), its organizers, employees and volunteers"
+        return "By signing up, you release, discharge, and agree to hold \(host) harmless from and against any liability for injury or loss arising from participation."
+    }
+
+    /// Ready-to-post caption for a Facebook/group post, e.g.
+    /// "Badminton sign-up for TUE 10/20/2026 · 6:30 PM".
+    var shareCaption: String {
+        let df = DateFormatter()
+        df.dateFormat = "EEE M/d/yyyy · h:mm a"
+        var lines = ["\(title) sign-up for \(df.string(from: eventDate).uppercasedFirstWord())"]
+        if !placeName.isEmpty { lines.append(placeName) }
+        if let fee = feeUSD, fee > 0 { lines.append(String(format: "$%.2f per player", fee)) }
+        if let opensAt = opensAt, Date() < opensAt {
+            let open = DateFormatter()
+            open.dateFormat = "EEE h:mm a"
+            lines.append("Sign-ups open \(open.string(from: opensAt))")
+        }
+        lines.append("\(spotsRemaining) of \(maxSignups) spots left")
+        if let url = shareURL { lines.append(url.absoluteString) }
+        return lines.joined(separator: "\n")
+    }
+}
+
+private extension String {
+    /// "Tue 10/20/2026" → "TUE 10/20/2026"
+    func uppercasedFirstWord() -> String {
+        guard let space = firstIndex(of: " ") else { return uppercased() }
+        return self[..<space].uppercased() + self[space...]
+    }
 }

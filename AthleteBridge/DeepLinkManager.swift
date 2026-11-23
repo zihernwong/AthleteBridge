@@ -10,6 +10,8 @@ enum DeepLinkDestination: Equatable {
     case clubJoinRequest(placeId: String)   // leader → manage pending requests
     case clubMembers(placeId: String)       // approved member → view club members
     case clubAnnouncement(placeId: String, announcementId: String)  // member taps club announcement → My Clubs tab
+    case signupEvent(placeId: String, eventId: String)  // moved off a waitlist → the club's page, which lists its events
+    case tournaments                                    // partner match or coach recommendation → tournament partner search
 }
 
 /// Observable bridge between NotificationManager (singleton, outside SwiftUI)

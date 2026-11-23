@@ -104,7 +104,7 @@ struct MainAppView: View {
                     if orderId == nil { deepLink.pendingDestination = nil }
                 case .clubJoinRequest, .clubMembers:
                     selectedTab = 1
-                case .clubAnnouncement:
+                case .clubAnnouncement, .signupEvent, .tournaments:
                     selectedTab = 1
                 }
             }
@@ -123,7 +123,7 @@ struct MainAppView: View {
                 if orderId == nil { deepLink.pendingDestination = nil }
             case .clubJoinRequest, .clubMembers:
                 selectedTab = 1
-            case .clubAnnouncement:
+            case .clubAnnouncement, .signupEvent, .tournaments:
                 selectedTab = 1
             }
         }

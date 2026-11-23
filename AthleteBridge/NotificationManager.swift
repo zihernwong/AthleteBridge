@@ -248,50 +248,58 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             NotificationManager.removeCalendarEventForCancelledBooking(bookingId: bookingId)
         }
 
-        if let chatId = userInfo["chatId"] as? String, !chatId.isEmpty {
-            print("[DeepLink] Found chatId: \(chatId)")
+        if let route = Self.destination(for: userInfo) {
+            print("[DeepLink] Routing tap to \(route.destination)")
             DispatchQueue.main.async {
-                DeepLinkManager.shared.pendingDestination = .chat(chatId: chatId)
-            }
-        } else if let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
-            let notifType = userInfo["type"] as? String
-            print("[DeepLink] Found bookingId: \(bookingId), type: \(notifType ?? "nil")")
-            DispatchQueue.main.async {
-                if notifType == "payment_confirmed" || notifType == "payment_reminder" {
-                    DeepLinkManager.shared.pendingDestination = .payments
-                } else {
-                    DeepLinkManager.shared.pendingBookingType = notifType
-                    DeepLinkManager.shared.pendingDestination = .booking(bookingId: bookingId)
+                if case .booking = route.destination {
+                    DeepLinkManager.shared.pendingBookingType = route.bookingType
                 }
-            }
-        } else if let orderId = userInfo["stringerOrderId"] as? String, !orderId.isEmpty {
-            print("[DeepLink] Found stringerOrderId: \(orderId)")
-            DispatchQueue.main.async {
-                DeepLinkManager.shared.pendingDestination = .stringing(orderId: orderId)
-            }
-        } else if let type = userInfo["type"] as? String, let placeId = userInfo["placeId"] as? String, !placeId.isEmpty {
-            if type == "club_join_request" {
-                print("[DeepLink] Club join request for place: \(placeId)")
-                DispatchQueue.main.async {
-                    DeepLinkManager.shared.pendingDestination = .clubJoinRequest(placeId: placeId)
-                }
-            } else if type == "club_approved" {
-                print("[DeepLink] Club approved for place: \(placeId)")
-                DispatchQueue.main.async {
-                    DeepLinkManager.shared.pendingDestination = .clubMembers(placeId: placeId)
-                }
-            } else if type == "club_announcement" {
-                let announcementId = userInfo["announcementId"] as? String ?? ""
-                print("[DeepLink] Club announcement for place: \(placeId), announcement: \(announcementId)")
-                DispatchQueue.main.async {
-                    DeepLinkManager.shared.pendingDestination = .clubAnnouncement(placeId: placeId, announcementId: announcementId)
-                }
+                DeepLinkManager.shared.pendingDestination = route.destination
             }
         } else {
             print("[DeepLink] No chatId, bookingId, or stringerOrderId found in notification payload")
         }
 
         completionHandler()
+    }
+
+    /// Where tapping a push with this payload navigates (nil = just opens the app), plus the
+    /// notification type for booking destinations so the booking screen can pick its mode.
+    static func destination(for userInfo: [AnyHashable: Any]) -> (destination: DeepLinkDestination, bookingType: String?)? {
+        if let chatId = userInfo["chatId"] as? String, !chatId.isEmpty {
+            return (.chat(chatId: chatId), nil)
+        }
+        if let bookingId = userInfo["bookingId"] as? String, !bookingId.isEmpty {
+            let notifType = userInfo["type"] as? String
+            if notifType == "payment_confirmed" || notifType == "payment_reminder" {
+                return (.payments, nil)
+            }
+            return (.booking(bookingId: bookingId), notifType)
+        }
+        if let orderId = userInfo["stringerOrderId"] as? String, !orderId.isEmpty {
+            return (.stringing(orderId: orderId), nil)
+        }
+        switch userInfo["type"] as? String {
+        case "event_waitlist_promoted":
+            // Sent by the app and the web signupApi when a spot opens up
+            if let placeId = userInfo["placeId"] as? String, !placeId.isEmpty {
+                return (.signupEvent(placeId: placeId, eventId: userInfo["eventId"] as? String ?? ""), nil)
+            }
+        case "tournament_partner", "tournament_recommendation":
+            return (.tournaments, nil)
+        default:
+            break
+        }
+        if let type = userInfo["type"] as? String, let placeId = userInfo["placeId"] as? String, !placeId.isEmpty {
+            switch type {
+            case "club_join_request": return (.clubJoinRequest(placeId: placeId), nil)
+            case "club_approved": return (.clubMembers(placeId: placeId), nil)
+            case "club_announcement":
+                return (.clubAnnouncement(placeId: placeId, announcementId: userInfo["announcementId"] as? String ?? ""), nil)
+            default: return nil
+            }
+        }
+        return nil
     }
 
     // MARK: - Session reminders (local notifications)

@@ -366,16 +366,26 @@ enum WebBracketLogic {
         let oldWin = m.win
         let oldSets = m.sets
         var ms = bracket.matches
-        if ms[mi].win != nil { undoProp(&ms, mi) }
-        ms[mi].sets = sets
-        ms[mi].win = winner
         let loser = winner == m.p1 ? m.p2 : m.p1
-        doProp(&ms, mi, winner: winner, loser: loser)
-        if let freedCourt = ms[mi].court {
-            scheduleNextMatch(&ms, freedCourt: freedCourt)
+        if oldWin == winner {
+            // Correcting the score of a result that stands: later rounds keep their results
+            ms[mi].sets = sets
+        } else {
+            if oldWin != nil { undoProp(&ms, mi) }
+            ms[mi].sets = sets
+            ms[mi].win = winner
+            doProp(&ms, mi, winner: winner, loser: loser)
+            if let freedCourt = ms[mi].court {
+                scheduleNextMatch(&ms, freedCourt: freedCourt)
+            }
         }
         bracket.matches = ms
         eventData.bracket = bracket
+        // A changed result can reopen a finished event; checkDone re-crowns the champion if it's still complete
+        if eventData.status == "complete" {
+            eventData.status = "active"
+            eventData.champion = nil
+        }
         checkDone(&eventData)
         return ScoreOutcome(winnerEntryId: winner, loserEntryId: loser, oldWin: oldWin, oldSets: oldSets, p1: m.p1, p2: m.p2)
     }

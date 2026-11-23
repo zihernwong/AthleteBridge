@@ -12,8 +12,22 @@ struct CreateSignupEventView: View {
     @State private var feeText = ""
     @State private var paymentLink = ""
     @State private var allowSelfReport = false
+    @State private var opensHoursBefore = 0
+    @State private var customOpensAt = Date()
+    @State private var notes = ""
+    @State private var requireWaiver = false
+    @State private var waiverText = SignupEvent.defaultWaiver(placeName: "")
     @State private var isSaving = false
     @State private var errorMessage: String?
+
+    private static let customOpenTag = -1
+
+    /// Default for a custom opening time: 8:30 PM the evening before the event
+    private static func dayBeforeAt830(_ event: Date) -> Date {
+        let cal = Calendar.current
+        let dayBefore = cal.date(byAdding: .day, value: -1, to: event) ?? event
+        return cal.date(bySettingHour: 20, minute: 30, second: 0, of: dayBefore) ?? dayBefore
+    }
 
     private var isValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -47,8 +61,35 @@ struct CreateSignupEventView: View {
                 Section(header: Text("Capacity")) {
                     Stepper("Max Signups: \(maxSignups)", value: $maxSignups, in: 2...500)
                 }
-                Section(header: Text("Schedule")) {
+                Section(header: Text("Schedule"), footer: Text(repeatsWeekly
+                    ? "Next week's event is created automatically once this one starts, with an empty signup list."
+                    : "")) {
                     Toggle("Repeats Weekly", isOn: $repeatsWeekly)
+                    Picker("Sign-ups Open", selection: $opensHoursBefore) {
+                        Text("Right away").tag(0)
+                        Text("1 day before").tag(24)
+                        Text("2 days before").tag(48)
+                        Text("3 days before").tag(72)
+                        Text("1 week before").tag(168)
+                        Text("Custom…").tag(Self.customOpenTag)
+                    }
+                    if opensHoursBefore == Self.customOpenTag {
+                        DatePicker("Opens At", selection: $customOpensAt, in: ...eventDate)
+                    }
+                }
+                .onChange(of: opensHoursBefore) { _, newValue in
+                    if newValue == Self.customOpenTag { customOpensAt = Self.dayBeforeAt830(eventDate) }
+                }
+                Section(header: Text("Important Notes (optional)"), footer: Text("Rules players should read before signing up, e.g. check-in, court queue, what to bring.")) {
+                    TextField("Each player must sign up individually…", text: $notes, axis: .vertical)
+                        .lineLimit(3...8)
+                }
+                Section(header: Text("Waiver")) {
+                    Toggle("Require waiver to sign up", isOn: $requireWaiver)
+                    if requireWaiver {
+                        TextField("Waiver text", text: $waiverText, axis: .vertical)
+                            .lineLimit(3...8)
+                    }
                 }
                 Section(header: Text("Payment (optional)"), footer: Text("Players see the fee and a payment button on the signup page. You can mark who has paid on the event screen.")) {
                     HStack {
@@ -63,6 +104,9 @@ struct CreateSignupEventView: View {
                         .keyboardType(.URL)
                     Toggle("Players can mark themselves paid", isOn: $allowSelfReport)
                 }
+            }
+            .onAppear {
+                waiverText = SignupEvent.defaultWaiver(placeName: place.name)
             }
             .navigationTitle("New Event")
             .navigationBarTitleDisplayMode(.inline)
@@ -87,7 +131,11 @@ struct CreateSignupEventView: View {
                                 recurrence: repeatsWeekly ? "weekly" : nil,
                                 feeUSD: feeUSD,
                                 paymentLink: paymentLink.trimmingCharacters(in: .whitespacesAndNewlines),
-                                allowSelfReportPaid: allowSelfReport
+                                allowSelfReportPaid: allowSelfReport,
+                                opensHoursBefore: opensHoursBefore == Self.customOpenTag ? nil : opensHoursBefore,
+                                opensAt: opensHoursBefore == Self.customOpenTag ? customOpensAt : nil,
+                                notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                                waiverText: requireWaiver ? waiverText.trimmingCharacters(in: .whitespacesAndNewlines) : nil
                             ) { err in
                                 DispatchQueue.main.async {
                                     isSaving = false

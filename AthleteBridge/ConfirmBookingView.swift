@@ -355,7 +355,7 @@ struct ConfirmBookingView: View {
             let data = snap.data() ?? [:]
             if let r = data["RateUSD"] as? Double { self.rateUSD = r }
             else if let r = data["RateCents"] as? Int { self.rateUSD = Double(r) / 100.0 }
-            self.coachNote = data["CoachNote"] as? String ?? data["CoachNote"] as? String
+            self.coachNote = data["CoachNote"] as? String ?? data["coachNote"] as? String
 
             // Load coach acceptances for group bookings
             if let acceptances = data["CoachAcceptances"] as? [String: Bool] {

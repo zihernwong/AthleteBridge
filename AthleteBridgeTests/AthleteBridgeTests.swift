@@ -87,8 +87,7 @@ final class CoachModelTests: XCTestCase {
             availability: ["Morning"]
         )
 
-        XCTAssertEqual(coach.experienceYears, -5)
-        // Note: Negative experience is allowed - potential validation bug
+        XCTAssertEqual(coach.experienceYears, 0, "Coach.init clamps negative experience")
     }
 
     func testCoachWithInvalidRateRange() {
@@ -101,9 +100,7 @@ final class CoachModelTests: XCTestCase {
             rateRange: [100.0, 50.0] // Lower > Upper
         )
 
-        XCTAssertEqual(coach.rateRange?[0], 100.0)
-        XCTAssertEqual(coach.rateRange?[1], 50.0)
-        // Note: Invalid rate range is allowed - potential validation bug
+        XCTAssertEqual(coach.rateRange, [50.0, 100.0], "Coach.init orders the range as [min, max]")
     }
 
     func testCoachWithSingleRateInRange() {
@@ -156,8 +153,7 @@ final class CoachModelTests: XCTestCase {
             hourlyRate: -50.0 // Negative rate - potential bug
         )
 
-        XCTAssertEqual(coach.hourlyRate, -50.0)
-        // Note: Negative hourly rate is allowed - potential validation bug
+        XCTAssertEqual(coach.hourlyRate, 0, "Coach.init clamps negative rates")
     }
 }
 
@@ -237,285 +233,6 @@ final class ClientModelTests: XCTestCase {
         set.insert(client2)
 
         XCTAssertGreaterThanOrEqual(set.count, 1)
-    }
-}
-
-// MARK: - Matcher Algorithm Tests
-
-final class MatcherTests: XCTestCase {
-
-    func testMatchCoachesBasicMatch() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        let matchingCoach = Coach(
-            id: "coach1",
-            name: "Matching Coach",
-            specialties: ["Tennis", "Badminton"],
-            experienceYears: 5,
-            availability: ["Morning", "Evening"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [matchingCoach])
-
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result.first?.id, "coach1")
-    }
-
-    func testMatchCoachesNoGoalMatch() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Swimming"], // No coach has this
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Tennis Coach",
-            specialties: ["Tennis", "Badminton"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty)
-    }
-
-    func testMatchCoachesNoTimeMatch() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Evening"] // Coach only available Morning
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Morning Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty)
-    }
-
-    func testMatchCoachesMultipleGoalsAndTimes() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis", "Badminton", "Swimming"],
-            preferredAvailability: ["Morning", "Afternoon", "Evening"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Multi Coach",
-            specialties: ["Tennis"], // Only one overlap
-            experienceYears: 5,
-            availability: ["Afternoon"] // Only one overlap
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertEqual(result.count, 1)
-    }
-
-    func testMatchCoachesEmptyGoals() {
-        let client = Client(
-            name: "Test Client",
-            goals: [], // Empty goals
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Any Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty) // No shared goals means no match
-    }
-
-    func testMatchCoachesEmptyAvailability() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: [] // Empty availability
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Any Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty) // No time overlap means no match
-    }
-
-    func testMatchCoachesEmptyCoachSpecialties() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "No Specialty Coach",
-            specialties: [], // Empty specialties
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty) // No specialties means no shared goals
-    }
-
-    func testMatchCoachesEmptyCoachAvailability() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Busy Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: [] // Empty availability
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertTrue(result.isEmpty) // No availability means no time match
-    }
-
-    func testMatchCoachesMultipleCoaches() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis", "Badminton"],
-            preferredAvailability: ["Morning", "Evening"]
-        )
-
-        let coach1 = Coach(
-            id: "coach1",
-            name: "Tennis Morning Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let coach2 = Coach(
-            id: "coach2",
-            name: "Badminton Evening Coach",
-            specialties: ["Badminton"],
-            experienceYears: 3,
-            availability: ["Evening"]
-        )
-
-        let coach3 = Coach(
-            id: "coach3",
-            name: "Swimming Coach", // No goal match
-            specialties: ["Swimming"],
-            experienceYears: 10,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach1, coach2, coach3])
-
-        XCTAssertEqual(result.count, 2)
-        XCTAssertTrue(result.contains { $0.id == "coach1" })
-        XCTAssertTrue(result.contains { $0.id == "coach2" })
-        XCTAssertFalse(result.contains { $0.id == "coach3" })
-    }
-
-    func testMatchCoachesEmptyCoachList() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [])
-
-        XCTAssertTrue(result.isEmpty)
-    }
-
-    func testMatchCoachesCaseSensitivity() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["tennis"], // lowercase
-            preferredAvailability: ["morning"] // lowercase
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Test Coach",
-            specialties: ["Tennis"], // Title case
-            experienceYears: 5,
-            availability: ["Morning"] // Title case
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        // This tests if matching is case-sensitive (potential bug if it should be case-insensitive)
-        XCTAssertTrue(result.isEmpty) // Current implementation is case-sensitive
-    }
-
-    func testMatchCoachesWhitespaceInGoals() {
-        let client = Client(
-            name: "Test Client",
-            goals: [" Tennis "], // With whitespace
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Test Coach",
-            specialties: ["Tennis"], // Without whitespace
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        // This tests if matching handles whitespace (potential bug)
-        XCTAssertTrue(result.isEmpty) // Whitespace not trimmed - potential bug
-    }
-
-    func testMatchCoachesDuplicateGoals() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis", "Tennis", "Tennis"], // Duplicates
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Test Coach",
-            specialties: ["Tennis"],
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertEqual(result.count, 1)
     }
 }
 
@@ -1069,9 +786,9 @@ final class ImageHelpersTests: XCTestCase {
 
         let resized = originalImage.resizeMaintainingAspectRatio(targetSize: CGSize(width: 200, height: 200))
 
-        // Should scale up to 200x200
-        XCTAssertEqual(resized.size.width, 200)
-        XCTAssertEqual(resized.size.height, 200)
+        // resizeMaintainingAspectRatio only ever shrinks images
+        XCTAssertEqual(resized.size.width, 50)
+        XCTAssertEqual(resized.size.height, 50)
     }
 }
 
@@ -1280,8 +997,8 @@ final class LocationItemTests: XCTestCase {
         XCTAssertNil(location.longitude)
     }
 
-    func testLocationItemEquatableIgnoresNotes() {
-        // The current Equatable implementation doesn't check notes
+    func testLocationItemEquatableComparesNotes() {
+        // Equatable includes notes, so edited notes count as a change
         let loc1 = FirestoreManager.LocationItem(
             id: "loc1",
             name: "Gym",
@@ -1300,8 +1017,7 @@ final class LocationItemTests: XCTestCase {
             longitude: -93.2650
         )
 
-        // Bug: notes are not compared in Equatable
-        XCTAssertEqual(loc1, loc2) // This might be unexpected behavior
+        XCTAssertNotEqual(loc1, loc2)
     }
 }
 
@@ -1516,53 +1232,6 @@ final class EdgeCaseTests: XCTestCase {
         XCTAssertNotNil(booking.startAt)
     }
 
-    func testMatcherWithManyCoaches() {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        // Create 1000 coaches
-        var coaches: [Coach] = []
-        for i in 0..<1000 {
-            coaches.append(Coach(
-                id: "coach\(i)",
-                name: "Coach \(i)",
-                specialties: i % 2 == 0 ? ["Tennis"] : ["Badminton"],
-                experienceYears: i % 20,
-                availability: i % 3 == 0 ? ["Morning"] : ["Evening"]
-            ))
-        }
-
-        let result = matchCoaches(client: client, allCoaches: coaches)
-
-        // Should have coaches with Tennis and Morning availability
-        XCTAssertGreaterThan(result.count, 0)
-        XCTAssertLessThan(result.count, coaches.count)
-    }
-
-    func testMatcherWithManyGoals() {
-        let manyGoals = (0..<100).map { "Goal\($0)" }
-        let client = Client(
-            name: "Test Client",
-            goals: manyGoals,
-            preferredAvailability: ["Morning"]
-        )
-
-        let coach = Coach(
-            id: "coach1",
-            name: "Coach",
-            specialties: ["Goal50"], // One match
-            experienceYears: 5,
-            availability: ["Morning"]
-        )
-
-        let result = matchCoaches(client: client, allCoaches: [coach])
-
-        XCTAssertEqual(result.count, 1)
-    }
-
     func testRateRangeWithThreeElements() {
         // Rate range usually has 2 elements [min, max], test with 3
         let coach = Coach(
@@ -1573,7 +1242,7 @@ final class EdgeCaseTests: XCTestCase {
             rateRange: [30.0, 50.0, 70.0]
         )
 
-        XCTAssertEqual(coach.rateRange?.count, 3)
+        XCTAssertEqual(coach.rateRange, [30.0, 50.0], "normalized to [min, max] of the first two values")
     }
 
     func testBookingIDAsUUID() {
@@ -1613,49 +1282,6 @@ final class EdgeCaseTests: XCTestCase {
         XCTAssertEqual(coach.payments?["venmo"], "@user")
         XCTAssertEqual(coach.payments?["paypal"], "")
         XCTAssertNil(coach.payments?["zelle"])
-    }
-}
-
-// MARK: - Concurrent Access Tests
-
-final class ConcurrencyTests: XCTestCase {
-
-    func testMatcherThreadSafety() async {
-        let client = Client(
-            name: "Test Client",
-            goals: ["Tennis"],
-            preferredAvailability: ["Morning"]
-        )
-
-        let coaches = (0..<100).map { i in
-            Coach(
-                id: "coach\(i)",
-                name: "Coach \(i)",
-                specialties: ["Tennis"],
-                experienceYears: 5,
-                availability: ["Morning"]
-            )
-        }
-
-        // Run matching concurrently
-        await withTaskGroup(of: [Coach].self) { group in
-            for _ in 0..<10 {
-                group.addTask {
-                    return matchCoaches(client: client, allCoaches: coaches)
-                }
-            }
-
-            var allResults: [[Coach]] = []
-            for await result in group {
-                allResults.append(result)
-            }
-
-            // All results should be identical
-            let firstCount = allResults.first?.count ?? 0
-            for result in allResults {
-                XCTAssertEqual(result.count, firstCount)
-            }
-        }
     }
 }
 

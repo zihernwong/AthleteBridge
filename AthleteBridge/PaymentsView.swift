@@ -124,6 +124,7 @@ struct PaymentsView: View {
         let notifPayload: [String: Any] = [
             "title": "Payment Notification",
             "body": "\(clientName) has marked booking as paid. Please confirm",
+            "type": "payment_submitted",
             "bookingId": booking.id,
             "senderId": auth.user?.uid ?? "",
             "createdAt": FieldValue.serverTimestamp(),
@@ -816,27 +817,8 @@ struct PaymentsView: View {
     }
 
     // Build a deep link URL for common platforms
-    private func paymentDeepLink(for key: String, value: String) -> URL? {
-        let k = key.lowercased()
-        var v = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if v.isEmpty { return nil }
-        switch k {
-        case "venmo":
-            // Venmo deep link should not include leading '@'
-            if v.hasPrefix("@") { v.removeFirst() }
-            return URL(string: "https://venmo.com/u/\(v)")
-        case "paypal":
-            if v.range(of: "^[A-Za-z0-9.-_]+$", options: .regularExpression) != nil {
-                return URL(string: "https://paypal.me/\(v)")
-            }
-            return nil
-        case "cashapp":
-            return URL(string: "https://cash.app/\(v)")
-        case "zelle":
-            return nil
-        default:
-            return nil
-        }
+    func paymentDeepLink(for key: String, value: String) -> URL? {
+        PaymentLinks.deepLink(platform: key, handle: value)
     }
 
     private func saveEntry() {
