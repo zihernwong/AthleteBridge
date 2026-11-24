@@ -1,0 +1,275 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:created}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "placesToPlay/{{club}}": {
+          "address": "100 Shuttle Ln, Minneapolis, MN",
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "name": "Lakeside Shuttlers",
+          "playingTimes": {
+            "Saturday": "9:00 AM - 12:00 PM",
+            "Tuesday": "6:30 PM - 9:30 PM"
+          },
+          "pricePerSession": "$8"
+        }
+      },
+      "name": "created"
+    },
+    {
+      "changed": {
+        "placesToPlay/{{club}}": {
+          "address": "100 Shuttle Ln, Minneapolis, MN",
+          "admins": {
+            "{{coach}}": {
+              "addedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "contactName": "Mei Chen",
+          "contactUid": "{{coach}}",
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "members": {
+            "{{coach}}": {
+              "joinedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "name": "Lakeside Shuttlers",
+          "playingTimes": {
+            "Saturday": "9:00 AM - 12:00 PM",
+            "Tuesday": "6:30 PM - 9:30 PM"
+          },
+          "pricePerSession": "$8"
+        }
+      },
+      "name": "claimed"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:join_requested}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "pendingNotifications/{{coach}}/notifications/{{h:2252205b}}": {
+          "body": "Alex Kim wants to join Lakeside Shuttlers",
+          "createdAt": {
+            "$timestamp": "{{now:join_requested}}"
+          },
+          "delivered": false,
+          "placeId": "{{club}}",
+          "senderId": "{{client}}",
+          "title": "New Club Join Request",
+          "type": "club_join_request"
+        },
+        "placesToPlay/{{club}}": {
+          "address": "100 Shuttle Ln, Minneapolis, MN",
+          "admins": {
+            "{{coach}}": {
+              "addedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "contactName": "Mei Chen",
+          "contactUid": "{{coach}}",
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "members": {
+            "{{coach}}": {
+              "joinedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "name": "Lakeside Shuttlers",
+          "pendingMembers": {
+            "{{client}}": {
+              "name": "Alex Kim",
+              "requestedAt": {
+                "$timestamp": "{{now:join_requested}}"
+              }
+            }
+          },
+          "playingTimes": {
+            "Saturday": "9:00 AM - 12:00 PM",
+            "Tuesday": "6:30 PM - 9:30 PM"
+          },
+          "pricePerSession": "$8"
+        }
+      },
+      "name": "join_requested"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:approved}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "pendingNotifications/{{client}}/notifications/{{h:502ca2b0}}": {
+          "body": "Your request to join Lakeside Shuttlers has been approved.",
+          "createdAt": {
+            "$timestamp": "{{now:approved}}"
+          },
+          "delivered": false,
+          "placeId": "{{club}}",
+          "title": "Welcome to Lakeside Shuttlers!",
+          "type": "club_approved"
+        },
+        "placesToPlay/{{club}}": {
+          "address": "100 Shuttle Ln, Minneapolis, MN",
+          "admins": {
+            "{{coach}}": {
+              "addedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "contactName": "Mei Chen",
+          "contactUid": "{{coach}}",
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "members": {
+            "{{client}}": {
+              "joinedAt": {
+                "$timestamp": "{{now:approved}}"
+              },
+              "name": "Alex Kim"
+            },
+            "{{coach}}": {
+              "joinedAt": {
+                "$timestamp": "{{now:claimed}}"
+              },
+              "name": "Mei Chen"
+            }
+          },
+          "name": "Lakeside Shuttlers",
+          "pendingMembers": {},
+          "playingTimes": {
+            "Saturday": "9:00 AM - 12:00 PM",
+            "Tuesday": "6:30 PM - 9:30 PM"
+          },
+          "pricePerSession": "$8"
+        }
+      },
+      "name": "approved"
+    },
+    {
+      "changed": {
+        "pendingNotifications/{{client}}/notifications/{{h:015cdd06}}": {
+          "announcementId": "{{announcement}}",
+          "body": "Courts close at 8 tonight",
+          "createdAt": {
+            "$timestamp": "{{now:announced}}"
+          },
+          "delivered": false,
+          "placeId": "{{club}}",
+          "senderId": "{{coach}}",
+          "title": "Lakeside Shuttlers",
+          "type": "club_announcement"
+        },
+        "placesToPlay/{{club}}/announcements/{{announcement}}": {
+          "body": "Courts close at 8 tonight",
+          "createdAt": {
+            "$timestamp": "{{now:announced}}"
+          },
+          "createdBy": "{{coach}}",
+          "senderName": "Mei Chen",
+          "title": "Lakeside Shuttlers"
+        }
+      },
+      "name": "announced"
+    }
+  ],
+  "story": "club",
+  "writer": "ios"
+}

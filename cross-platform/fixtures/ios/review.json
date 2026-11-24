@@ -1,0 +1,74 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:reviewed}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "reviews/{{review}}": {
+          "ClientID": "{{client}}",
+          "CoachID": "{{coach}}",
+          "Rating": "5",
+          "RatingMessage": "Clear, patient coaching",
+          "coachId": "{{coach}}",
+          "comment": "Clear, patient coaching",
+          "createdAt": {
+            "$timestamp": "{{now:reviewed}}"
+          },
+          "rating": 5,
+          "reviewerId": "{{client}}",
+          "reviewerName": "Alex Kim"
+        }
+      },
+      "name": "reviewed"
+    }
+  ],
+  "story": "review",
+  "writer": "ios"
+}

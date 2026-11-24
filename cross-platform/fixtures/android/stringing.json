@@ -1,0 +1,227 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "Bio": "",
+          "City": "",
+          "FirstName": "Alex",
+          "Goals": [],
+          "LastName": "Kim",
+          "MeetingPreference": "",
+          "Name": "Alex Kim",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "PreferredAvailability": [],
+          "SkillLevel": "",
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "bio": "",
+          "city": "",
+          "goals": [],
+          "meetingPreference": "",
+          "name": "Alex Kim",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "preferredAvailability": [],
+          "skillLevel": "",
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "coaches/{{coach2}}": {
+          "Availability": [],
+          "Bio": "",
+          "City": "",
+          "ExperienceYears": 0,
+          "FirstName": "Raj",
+          "HourlyRate": null,
+          "LastName": "Patel",
+          "MeetingPreference": "",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "RateRange": [],
+          "Specialties": ["Badminton"],
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "availability": [],
+          "bio": "",
+          "cancellationWindowHours": 0,
+          "city": "",
+          "experienceYears": 0,
+          "hourlyRate": null,
+          "meetingPreference": "",
+          "name": "Raj Patel",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "photoURLString": "",
+          "rateRange": [],
+          "specialties": ["Badminton"],
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach2}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "stringers/{{stringerProfile}}": {
+          "createdAt": {
+            "$timestamp": "{{now:profile}}"
+          },
+          "createdBy": "{{coach2}}",
+          "laborCost": "$15",
+          "meetupLocation": "Egret Badminton Club",
+          "meetupLocationNames": ["Egret Badminton Club"],
+          "name": "Raj Strings",
+          "strings": {
+            "BG65": {
+              "$double": 5.0
+            }
+          },
+          "stringsOffered": {
+            "BG65": "$5"
+          },
+          "userId": "{{coach2}}"
+        }
+      },
+      "name": "profile"
+    },
+    {
+      "changed": {
+        "stringerOrders/{{order}}": {
+          "buyerId": "{{client}}",
+          "buyerName": "Alex Kim",
+          "clientId": "{{client}}",
+          "clientName": "Alex Kim",
+          "createdAt": {
+            "$timestamp": "{{now:ordered}}"
+          },
+          "createdBy": "{{client}}",
+          "hasOwnString": false,
+          "laborCost": {
+            "$double": 15.0
+          },
+          "orderTotal": "$20.00",
+          "racketName": "Astrox 88D Pro",
+          "selectedString": "BG65",
+          "status": "placed",
+          "stringCost": {
+            "$double": 5.0
+          },
+          "stringType": "BG65",
+          "stringerId": "{{stringerProfile}}",
+          "stringerName": "Raj Strings",
+          "stringerUserId": "{{coach2}}",
+          "tension": 26,
+          "timelinePreference": "This week"
+        }
+      },
+      "name": "ordered"
+    },
+    {
+      "changed": {
+        "pendingNotifications/{{client}}/notifications/{{h:3a23d377}}": {
+          "body": "Raj Strings has accepted your stringing order for Astrox 88D Pro.",
+          "createdAt": {
+            "$timestamp": "{{now:accepted}}"
+          },
+          "delivered": false,
+          "stringerOrderId": "{{order}}",
+          "title": "Order Accepted",
+          "type": "stringer_order"
+        },
+        "stringerOrders/{{order}}": {
+          "buyerId": "{{client}}",
+          "buyerName": "Alex Kim",
+          "clientId": "{{client}}",
+          "clientName": "Alex Kim",
+          "createdAt": {
+            "$timestamp": "{{now:ordered}}"
+          },
+          "createdBy": "{{client}}",
+          "hasOwnString": false,
+          "laborCost": {
+            "$double": 15.0
+          },
+          "orderTotal": "$20.00",
+          "racketName": "Astrox 88D Pro",
+          "selectedString": "BG65",
+          "status": "accepted",
+          "statusHistory": {
+            "accepted": {
+              "$timestamp": "{{now:accepted}}"
+            }
+          },
+          "stringCost": {
+            "$double": 5.0
+          },
+          "stringType": "BG65",
+          "stringerId": "{{stringerProfile}}",
+          "stringerName": "Raj Strings",
+          "stringerUserId": "{{coach2}}",
+          "tension": 26,
+          "timelinePreference": "This week"
+        }
+      },
+      "name": "accepted"
+    },
+    {
+      "changed": {
+        "pendingNotifications/{{client}}/notifications/{{h:86822a88}}": {
+          "body": "Your racket is ready for pickup from Raj Strings!",
+          "createdAt": {
+            "$timestamp": "{{now:ready_for_pickup}}"
+          },
+          "delivered": false,
+          "stringerOrderId": "{{order}}",
+          "title": "Ready For Pickup",
+          "type": "stringer_order"
+        },
+        "stringerOrders/{{order}}": {
+          "buyerId": "{{client}}",
+          "buyerName": "Alex Kim",
+          "clientId": "{{client}}",
+          "clientName": "Alex Kim",
+          "createdAt": {
+            "$timestamp": "{{now:ordered}}"
+          },
+          "createdBy": "{{client}}",
+          "hasOwnString": false,
+          "laborCost": {
+            "$double": 15.0
+          },
+          "orderTotal": "$20.00",
+          "racketName": "Astrox 88D Pro",
+          "selectedString": "BG65",
+          "status": "ready_for_pickup",
+          "statusHistory": {
+            "accepted": {
+              "$timestamp": "{{now:accepted}}"
+            },
+            "ready_for_pickup": {
+              "$timestamp": "{{now:ready_for_pickup}}"
+            }
+          },
+          "stringCost": {
+            "$double": 5.0
+          },
+          "stringType": "BG65",
+          "stringerId": "{{stringerProfile}}",
+          "stringerName": "Raj Strings",
+          "stringerUserId": "{{coach2}}",
+          "tension": 26,
+          "timelinePreference": "This week"
+        }
+      },
+      "name": "ready_for_pickup"
+    }
+  ],
+  "story": "stringing",
+  "writer": "android"
+}

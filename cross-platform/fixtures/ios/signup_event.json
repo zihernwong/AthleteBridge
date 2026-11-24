@@ -1,0 +1,354 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "placesToPlay/{{club}}": {
+          "address": "100 Shuttle Ln, Minneapolis, MN",
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "createdBy": "{{coach}}",
+          "name": "Lakeside Shuttlers",
+          "playingTimes": {},
+          "pricePerSession": ""
+        },
+        "userType/{{client2}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "signupEvents/{{event}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-05T01:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "recurrence": "weekly",
+          "signupCount": 0,
+          "signups": {},
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in"
+        }
+      },
+      "name": "created"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:signed_up}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "signupEvents/{{event}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-05T01:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "recurrence": "weekly",
+          "signupCount": 1,
+          "signups": {
+            "{{h:58771edb}}": {
+              "email": "{{client-email}}",
+              "name": "Alex Kim",
+              "paid": false,
+              "signedUpAt": {
+                "$timestamp": "{{now:signed_up}}"
+              },
+              "userId": "{{client}}"
+            }
+          },
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in"
+        }
+      },
+      "name": "signed_up"
+    },
+    {
+      "changed": {
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:waitlisted}}"
+          },
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "signupEvents/{{event}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-05T01:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "recurrence": "weekly",
+          "signupCount": 1,
+          "signups": {
+            "{{h:58771edb}}": {
+              "email": "{{client-email}}",
+              "name": "Alex Kim",
+              "paid": false,
+              "signedUpAt": {
+                "$timestamp": "{{now:signed_up}}"
+              },
+              "userId": "{{client}}"
+            }
+          },
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in",
+          "waitlist": {
+            "{{h:104f44db}}": {
+              "email": "{{client2-email}}",
+              "joinedAt": {
+                "$timestamp": "{{now:waitlisted}}"
+              },
+              "name": "Sam Lee",
+              "userId": "{{client2}}"
+            }
+          }
+        }
+      },
+      "name": "waitlisted"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:promoted}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "pendingNotifications/{{client2}}/notifications/{{h:7307f9ef}}": {
+          "body": "A spot opened up in \"Tuesday Drop-in\" — you've been moved off the waitlist.",
+          "createdAt": {
+            "$timestamp": "{{now:promoted}}"
+          },
+          "delivered": false,
+          "eventId": "{{event}}",
+          "placeId": "{{club}}",
+          "title": "You're in!",
+          "type": "event_waitlist_promoted"
+        },
+        "signupEvents/{{event}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-05T01:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "recurrence": "weekly",
+          "signupCount": 1,
+          "signups": {
+            "{{h:104f44db}}": {
+              "email": "{{client2-email}}",
+              "name": "Sam Lee",
+              "paid": false,
+              "signedUpAt": {
+                "$timestamp": "{{now:promoted}}"
+              },
+              "userId": "{{client2}}"
+            }
+          },
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in",
+          "waitlist": {}
+        }
+      },
+      "name": "promoted"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:next_week}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "signupEvents/{{event}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-05T01:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "nextOccurrenceId": "{{nextEvent}}",
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "recurrence": "weekly",
+          "signupCount": 1,
+          "signups": {
+            "{{h:104f44db}}": {
+              "email": "{{client2-email}}",
+              "name": "Sam Lee",
+              "paid": false,
+              "signedUpAt": {
+                "$timestamp": "{{now:promoted}}"
+              },
+              "userId": "{{client2}}"
+            }
+          },
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in",
+          "waitlist": {}
+        },
+        "signupEvents/{{nextEvent}}": {
+          "createdAt": {
+            "$timestamp": "{{now:next_week}}"
+          },
+          "createdBy": "{{coach}}",
+          "description": "Open play, all levels",
+          "eventDate": {
+            "$timestamp": "2031-03-12T00:30:00Z"
+          },
+          "feeUSD": {
+            "$double": 8.0
+          },
+          "location": "Lakeside Shuttlers",
+          "maxSignups": 1,
+          "paymentLink": "@egretclub",
+          "placeId": "{{club}}",
+          "placeName": "Lakeside Shuttlers",
+          "previousOccurrenceId": "{{event}}",
+          "recurrence": "weekly",
+          "signupCount": 0,
+          "signups": {},
+          "timeZone": "America/Chicago",
+          "title": "Tuesday Drop-in"
+        }
+      },
+      "name": "next_week"
+    }
+  ],
+  "story": "signup_event",
+  "writer": "ios"
+}

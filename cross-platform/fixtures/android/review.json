@@ -1,0 +1,93 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "Bio": "",
+          "City": "",
+          "FirstName": "Alex",
+          "Goals": [],
+          "LastName": "Kim",
+          "MeetingPreference": "",
+          "Name": "Alex Kim",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "PreferredAvailability": [],
+          "SkillLevel": "",
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "bio": "",
+          "city": "",
+          "goals": [],
+          "meetingPreference": "",
+          "name": "Alex Kim",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "preferredAvailability": [],
+          "skillLevel": "",
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "coaches/{{coach}}": {
+          "Availability": [],
+          "Bio": "",
+          "City": "",
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "HourlyRate": null,
+          "LastName": "Chen",
+          "MeetingPreference": "",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "RateRange": [],
+          "Specialties": ["Badminton"],
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "availability": [],
+          "bio": "",
+          "cancellationWindowHours": 0,
+          "city": "",
+          "experienceYears": 0,
+          "hourlyRate": null,
+          "meetingPreference": "",
+          "name": "Mei Chen",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "photoURLString": "",
+          "rateRange": [],
+          "specialties": ["Badminton"],
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "reviews/{{review}}": {
+          "ClientID": "{{client}}",
+          "CoachID": "{{coach}}",
+          "Rating": "5",
+          "RatingMessage": "Clear, patient coaching",
+          "coachId": "{{coach}}",
+          "comment": "Clear, patient coaching",
+          "createdAt": {
+            "$timestamp": "{{now:reviewed}}"
+          },
+          "rating": 5,
+          "reviewerId": "{{client}}",
+          "reviewerName": "Alex Kim"
+        }
+      },
+      "name": "reviewed"
+    }
+  ],
+  "story": "review",
+  "writer": "android"
+}

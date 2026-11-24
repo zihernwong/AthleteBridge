@@ -1,0 +1,174 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "Bio": "",
+          "City": "",
+          "FirstName": "Alex",
+          "Goals": [],
+          "LastName": "Kim",
+          "MeetingPreference": "",
+          "Name": "Alex Kim",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "PreferredAvailability": [],
+          "SkillLevel": "",
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "bio": "",
+          "city": "",
+          "goals": [],
+          "meetingPreference": "",
+          "name": "Alex Kim",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "preferredAvailability": [],
+          "skillLevel": "",
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "coaches/{{coach}}": {
+          "Availability": [],
+          "Bio": "",
+          "City": "",
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "HourlyRate": null,
+          "LastName": "Chen",
+          "MeetingPreference": "",
+          "PhoneNumber": "",
+          "PhoneVerified": false,
+          "RateRange": [],
+          "Specialties": ["Badminton"],
+          "TournamentSoftwareLink": "",
+          "ZipCode": "",
+          "availability": [],
+          "bio": "",
+          "cancellationWindowHours": 0,
+          "city": "",
+          "experienceYears": 0,
+          "hourlyRate": null,
+          "meetingPreference": "",
+          "name": "Mei Chen",
+          "phoneNumber": "",
+          "phoneVerified": false,
+          "photoURLString": "",
+          "rateRange": [],
+          "specialties": ["Badminton"],
+          "tournamentSoftwareLink": "",
+          "zipCode": ""
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{client}}"
+            },
+            {
+              "$ref": "coaches/{{coach}}"
+            }
+          ],
+          "participants": ["{{client}}", "{{coach}}"]
+        }
+      },
+      "name": "opened"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:messaged}}"
+          },
+          "lastMessageText": "Can we move to 7pm?",
+          "lastSenderId": "{{client}}",
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{client}}"
+            },
+            {
+              "$ref": "coaches/{{coach}}"
+            }
+          ],
+          "participants": ["{{client}}", "{{coach}}"],
+          "readBy": {
+            "{{client}}": {
+              "$timestamp": "{{now:messaged}}"
+            }
+          }
+        },
+        "chats/{{chat}}/messages/{{message}}": {
+          "createdAt": {
+            "$timestamp": "{{now:messaged}}"
+          },
+          "senderId": "{{client}}",
+          "senderRef": {
+            "$ref": "coaches/{{client}}"
+          },
+          "text": "Can we move to 7pm?"
+        }
+      },
+      "name": "messaged"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:replied}}"
+          },
+          "lastMessageText": "Sure, see you then",
+          "lastSenderId": "{{coach}}",
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{client}}"
+            },
+            {
+              "$ref": "coaches/{{coach}}"
+            }
+          ],
+          "participants": ["{{client}}", "{{coach}}"],
+          "readBy": {
+            "{{client}}": {
+              "$timestamp": "{{now:messaged}}"
+            },
+            "{{coach}}": {
+              "$timestamp": "{{now:replied}}"
+            }
+          }
+        },
+        "chats/{{chat}}/messages/{{reply}}": {
+          "createdAt": {
+            "$timestamp": "{{now:replied}}"
+          },
+          "senderId": "{{coach}}",
+          "senderRef": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "text": "Sure, see you then"
+        }
+      },
+      "name": "replied"
+    }
+  ],
+  "story": "chat",
+  "writer": "android"
+}

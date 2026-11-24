@@ -1,0 +1,2823 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach2}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Raj",
+          "LastName": "Patel",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client2}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach2}}": {
+          "type": "COACH"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "coaches/{{coach2}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Raj",
+          "LastName": "Patel",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientIDs": ["{{client}}", "{{client2}}"],
+              "CoachIDs": ["{{coach}}", "{{coach2}}"],
+              "EndAt": {
+                "$timestamp": "2031-03-19T18:30:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Doubles rotation drills",
+              "StartAt": {
+                "$timestamp": "2031-03-19T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}",
+              "isGroupBooking": true
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientIDs": ["{{client}}", "{{client2}}"],
+              "CoachIDs": ["{{coach}}", "{{coach2}}"],
+              "EndAt": {
+                "$timestamp": "2031-03-19T18:30:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Doubles rotation drills",
+              "StartAt": {
+                "$timestamp": "2031-03-19T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}",
+              "isGroupBooking": true
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": false
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "pendingNotifications/{{client2}}/notifications/{{h:8ecfceac}}": {
+          "body": "Alex Kim added you to a group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client}}",
+          "title": "Added to Group Session",
+          "type": "booking_request"
+        },
+        "pendingNotifications/{{coach2}}/notifications/{{h:ac15fbf5}}": {
+          "body": "Alex Kim requested a group session - Action Required",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client}}",
+          "title": "Group Booking Requested",
+          "type": "booking_request"
+        },
+        "pendingNotifications/{{coach}}/notifications/{{h:e08ce2ed}}": {
+          "body": "Alex Kim requested a group session - Action Required",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client}}",
+          "title": "Group Booking Requested",
+          "type": "booking_request"
+        }
+      },
+      "name": "requested"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 40.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_accepted",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 40.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_accepted"
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 40.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_accepted",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 40.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_accepted"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 40.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_accepted",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 40.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_accepted"
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 40.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_accepted",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 40.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_accepted"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientIDs": ["{{client}}", "{{client2}}"],
+              "CoachIDs": ["{{coach}}", "{{coach2}}"],
+              "EndAt": {
+                "$timestamp": "2031-03-19T18:30:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Doubles rotation drills",
+              "StartAt": {
+                "$timestamp": "2031-03-19T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}",
+              "isGroupBooking": true
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:coach_accepted}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 40.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_accepted",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": false,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 40.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_accepted"
+        },
+        "pendingNotifications/{{client2}}/notifications/{{h:e6c1c963}}": {
+          "body": "Mei Chen has accepted your group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:coach_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach}}",
+          "title": "Coach Accepted",
+          "type": "booking_accepted"
+        },
+        "pendingNotifications/{{client}}/notifications/{{h:8ef53735}}": {
+          "body": "Mei Chen has accepted your group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:coach_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach}}",
+          "title": "Coach Accepted",
+          "type": "booking_accepted"
+        },
+        "pendingNotifications/{{coach2}}/notifications/{{h:6de55086}}": {
+          "body": "Mei Chen has accepted the group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:coach_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach}}",
+          "title": "Coach Accepted",
+          "type": "booking_accepted"
+        }
+      },
+      "name": "coach_accepted"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "coaches/{{coach2}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Raj",
+          "LastName": "Patel",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientIDs": ["{{client}}", "{{client2}}"],
+              "CoachIDs": ["{{coach}}", "{{coach2}}"],
+              "EndAt": {
+                "$timestamp": "2031-03-19T18:30:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Doubles rotation drills",
+              "StartAt": {
+                "$timestamp": "2031-03-19T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}",
+              "isGroupBooking": true
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:all_accepted}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": false
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "pendingNotifications/{{client2}}/notifications/{{h:01103597}}": {
+          "body": "All coaches have accepted your group session - Please confirm",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach2}}",
+          "title": "Group Booking Ready",
+          "type": "booking_accepted"
+        },
+        "pendingNotifications/{{client}}/notifications/{{h:f940b77e}}": {
+          "body": "All coaches have accepted your group session - Please confirm",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach2}}",
+          "title": "Group Booking Ready",
+          "type": "booking_accepted"
+        },
+        "pendingNotifications/{{coach}}/notifications/{{h:088d928c}}": {
+          "body": "Raj Patel has accepted the group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_accepted}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{coach2}}",
+          "title": "Coach Accepted",
+          "type": "booking_accepted"
+        }
+      },
+      "name": "all_accepted"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_confirmed",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_confirmed"
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_confirmed",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_confirmed"
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:client_confirmed}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_confirmed",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_confirmed"
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_confirmed",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_confirmed"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "partially_confirmed",
+          "clientConfirmations": {
+            "{{client2}}": false,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "partially_confirmed"
+        },
+        "pendingNotifications/{{client2}}/notifications/{{h:97a36a60}}": {
+          "body": "Alex Kim has confirmed. Please review and confirm the group session.",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:client_confirmed}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client}}",
+          "title": "Action Required: Confirm Group Session",
+          "type": "booking_accepted"
+        }
+      },
+      "name": "client_confirmed"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "pendingNotifications/{{client}}/notifications/{{h:ba0d640a}}": {
+          "body": "All participants have confirmed - your group session is now booked!",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client2}}",
+          "title": "Group Session Confirmed",
+          "type": "booking_confirmed"
+        },
+        "pendingNotifications/{{coach2}}/notifications/{{h:511e80d4}}": {
+          "body": "All clients have confirmed the group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client2}}",
+          "title": "Group Booking Confirmed",
+          "type": "booking_confirmed"
+        },
+        "pendingNotifications/{{coach}}/notifications/{{h:63d6f772}}": {
+          "body": "All clients have confirmed the group session",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "delivered": false,
+          "isGroupBooking": true,
+          "senderId": "{{client2}}",
+          "title": "Group Booking Confirmed",
+          "type": "booking_confirmed"
+        }
+      },
+      "name": "all_confirmed"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "clients/{{client2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "coaches/{{coach2}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientIDs": ["{{client}}", "{{client2}}"],
+              "CoachIDs": ["{{coach}}", "{{coach2}}"],
+              "EndAt": {
+                "$timestamp": "2031-03-19T18:30:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Doubles rotation drills",
+              "StartAt": {
+                "$timestamp": "2031-03-19T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}",
+              "isGroupBooking": true
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:cancelled}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientIDs": ["{{client}}", "{{client2}}"],
+          "ClientName": "Alex Kim",
+          "ClientNames": ["Alex Kim", "Sam Lee"],
+          "CoachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachIDs": ["{{coach}}", "{{coach2}}"],
+          "CoachName": "Mei Chen",
+          "CoachNames": ["Mei Chen", "Raj Patel"],
+          "CoachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "EndAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Doubles rotation drills",
+          "PaymentStatus": "unpaid",
+          "RateUSD": {
+            "$double": 50.0
+          },
+          "StartAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientConfirmations": {
+            "{{client2}}": true,
+            "{{client}}": true
+          },
+          "clientID": "{{client}}",
+          "clientIDs": ["{{client}}", "{{client2}}"],
+          "coachAcceptances": {
+            "{{coach2}}": true,
+            "{{coach}}": true
+          },
+          "coachID": "{{coach}}",
+          "coachIDs": ["{{coach}}", "{{coach2}}"],
+          "coachRates": {
+            "{{coach2}}": {
+              "$double": 50.0
+            },
+            "{{coach}}": {
+              "$double": 40.0
+            }
+          },
+          "confirmedAt": {
+            "$timestamp": "{{now:all_confirmed}}"
+          },
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "creatorID": "{{client}}",
+          "creatorType": "client",
+          "endAt": {
+            "$timestamp": "2031-03-19T18:30:00Z"
+          },
+          "isGroupBooking": true,
+          "location": "Egret Badminton Club",
+          "notes": "Doubles rotation drills",
+          "paymentStatus": "unpaid",
+          "rateUSD": {
+            "$double": 50.0
+          },
+          "startAt": {
+            "$timestamp": "2031-03-19T17:00:00Z"
+          },
+          "status": "cancelled"
+        }
+      },
+      "name": "cancelled"
+    }
+  ],
+  "story": "group_booking",
+  "writer": "ios"
+}

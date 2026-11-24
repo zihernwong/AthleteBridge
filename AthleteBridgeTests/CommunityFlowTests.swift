@@ -307,7 +307,7 @@ final class ChatFlowTests: EmulatorTestCase {
         XCTAssertEqual(again, chatId)
     }
 
-    func testMessagesUpdateTheChatAndNotifyTheOtherPerson() async throws {
+    func testMessagesUpdateTheChatAndLeaveThePushToTheServer() async throws {
         let chatId = try await openChat()
         try await send("Can we move to 7?", as: client, in: chatId)
         let chat = try await data("chats/\(chatId)") ?? [:]
@@ -315,12 +315,13 @@ final class ChatFlowTests: EmulatorTestCase {
         let message = try await docs("chats/\(chatId)/messages").first?.data() ?? [:]
         XCTAssertEqual(message["senderId"] as? String, client.uid)
         XCTAssertNotNil(message["createdAt"] as? Timestamp)
-        try await eventually("the coach's chat push") { try await self.notifications(for: self.coach.uid).count > 0 }
-        let push = try await notifications(for: coach.uid)[0]
-        XCTAssertEqual(push["chatId"] as? String, chatId)
-        XCTAssertEqual(push["body"] as? String, "Can we move to 7?")
-        let toSender = try await notifications(for: client.uid)
-        XCTAssertTrue(toSender.isEmpty)
+        // The onMessageCreate Cloud Function pushes each new message to the chat's other participantRefs.
+        // The app used to queue its own push as well, so the coach was notified twice.
+        let participants = (chat["participantRefs"] as? [DocumentReference] ?? []).map(\.documentID)
+        XCTAssertEqual(Set(participants), [coach.uid, client.uid])
+        try await settle()
+        let queued = try await notifications(for: coach.uid) + notifications(for: client.uid)
+        XCTAssertTrue(queued.isEmpty, "onMessageCreate already pushes the message; a queued push notifies the coach twice")
     }
 
     func testTheChatRecordsWhoSentTheLastMessage() async throws {

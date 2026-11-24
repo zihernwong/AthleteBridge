@@ -1,0 +1,240 @@
+{
+  "about": "Shared contract for the AthleteBridge iOS and Android apps, which share one Firestore database. Identical copies live in both repos under cross-platform/ (check.sh keeps them in sync). Each app records what its real code writes for every story below (fixtures/<platform>/<story>.json); the other app's tests then read and act on those documents. See README.md.",
+  "version": 1,
+
+  "actors": {
+    "coach":   { "role": "COACH",  "first": "Mei",  "last": "Chen" },
+    "coach2":  { "role": "COACH",  "first": "Raj",  "last": "Patel" },
+    "client":  { "role": "CLIENT", "first": "Alex", "last": "Kim" },
+    "client2": { "role": "CLIENT", "first": "Sam",  "last": "Lee" }
+  },
+
+  "derivedIds": {
+    "chat": { "sortedJoin": ["client", "coach"], "separator": "_", "why": "chat ids are the two uids sorted and joined with _" }
+  },
+
+  "stories": {
+    "booking": {
+      "about": "A client books a 1:1 session; the coach accepts with a rate and note, the client confirms, the coach records payment and notes, reschedules, and the client cancels.",
+      "checkpoints": ["setup", "requested", "accepted", "confirmed", "paid", "session_notes", "rescheduled", "cancelled"],
+      "values": {
+        "club": "Egret Badminton Club",
+        "start": "2031-03-12T17:00:00Z",
+        "end": "2031-03-12T18:00:00Z",
+        "location": "Egret Badminton Club",
+        "notes": "Working on net play",
+        "rateUSD": 45.0,
+        "coachNote": "Bring two rackets",
+        "sessionNotes": "Late split step",
+        "recap": "Great rallies today",
+        "newStart": "2031-03-14T15:00:00Z",
+        "newEnd": "2031-03-14T16:30:00Z"
+      },
+      "expect": {
+        "requested":     { "status": "requested" },
+        "accepted":      { "status": "Pending Acceptance", "rateUSD": 45.0, "coachNote": "Bring two rackets" },
+        "confirmed":     { "status": "confirmed" },
+        "paid":          { "status": "confirmed", "paymentStatus": "paid" },
+        "session_notes": { "coachNote": "Late split step", "sessionRecap": "Great rallies today" },
+        "rescheduled":   { "status": "Pending Acceptance", "start": "2031-03-14T15:00:00Z", "end": "2031-03-14T16:30:00Z" },
+        "cancelled":     { "status": "cancelled" }
+      }
+    },
+
+    "group_booking": {
+      "about": "A client books both coaches for themself and a second client; each coach accepts with their own rate, each client confirms, then a coach cancels.",
+      "checkpoints": ["setup", "requested", "coach_accepted", "all_accepted", "client_confirmed", "all_confirmed", "cancelled"],
+      "values": {
+        "start": "2031-03-19T17:00:00Z",
+        "end": "2031-03-19T18:30:00Z",
+        "location": "Egret Badminton Club",
+        "notes": "Doubles rotation drills",
+        "coachRate": 40.0,
+        "coach2Rate": 50.0
+      },
+      "expect": {
+        "requested":        { "status": "requested" },
+        "coach_accepted":   { "accepted": ["coach"] },
+        "all_accepted":     { "status": "Pending Acceptance", "accepted": ["coach", "coach2"] },
+        "client_confirmed": { "confirmed": ["client"] },
+        "all_confirmed":    { "status": "confirmed", "confirmed": ["client", "client2"] },
+        "cancelled":        { "status": "cancelled" }
+      }
+    },
+
+    "chat": {
+      "about": "A client opens a chat with a coach and sends a message; the coach replies.",
+      "checkpoints": ["setup", "opened", "messaged", "replied"],
+      "values": { "message": "Can we move to 7pm?", "reply": "Sure, see you then" }
+    },
+
+    "club": {
+      "about": "A coach lists a club and becomes its admin; a client asks to join and is approved; the coach posts an announcement.",
+      "checkpoints": ["setup", "created", "claimed", "join_requested", "approved", "announced"],
+      "values": {
+        "name": "Lakeside Shuttlers",
+        "address": "100 Shuttle Ln, Minneapolis, MN",
+        "playingTimes": { "Tuesday": "6:30 PM - 9:30 PM", "Saturday": "9:00 AM - 12:00 PM" },
+        "price": "$8",
+        "announcement": "Courts close at 8 tonight"
+      }
+    },
+
+    "signup_event": {
+      "about": "A coach creates a weekly one-spot drop-in at a club; a client signs up, a second client joins the waitlist, the first drops out so the second is promoted, and the coach rolls the event to next week across the start of daylight saving time.",
+      "checkpoints": ["setup", "created", "signed_up", "waitlisted", "promoted", "next_week"],
+      "values": {
+        "club": "Lakeside Shuttlers",
+        "title": "Tuesday Drop-in",
+        "description": "Open play, all levels",
+        "eventDate": "2031-03-05T01:30:00Z",
+        "timeZone": "America/Chicago",
+        "location": "Lakeside Shuttlers",
+        "maxSignups": 1,
+        "feeUSD": 8.0,
+        "paymentLink": "@egretclub",
+        "recurrence": "weekly",
+        "nextEventDate": "2031-03-12T00:30:00Z"
+      }
+    },
+
+    "stringing": {
+      "about": "A coach sets up a stringing profile; a client orders a restring; the stringer accepts it and marks it ready for pickup.",
+      "checkpoints": ["setup", "profile", "ordered", "accepted", "ready_for_pickup"],
+      "values": {
+        "stringer": "coach2",
+        "name": "Raj Strings",
+        "string": "BG65",
+        "stringPrice": 5.0,
+        "laborCost": 15.0,
+        "meetup": "Egret Badminton Club",
+        "racket": "Astrox 88D Pro",
+        "tension": 26,
+        "timeline": "This week",
+        "orderTotal": "$20.00"
+      }
+    },
+
+    "review": {
+      "about": "A client reviews their coach.",
+      "checkpoints": ["setup", "reviewed"],
+      "values": { "rating": 5, "comment": "Clear, patient coaching" }
+    },
+
+    "tournament": {
+      "about": "A coach adds a tournament; a client looking for a mixed doubles partner joins, then a compatible second client joins and the first is told.",
+      "checkpoints": ["setup", "created", "joined", "partner_joined"],
+      "values": {
+        "name": "Spring Open 2031",
+        "start": "2031-04-05T14:00:00Z",
+        "end": "2031-04-06T23:00:00Z",
+        "location": "Lakeside Shuttlers",
+        "signupLink": "https://example.com/spring-open",
+        "client": { "gender": "Male", "events": ["Mixed Doubles"], "skillLevels": ["B"] },
+        "client2": { "gender": "Female", "events": ["Mixed Doubles"], "skillLevels": ["B"] }
+      }
+    },
+
+    "profiles": {
+      "about": "A coach and a client fill in their profiles; the coach adds payment handles.",
+      "checkpoints": ["setup", "coach_profile", "client_profile", "payment_methods"],
+      "values": {
+        "coach": {
+          "specialties": ["Badminton"],
+          "experienceYears": 8,
+          "availability": ["Evening", "Weekend"],
+          "bio": "Former national doubles player",
+          "hourlyRate": 60.0,
+          "rateRange": [50.0, 70.0],
+          "meetingPreference": "In-Person",
+          "zipCode": "55413",
+          "city": "Minneapolis",
+          "tournamentSoftwareLink": "https://www.tournamentsoftware.com/player/mei",
+          "cancellationWindowHours": 24
+        },
+        "client": {
+          "goals": ["Footwork", "Smash"],
+          "preferredAvailability": ["Evening"],
+          "meetingPreference": "In-Person",
+          "skillLevel": "Intermediate",
+          "zipCode": "55102",
+          "city": "St. Paul",
+          "bio": "Playing for two years"
+        },
+        "payments": { "venmo": "mei-chen", "paypal": "meichen", "cashapp": "meichen" }
+      }
+    }
+  },
+
+  "statuses": {
+    "about": "Booking statuses either app may write. A status outside this list is one the other app has never been taught to show.",
+    "known": ["requested", "Pending Acceptance", "pending_payment", "payment_submitted", "partially_accepted", "partially_confirmed", "confirmed", "fully_confirmed", "cancelled", "rejected", "declined_by_client"]
+  },
+
+  "cloudFunction": {
+    "about": "pendingNotifications/{uid}/notifications docs become pushes through onPendingNotificationCreate (AthleteBridge/functions/src/index.ts), which copies only these keys into the FCM data payload and adds recipientUid. Anything else in the doc never reaches the phone.",
+    "forwardedKeys": ["chatId", "messageId", "bookingId", "type", "stringerOrderId", "placeId", "announcementId", "eventId", "tournamentId"],
+    "addedKeys": ["recipientUid"],
+    "chatMessagePushes": "onMessageCreate pushes every new chats/{chatId}/messages doc itself (type chat, chatId, messageId), so an app that also queues a pendingNotifications push for a message notifies the recipient twice."
+  },
+
+  "pushRouting": {
+    "about": "What tapping each push type must open, given the data a phone actually receives (after the Cloud Function). Screens: booking, bookings, payments, chat, stringerOrder, club, myClubs, clubAnnouncements, signupEvent, signupEvents, tournaments. Where the apps legitimately differ, accept lists every acceptable screen.",
+    "routes": [
+      { "type": "booking_request",       "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_accepted",      "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_rejected",      "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_confirmed",     "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_rescheduled",   "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_declined",      "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "booking_cancelled",     "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }, { "screen": "bookings" }] },
+      { "type": "payment_submitted",     "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "payment_acknowledged",  "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "booking", "id": "{{booking}}" }] },
+      { "type": "payment_confirmed",     "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "payments" }] },
+      { "type": "payment_reminder",      "data": { "bookingId": "{{booking}}" }, "accept": [{ "screen": "payments" }] },
+      { "type": "chat",                  "data": { "chatId": "{{chat}}", "messageId": "{{message}}" }, "accept": [{ "screen": "chat", "id": "{{chat}}" }] },
+      { "type": "stringer_order",        "data": { "stringerOrderId": "{{order}}" }, "accept": [{ "screen": "stringerOrder", "id": "{{order}}" }] },
+      { "type": "club_join_request",     "data": { "placeId": "{{club}}" }, "accept": [{ "screen": "club", "id": "{{club}}" }] },
+      { "type": "club_approved",         "data": { "placeId": "{{club}}" }, "accept": [{ "screen": "club", "id": "{{club}}" }, { "screen": "myClubs" }] },
+      { "type": "club_announcement",     "data": { "placeId": "{{club}}", "announcementId": "{{announcement}}" }, "accept": [{ "screen": "clubAnnouncements", "id": "{{club}}" }] },
+      { "type": "event_waitlist_promoted", "data": { "placeId": "{{club}}", "eventId": "{{event}}" }, "accept": [{ "screen": "signupEvent", "id": "{{event}}" }] },
+      { "type": "tournament_partner",    "data": { "tournamentId": "{{tournament}}" }, "accept": [{ "screen": "tournaments" }] },
+      { "type": "tournament_recommendation", "data": { "tournamentId": "{{tournament}}" }, "accept": [{ "screen": "tournaments" }] }
+    ]
+  },
+
+  "vectors": {
+    "about": "Logic both apps implement separately; each must give the same answer.",
+    "paymentLinks": [
+      { "platform": "venmo",   "handle": "mei-chen",                        "url": "https://venmo.com/u/mei-chen" },
+      { "platform": "venmo",   "handle": "@mei-chen",                       "url": "https://venmo.com/u/mei-chen" },
+      { "platform": "Venmo",   "handle": " https://venmo.com/u/mei-chen ", "url": "https://venmo.com/u/mei-chen" },
+      { "platform": "venmo",   "handle": "venmo.com/mei-chen?txn=pay",      "url": "https://venmo.com/u/mei-chen" },
+      { "platform": "paypal",  "handle": "meichen",                         "url": "https://paypal.me/meichen" },
+      { "platform": "paypal",  "handle": "https://www.paypal.me/meichen/",  "url": "https://paypal.me/meichen" },
+      { "platform": "paypal",  "handle": "paypal.com/paypalme/meichen",     "url": "https://paypal.me/meichen" },
+      { "platform": "paypal",  "handle": "mei@example.com",                 "url": null },
+      { "platform": "cashapp", "handle": "$meichen",                        "url": "https://cash.app/$meichen" },
+      { "platform": "cashapp", "handle": "meichen",                         "url": "https://cash.app/$meichen" },
+      { "platform": "Cash App","handle": "https://cash.app/$meichen",       "url": "https://cash.app/$meichen" },
+      { "platform": "zelle",   "handle": "612-555-0100",                    "url": null },
+      { "platform": "venmo",   "handle": "",                                "url": null },
+      { "platform": "venmo",   "handle": "mei chen",                        "url": null }
+    ],
+    "effectiveTier": [
+      { "subscriptionTier": null,   "lifetimeTier": null,   "tier": "free" },
+      { "subscriptionTier": "plus", "lifetimeTier": null,   "tier": "plus" },
+      { "subscriptionTier": "free", "lifetimeTier": "pro",  "tier": "pro" },
+      { "subscriptionTier": "pro",  "lifetimeTier": "plus", "tier": "pro" },
+      { "subscriptionTier": "gold", "lifetimeTier": null,   "tier": "free" }
+    ],
+    "partnersCompatible": [
+      { "a": { "gender": "Male",   "events": ["Mixed Doubles"], "skillLevels": ["B"] }, "b": { "gender": "Female", "events": ["Mixed Doubles"], "skillLevels": ["B"] }, "compatible": true },
+      { "a": { "gender": "Male",   "events": ["Mixed Doubles"], "skillLevels": ["B"] }, "b": { "gender": "Male",   "events": ["Mixed Doubles"], "skillLevels": ["B"] }, "compatible": false },
+      { "a": { "gender": "Male",   "events": ["Men's Doubles"], "skillLevels": ["A"] }, "b": { "gender": "Male",   "events": ["Men's Doubles"], "skillLevels": ["B"] }, "compatible": false },
+      { "a": { "gender": "Female", "events": ["Women's Doubles", "Mixed Doubles"], "skillLevels": [] }, "b": { "gender": "Female", "events": ["Women's Doubles"], "skillLevels": ["C"] }, "compatible": true },
+      { "a": { "gender": "Male",   "events": ["Men's Doubles"], "skillLevels": ["B"] }, "b": { "gender": "Female", "events": ["Women's Doubles"], "skillLevels": ["B"] }, "compatible": false },
+      { "a": { "gender": "Male",   "events": ["Singles"], "skillLevels": ["B"] }, "b": { "gender": "Female", "events": ["Singles"], "skillLevels": ["B", "C"] }, "compatible": true }
+    ]
+  }
+}

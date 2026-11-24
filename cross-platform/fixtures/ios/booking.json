@@ -1,0 +1,813 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientID": "{{client}}",
+              "CoachID": "{{coach}}",
+              "EndAt": {
+                "$timestamp": "2031-03-12T18:00:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Working on net play",
+              "StartAt": {
+                "$timestamp": "2031-03-12T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}"
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "requested",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "requested"
+        },
+        "pendingNotifications/{{coach}}/notifications/{{h:1b57a98f}}": {
+          "body": "Booking Requested by Alex Kim Action Required",
+          "bookingId": "{{booking}}",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "delivered": false,
+          "senderId": "{{client}}",
+          "title": "Booking Requested",
+          "type": "booking_request"
+        }
+      },
+      "name": "requested"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        }
+      },
+      "name": "confirmed"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "calendar": [
+            {
+              "ClientID": "{{client}}",
+              "CoachID": "{{coach}}",
+              "EndAt": {
+                "$timestamp": "2031-03-12T18:00:00Z"
+              },
+              "Location": "Egret Badminton Club",
+              "Notes": "Working on net play",
+              "StartAt": {
+                "$timestamp": "2031-03-12T17:00:00Z"
+              },
+              "Status": "requested",
+              "createdAt": {
+                "$timestamp": "{{now:requested}}"
+              },
+              "id": "{{booking}}"
+            }
+          ],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:paid}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        }
+      },
+      "name": "paid"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "Status": "confirmed",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-12T18:00:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-12T17:00:00Z"
+          },
+          "status": "confirmed"
+        }
+      },
+      "name": "session_notes"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "Pending Acceptance",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "Pending Acceptance"
+        }
+      },
+      "name": "rescheduled"
+    },
+    {
+      "changed": {
+        "bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:cancelled}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "cancelled"
+        },
+        "coaches/{{coach}}/bookings/{{booking}}": {
+          "ClientID": {
+            "$ref": "clients/{{client}}"
+          },
+          "ClientName": "Alex Kim",
+          "CoachID": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "CoachName": "Mei Chen",
+          "EndAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "Location": "Egret Badminton Club",
+          "Notes": "Working on net play",
+          "PaymentStatus": "paid",
+          "StartAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "Status": "cancelled",
+          "clientID": "{{client}}",
+          "clientName": "Alex Kim",
+          "coachID": "{{coach}}",
+          "coachName": "Mei Chen",
+          "coachNote": "Late split step",
+          "createdAt": {
+            "$timestamp": "{{now:requested}}"
+          },
+          "endAt": {
+            "$timestamp": "2031-03-14T16:30:00Z"
+          },
+          "paymentStatus": "paid",
+          "sessionRecap": "Great rallies today",
+          "startAt": {
+            "$timestamp": "2031-03-14T15:00:00Z"
+          },
+          "status": "cancelled"
+        }
+      },
+      "name": "cancelled"
+    }
+  ],
+  "story": "booking",
+  "writer": "ios"
+}

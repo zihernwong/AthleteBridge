@@ -1,0 +1,189 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client2}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:created}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "tournaments/{{tournament}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "endDate": {
+            "$timestamp": "2031-04-06T23:00:00Z"
+          },
+          "location": "Lakeside Shuttlers",
+          "name": "Spring Open 2031",
+          "signupLink": "https://example.com/spring-open",
+          "startDate": {
+            "$timestamp": "2031-04-05T14:00:00Z"
+          }
+        }
+      },
+      "name": "created"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:joined}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "tournaments/{{tournament}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "endDate": {
+            "$timestamp": "2031-04-06T23:00:00Z"
+          },
+          "location": "Lakeside Shuttlers",
+          "name": "Spring Open 2031",
+          "participants": {
+            "{{client}}": {
+              "events": ["Mixed Doubles"],
+              "gender": "Male",
+              "skillLevels": ["B"]
+            }
+          },
+          "signupLink": "https://example.com/spring-open",
+          "startDate": {
+            "$timestamp": "2031-04-05T14:00:00Z"
+          }
+        }
+      },
+      "name": "joined"
+    },
+    {
+      "changed": {
+        "clients/{{client2}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:partner_joined}}"
+          },
+          "name": "Sam Lee",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "pendingNotifications/{{client}}/notifications/{{h:61f2f779}}": {
+          "body": "Sam Lee is looking for a Mixed Doubles partner at Spring Open 2031.",
+          "createdAt": {
+            "$timestamp": "{{now:partner_joined}}"
+          },
+          "delivered": false,
+          "senderId": "{{client2}}",
+          "title": "New Tournament Partner Option",
+          "tournamentId": "{{tournament}}",
+          "type": "tournament_partner"
+        },
+        "tournaments/{{tournament}}": {
+          "createdAt": {
+            "$timestamp": "{{now:created}}"
+          },
+          "createdBy": "{{coach}}",
+          "endDate": {
+            "$timestamp": "2031-04-06T23:00:00Z"
+          },
+          "location": "Lakeside Shuttlers",
+          "name": "Spring Open 2031",
+          "participants": {
+            "{{client2}}": {
+              "events": ["Mixed Doubles"],
+              "gender": "Female",
+              "skillLevels": ["B"]
+            },
+            "{{client}}": {
+              "events": ["Mixed Doubles"],
+              "gender": "Male",
+              "skillLevels": ["B"]
+            }
+          },
+          "signupLink": "https://example.com/spring-open",
+          "startDate": {
+            "$timestamp": "2031-04-05T14:00:00Z"
+          }
+        }
+      },
+      "name": "partner_joined"
+    }
+  ],
+  "story": "tournament",
+  "writer": "ios"
+}

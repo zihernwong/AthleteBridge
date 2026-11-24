@@ -1,0 +1,147 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": ["Evening", "Weekend"],
+          "Bio": "Former national doubles player",
+          "City": "Minneapolis",
+          "ExperienceYears": 8,
+          "FirstName": "Mei",
+          "HourlyRate": {
+            "$double": 60.0
+          },
+          "LastName": "Chen",
+          "RateRange": [
+            {
+              "$double": 50.0
+            },
+            {
+              "$double": 70.0
+            }
+          ],
+          "Specialties": ["Badminton"],
+          "ZipCode": "55413",
+          "cancellationWindowHours": 24,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:coach_profile}}"
+          },
+          "linkedPlaceIds": [],
+          "meetingPreference": "In-Person",
+          "tournamentSoftwareLink": "https://www.tournamentsoftware.com/player/mei"
+        }
+      },
+      "name": "coach_profile"
+    },
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "bio": "Playing for two years",
+          "city": "St. Paul",
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": ["Footwork", "Smash"],
+          "lastSeen": {
+            "$timestamp": "{{now:client_profile}}"
+          },
+          "meetingPreference": "In-Person",
+          "name": "Alex Kim",
+          "preferredAvailability": ["Evening"],
+          "skillLevel": "Intermediate",
+          "updatedAt": {
+            "$timestamp": "{{now:client_profile}}"
+          },
+          "zipCode": "55102"
+        }
+      },
+      "name": "client_profile"
+    },
+    {
+      "changed": {
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": ["Evening", "Weekend"],
+          "Bio": "Former national doubles player",
+          "City": "Minneapolis",
+          "ExperienceYears": 8,
+          "FirstName": "Mei",
+          "HourlyRate": {
+            "$double": 60.0
+          },
+          "LastName": "Chen",
+          "RateRange": [
+            {
+              "$double": 50.0
+            },
+            {
+              "$double": 70.0
+            }
+          ],
+          "Specialties": ["Badminton"],
+          "ZipCode": "55413",
+          "cancellationWindowHours": 24,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:payment_methods}}"
+          },
+          "linkedPlaceIds": [],
+          "meetingPreference": "In-Person",
+          "payments": {
+            "cashapp": "meichen",
+            "paypal": "meichen",
+            "venmo": "mei-chen"
+          },
+          "tournamentSoftwareLink": "https://www.tournamentsoftware.com/player/mei",
+          "updatedAt": {
+            "$timestamp": "{{now:payment_methods}}"
+          }
+        }
+      },
+      "name": "payment_methods"
+    }
+  ],
+  "story": "profiles",
+  "writer": "ios"
+}

@@ -1,0 +1,191 @@
+{
+  "checkpoints": [
+    {
+      "changed": {
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "linkedPlaceIds": []
+        },
+        "userType/{{client}}": {
+          "type": "CLIENT"
+        },
+        "userType/{{coach}}": {
+          "type": "COACH"
+        }
+      },
+      "name": "setup"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageText": null,
+          "participantNames": {
+            "{{client}}": "Alex Kim",
+            "{{coach}}": "Mei Chen"
+          },
+          "participantPhotoURLs": {},
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{coach}}"
+            },
+            {
+              "$ref": "clients/{{client}}"
+            }
+          ]
+        },
+        "clients/{{client}}": {
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "goals": [],
+          "lastSeen": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "name": "Alex Kim",
+          "preferredAvailability": [],
+          "updatedAt": {
+            "$timestamp": "{{now:setup}}"
+          }
+        },
+        "clients/{{client}}/chats/{{chat}}": {
+          "chatRef": {
+            "$ref": "chats/{{chat}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageText": null,
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{coach}}"
+            },
+            {
+              "$ref": "clients/{{client}}"
+            }
+          ]
+        }
+      },
+      "name": "opened"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:messaged}}"
+          },
+          "lastMessageText": "Can we move to 7pm?",
+          "lastSenderId": "{{client}}",
+          "participantNames": {
+            "{{client}}": "Alex Kim",
+            "{{coach}}": "Mei Chen"
+          },
+          "participantPhotoURLs": {},
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{coach}}"
+            },
+            {
+              "$ref": "clients/{{client}}"
+            }
+          ]
+        },
+        "chats/{{chat}}/messages/{{message}}": {
+          "createdAt": {
+            "$timestamp": "{{now:messaged}}"
+          },
+          "senderId": "{{client}}",
+          "senderRef": {
+            "$ref": "clients/{{client}}"
+          },
+          "text": "Can we move to 7pm?"
+        }
+      },
+      "name": "messaged"
+    },
+    {
+      "changed": {
+        "chats/{{chat}}": {
+          "createdAt": {
+            "$timestamp": "{{now:opened}}"
+          },
+          "lastMessageAt": {
+            "$timestamp": "{{now:replied}}"
+          },
+          "lastMessageText": "Sure, see you then",
+          "lastSenderId": "{{coach}}",
+          "participantNames": {
+            "{{client}}": "Alex Kim",
+            "{{coach}}": "Mei Chen"
+          },
+          "participantPhotoURLs": {},
+          "participantRefs": [
+            {
+              "$ref": "coaches/{{coach}}"
+            },
+            {
+              "$ref": "clients/{{client}}"
+            }
+          ]
+        },
+        "chats/{{chat}}/messages/{{reply}}": {
+          "createdAt": {
+            "$timestamp": "{{now:replied}}"
+          },
+          "senderId": "{{coach}}",
+          "senderRef": {
+            "$ref": "coaches/{{coach}}"
+          },
+          "text": "Sure, see you then"
+        },
+        "coaches/{{coach}}": {
+          "Active": true,
+          "Availability": [],
+          "ExperienceYears": 0,
+          "FirstName": "Mei",
+          "LastName": "Chen",
+          "Specialties": ["Badminton"],
+          "cancellationWindowHours": 0,
+          "createdAt": {
+            "$timestamp": "{{now:setup}}"
+          },
+          "lastSeen": {
+            "$timestamp": "{{now:replied}}"
+          },
+          "linkedPlaceIds": []
+        }
+      },
+      "name": "replied"
+    }
+  ],
+  "story": "chat",
+  "writer": "ios"
+}

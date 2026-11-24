@@ -659,6 +659,26 @@ class FirestoreManager: ObservableObject {
         let ratingMessage: String?
     }
 
+    // Reviews come from both apps: iOS writes ClientID/CoachID/Rating (text)/RatingMessage and Android
+    // reviewerId/coachId/rating (a number)/comment. Both now write both; read either so every review shows.
+    nonisolated static func reviewPersonId(_ value: Any?) -> String? {
+        if let ref = value as? DocumentReference { return ref.documentID }
+        if let s = value as? String, let last = s.split(separator: "/").last { return String(last) }
+        return nil
+    }
+
+    nonisolated static func reviewRating(_ data: [String: Any]) -> String? {
+        for key in ["Rating", "rating"] {
+            if let s = data[key] as? String { return s }
+            if let n = data[key] as? NSNumber { return String(n.intValue) }
+        }
+        return nil
+    }
+
+    nonisolated static func reviewMessage(_ data: [String: Any]) -> String? {
+        (data["RatingMessage"] as? String) ?? (data["comment"] as? String)
+    }
+
     @Published var reviews: [ReviewItem] = []
     @Published var reviewsDebug: String = ""
 
@@ -3415,13 +3435,25 @@ class FirestoreManager: ObservableObject {
 
     // MARK: - Badminton Stringers
 
+    /// Stringer prices are typed text on iOS ("$15"); the Android app saves numbers. Show both the same way.
+    nonisolated static func priceText(_ value: Any?) -> String? {
+        if let s = value as? String { return s }
+        guard let n = value as? NSNumber else { return nil }
+        let amount = n.doubleValue
+        return amount == amount.rounded() ? "$\(Int(amount))" : String(format: "$%.2f", amount)
+    }
+
     func fetchStringers() {
-        self.db.collection("stringers").order(by: "createdAt", descending: true).getDocuments { snap, err in
+        // No order(by: "createdAt"): Firestore drops documents without the field, which hid every stringer
+        // who set up on Android. Newest first on the device instead.
+        self.db.collection("stringers").getDocuments { snap, err in
             if let err = err {
                 print("fetchStringers error: \(err)")
                 return
             }
-            let docs = snap?.documents ?? []
+            let docs = (snap?.documents ?? []).sorted {
+                (($0.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast) > (($1.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast)
+            }
             let results: [BadmintonStringer] = docs.compactMap { d in
                 let data = d.data()
                 let name = data["name"] as? String ?? ""
@@ -3430,7 +3462,7 @@ class FirestoreManager: ObservableObject {
                 if let raw = data["stringsOffered"] as? [String: String] {
                     stringsMap = raw
                 } else if let raw = data["stringsOffered"] as? [String: Any] {
-                    for (k, v) in raw { stringsMap[k] = "\(v)" }
+                    for (k, v) in raw { stringsMap[k] = Self.priceText(v) ?? "\(v)" }
                 }
                 // Parse rich meetup locations (with coordinates)
                 var locations: [StringerLocation] = []
@@ -3452,7 +3484,7 @@ class FirestoreManager: ObservableObject {
                     meetupLocationNames: data["meetupLocationNames"] as? [String] ?? [],
                     meetupLocations: locations,
                     stringsOffered: stringsMap,
-                    laborCost: data["laborCost"] as? String ?? "",
+                    laborCost: Self.priceText(data["laborCost"]) ?? "",
                     createdBy: data["createdBy"] as? String ?? ""
                 )
             }
@@ -3977,13 +4009,19 @@ class FirestoreManager: ObservableObject {
 
     // Save a review document to "reviews" collection
     func saveReview(clientID: String, coachID: String, rating: String, ratingMessage: String, completion: @escaping (Error?) -> Void) {
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "ClientID": clientID,
             "CoachID": coachID,
             "createdAt": FieldValue.serverTimestamp(),
             "Rating": rating,
-            "RatingMessage": ratingMessage
+            "RatingMessage": ratingMessage,
+            // The Android app reads reviews by these names (and the rating as a number)
+            "reviewerId": clientID,
+            "coachId": coachID,
+            "comment": ratingMessage
         ]
+        if let stars = Int(rating.trimmingCharacters(in: .whitespaces)) { data["rating"] = stars }
+        if let me = currentClient, me.id == clientID, !me.name.isEmpty { data["reviewerName"] = me.name }
         self.db.collection("reviews").addDocument(data: data, completion: completion)
     }
 
@@ -4454,18 +4492,14 @@ class FirestoreManager: ObservableObject {
                 var coachName: String? = nil
                 let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
 
-                // rating may be stored as number or string
-                var ratingStr: String? = nil
-                if let r = data["Rating"] as? String { ratingStr = r }
-                else if let r = data["Rating"] as? Int { ratingStr = String(r) }
-                else if let r = data["Rating"] as? Double { ratingStr = String(Int(r)) }
-
-                let ratingMessage = data["RatingMessage"] as? String
+                // rating may be stored as number or string, under either app's field name
+                let ratingStr = Self.reviewRating(data)
+                let ratingMessage = Self.reviewMessage(data)
 
                 let inner = DispatchGroup()
 
                 // Client resolution
-                if let clientRef = data["ClientID"] as? DocumentReference {
+                if let clientRef = (data["ClientID"] ?? data["reviewerId"]) as? DocumentReference {
                     clientID = clientRef.documentID
                     inner.enter()
                     clientRef.getDocument { sSnap, _ in
@@ -4474,20 +4508,20 @@ class FirestoreManager: ObservableObject {
                         }
                         inner.leave()
                     }
-                } else if let s = data["ClientID"] as? String {
+                } else if let s = (data["ClientID"] ?? data["reviewerId"]) as? String {
                     clientID = s.split(separator: "/").last.map(String.init) ?? s
                     // fallback to direct client lookup
                     inner.enter()
                     self.db.collection("clients").document(clientID).getDocument { sSnap, _ in
                         if let sdata = sSnap?.data() {
-                            clientName = sdata["name"] as? String
+                            clientName = (sdata["name"] as? String) ?? (data["reviewerName"] as? String)
                         }
                         inner.leave()
                     }
                 }
 
                 // Coach resolution
-                if let coachRef = data["CoachID"] as? DocumentReference {
+                if let coachRef = (data["CoachID"] ?? data["coachId"]) as? DocumentReference {
                     coachID = coachRef.documentID
                     inner.enter()
                     coachRef.getDocument { sSnap, _ in
@@ -4496,7 +4530,7 @@ class FirestoreManager: ObservableObject {
                         }
                         inner.leave()
                     }
-                } else if let s = data["CoachID"] as? String {
+                } else if let s = (data["CoachID"] ?? data["coachId"]) as? String {
                     coachID = s.split(separator: "/").last.map(String.init) ?? s
                     inner.enter()
                     self.db.collection("coaches").document(coachID).getDocument { sSnap, _ in
@@ -4536,16 +4570,10 @@ class FirestoreManager: ObservableObject {
             }
 
             let docs = snapshot?.documents ?? []
-            let matching = docs.filter { doc -> Bool in
+            // CoachID (iOS: id, path or reference) or coachId (Android)
+            let matching = docs.filter { doc in
                 let data = doc.data()
-                if let ref = data["CoachID"] as? DocumentReference {
-                    return ref.documentID == coachId
-                }
-                if let s = data["CoachID"] as? String {
-                    let last = s.split(separator: "/").last.map(String.init) ?? s
-                    return last == coachId || s == "coaches/\(coachId)" || s == "/coaches/\(coachId)"
-                }
-                return false
+                return Self.reviewPersonId(data["CoachID"] ?? data["coachId"]) == coachId
             }
 
             var results: [ReviewItem] = []
@@ -4558,15 +4586,11 @@ class FirestoreManager: ObservableObject {
                 var clientName: String? = nil
                 let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
 
-                // rating may be stored as number or string
-                var ratingStr: String? = nil
-                if let r = data["Rating"] as? String { ratingStr = r }
-                else if let r = data["Rating"] as? Int { ratingStr = String(r) }
-                else if let r = data["Rating"] as? Double { ratingStr = String(Int(r)) }
+                // rating may be stored as number or string, under either app's field name
+                let ratingStr = Self.reviewRating(data)
+                let ratingMessage = Self.reviewMessage(data)
 
-                let ratingMessage = data["RatingMessage"] as? String
-
-                if let clientRef = data["ClientID"] as? DocumentReference {
+                if let clientRef = (data["ClientID"] ?? data["reviewerId"]) as? DocumentReference {
                     clientID = clientRef.documentID
                     clientRef.getDocument { sSnap, _ in
                         if let sdata = sSnap?.data() {
@@ -4576,19 +4600,19 @@ class FirestoreManager: ObservableObject {
                         results.append(item)
                         group.leave()
                     }
-                } else if let s = data["ClientID"] as? String {
+                } else if let s = (data["ClientID"] ?? data["reviewerId"]) as? String {
                     clientID = s.split(separator: "/").last.map(String.init) ?? s
                     // try to fetch client doc to get name
                     self.db.collection("clients").document(clientID).getDocument { sSnap, _ in
                         if let sdata = sSnap?.data() {
-                            clientName = sdata["name"] as? String
+                            clientName = (sdata["name"] as? String) ?? (data["reviewerName"] as? String)
                         }
                         let item = ReviewItem(id: doc.documentID, clientID: clientID, clientName: clientName, coachID: coachId, coachName: nil, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
                         results.append(item)
                         group.leave()
                     }
                 } else {
-                    let item = ReviewItem(id: doc.documentID, clientID: "", clientName: nil, coachID: coachId, coachName: nil, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
+                    let item = ReviewItem(id: doc.documentID, clientID: "", clientName: data["reviewerName"] as? String, coachID: coachId, coachName: nil, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
                     results.append(item)
                     group.leave()
                 }
@@ -4614,16 +4638,10 @@ class FirestoreManager: ObservableObject {
             }
 
             let docs = snapshot?.documents ?? []
-            let matching = docs.filter { doc -> Bool in
+            // ClientID (iOS: id, path or reference) or reviewerId (Android)
+            let matching = docs.filter { doc in
                 let data = doc.data()
-                if let ref = data["ClientID"] as? DocumentReference {
-                    return ref.documentID == clientId
-                }
-                if let s = data["ClientID"] as? String {
-                    let last = s.split(separator: "/").last.map(String.init) ?? s
-                    return last == clientId || s == "clients/\(clientId)" || s == "/clients/\(clientId)"
-                }
-                return false
+                return Self.reviewPersonId(data["ClientID"] ?? data["reviewerId"]) == clientId
             }
 
             var results: [ReviewItem] = []
@@ -4636,15 +4654,11 @@ class FirestoreManager: ObservableObject {
                 var coachName: String? = nil
                 let createdAt = (data["createdAt"] as? Timestamp)?.dateValue()
 
-                // rating may be stored as number or string
-                var ratingStr: String? = nil
-                if let r = data["Rating"] as? String { ratingStr = r }
-                else if let r = data["Rating"] as? Int { ratingStr = String(r) }
-                else if let r = data["Rating"] as? Double { ratingStr = String(Int(r)) }
+                // rating may be stored as number or string, under either app's field name
+                let ratingStr = Self.reviewRating(data)
+                let ratingMessage = Self.reviewMessage(data)
 
-                let ratingMessage = data["RatingMessage"] as? String
-
-                if let coachRef = data["CoachID"] as? DocumentReference {
+                if let coachRef = (data["CoachID"] ?? data["coachId"]) as? DocumentReference {
                     coachID = coachRef.documentID
                     coachRef.getDocument { sSnap, _ in
                         if let sdata = sSnap?.data() {
@@ -4654,7 +4668,7 @@ class FirestoreManager: ObservableObject {
                         results.append(item)
                         group.leave()
                     }
-                } else if let s = data["CoachID"] as? String {
+                } else if let s = (data["CoachID"] ?? data["coachId"]) as? String {
                     coachID = s.split(separator: "/").last.map(String.init) ?? s
                     coachName = coachID
                     let item = ReviewItem(id: doc.documentID, clientID: clientId, clientName: nil, coachID: coachID, coachName: coachName, createdAt: createdAt, rating: ratingStr, ratingMessage: ratingMessage)
@@ -6247,8 +6261,8 @@ class FirestoreManager: ObservableObject {
 
         let chatRef = db.collection("chats").document(chatId)
 
-        // Read chat participants so we can update per-user pointer docs as well
-        chatRef.getDocument { snap, err in
+        // Read the chat first (a failed read is logged; the message is written either way)
+        chatRef.getDocument { _, err in
             if let err = err {
                 print("sendMessage: failed to read chat for participants: \(err)")
                 // continue anyway and write message to chat
@@ -6285,44 +6299,8 @@ class FirestoreManager: ObservableObject {
                     print("sendMessage: failed to send message for chatId=\(chatId): \(err)")
                     completion?(err)
                 } else {
-                    // After successfully writing the message, write small pendingNotifications for recipients (non-blocking)
-                    if let pData = snap?.data() {
-                        var recipients: [String] = []
-                        if let prefRefs = pData["participantRefs"] as? [DocumentReference] {
-                            for r in prefRefs {
-                                let rid = r.documentID
-                                if rid != uid { recipients.append(rid) }
-                            }
-                        } else if let pArr = pData["participants"] as? [String] {
-                            for raw in pArr {
-                                let rid = raw.split(separator: "/").last.map(String.init) ?? raw
-                                if rid != uid { recipients.append(rid) }
-                            }
-                        }
-
-                        var senderDisplayName: String = uid
-                        if let cached = self.participantNames[uid], !cached.isEmpty { senderDisplayName = cached }
-                        else if let curCoach = self.currentCoach, curCoach.id == uid { senderDisplayName = curCoach.name }
-                        else if let curClient = self.currentClient, curClient.id == uid { senderDisplayName = curClient.name }
-
-                        for rid in recipients {
-                            let notifColl = self.db.collection("pendingNotifications").document(rid).collection("notifications")
-                            let notifDoc = notifColl.document()
-                            let payload: [String: Any] = [
-                                "title": senderDisplayName,
-                                "body": text,
-                                "chatId": chatId,
-                                "messageId": newMsgRef.documentID,
-                                "senderId": uid,
-                                "createdAt": FieldValue.serverTimestamp(),
-                                "delivered": false
-                            ]
-                            notifDoc.setData(payload) { nerr in
-                                if let nerr = nerr { print("sendMessage: failed to write pending notification for \(rid): \(nerr)") }
-                            }
-                        }
-                    }
-
+                    // No push from here: the onMessageCreate Cloud Function pushes every new message to the other
+                    // participants. Queueing our own as well notified them twice.
                     completion?(nil)
                 }
             }
@@ -7452,9 +7430,9 @@ extension FirestoreManager {
             racketName: racketName,
             hasOwnString: data["hasOwnString"] as? Bool ?? false,
             selectedString: data["selectedString"] as? String,
-            stringCost: data["stringCost"] as? String,
-            laborCost: data["laborCost"] as? String,
-            orderTotal: data["orderTotal"] as? String,
+            stringCost: Self.priceText(data["stringCost"]),
+            laborCost: Self.priceText(data["laborCost"]),
+            orderTotal: Self.priceText(data["orderTotal"]),
             tension: data["tension"] as? Int ?? 24,
             timelinePreference: data["timelinePreference"] as? String ?? "",
             // The buyer: iOS writes createdBy, older Android builds buyerId / clientId
